@@ -39,3 +39,13 @@ def logout(response: Response) -> dict:
 @router.get("/me")
 def me(user: sqlite3.Row = Depends(get_current_user)) -> dict:
     return _me_payload(user)
+
+
+@router.post("/me/onboarded")
+def set_onboarded(
+    user: sqlite3.Row = Depends(get_current_user), conn: sqlite3.Connection = Depends(get_db)
+) -> dict:
+    conn.execute("UPDATE users SET onboarded = 1 WHERE login = ?", (user["login"],))
+    conn.commit()
+    row = conn.execute("SELECT * FROM users WHERE login = ?", (user["login"],)).fetchone()
+    return _me_payload(row)

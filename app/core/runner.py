@@ -232,7 +232,9 @@ async def _execute(run_id: int, project_name: str, stand_name: str | None, targe
 
     args = [str(python), "-m", "pytest"]
     if target and target != "all":
-        args.append(target)
+        # UI посылает несколько выбранных nodeid, разделённых переводом строки
+        # (не пробелом — параметризованные тесты содержат пробелы в имени).
+        args.extend(line for line in target.splitlines() if line.strip())
     args.append(f"--alluredir={results_dir}")
 
     env = os.environ.copy()

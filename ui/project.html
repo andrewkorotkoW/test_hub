@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Test Hub — проект</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header id="app-header" class="site-header"></header>
+  <main class="page">
+    <h1 id="project-title">Проект</h1>
+    <div id="page-error" class="error-box" hidden></div>
+
+    <div class="project-layout">
+      <div class="card" id="tests-card">
+        <h2>Тесты</h2>
+        <div class="stand-row">
+          <label for="stand-select">Стенд</label>
+          <select id="stand-select"><option value="">— без стенда —</option></select>
+        </div>
+        <div id="tests-error" class="error-box" hidden></div>
+        <div id="tests-tree" class="test-tree"><p class="muted">Загрузка…</p></div>
+        <div class="run-buttons">
+          <button id="run-all-btn" class="primary">Запустить всё</button>
+          <button id="run-selected-btn">Запустить выбранное</button>
+        </div>
+      </div>
+
+      <div class="card" id="run-card" hidden>
+        <h2>Прогон #<span id="run-id-label"></span></h2>
+        <div class="run-status-bar">
+          <span id="run-status-pill" class="status-pill queued" data-status="queued">queued</span>
+          <button id="cancel-run-btn" class="danger" hidden>Отменить</button>
+        </div>
+        <div id="run-log" class="run-log"></div>
+
+        <div id="report-section" hidden>
+          <h3>Итог прогона</h3>
+          <div id="summary-badges" class="summary-badges"></div>
+          <div class="report-filters">
+            <select id="report-status-filter">
+              <option value="">Все статусы</option>
+              <option value="passed">passed</option>
+              <option value="failed">failed</option>
+              <option value="broken">broken</option>
+              <option value="skipped">skipped</option>
+              <option value="unknown">unknown</option>
+            </select>
+            <input id="report-name-filter" placeholder="Фильтр по имени теста">
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Тест</th><th>Статус</th><th>Длительность</th></tr></thead>
+              <tbody id="report-rows"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>История прогонов</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>ID</th><th>Статус</th><th>Стенд</th><th>Цель</th><th>Начат</th><th>Длительность</th><th>Кем запущен</th></tr>
+          </thead>
+          <tbody id="history-rows"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script src="common.js"></script>
+  <script src="project.js"></script>
+</body>
+</html>

@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Test Hub — стенды и пользователи</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header id="app-header" class="site-header"></header>
+  <main class="page">
+    <h1>Стенды и пользователи</h1>
+    <div id="access-denied" class="error-box" hidden>Этот раздел доступен только роли qa.</div>
+    <div id="admin-error" class="error-box" hidden></div>
+
+    <div id="admin-content">
+      <div class="card">
+        <h2>Стенды</h2>
+        <div class="form-row">
+          <label for="admin-project-select">Проект</label>
+          <select id="admin-project-select"></select>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Имя</th><th>URL</th><th>Логин</th><th></th></tr></thead>
+            <tbody id="stands-rows"></tbody>
+          </table>
+        </div>
+        <h3>Стенд</h3>
+        <form id="stand-form" class="form-row">
+          <input id="stand-name" placeholder="Имя" required>
+          <input id="stand-url" placeholder="URL" required>
+          <input id="stand-login" placeholder="Логин (необязательно)">
+          <button type="submit" class="primary">Сохранить</button>
+          <button type="button" id="stand-cancel-edit" hidden>Отмена</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Пользователи</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Логин</th><th>Роль</th><th>Онбординг</th><th></th></tr></thead>
+            <tbody id="users-rows"></tbody>
+          </table>
+        </div>
+        <h3>Пользователь</h3>
+        <form id="user-form" class="form-row">
+          <input id="user-login" placeholder="Логин" required>
+          <input id="user-password" placeholder="Пароль" type="password">
+          <select id="user-role">
+            <option value="qa">qa</option>
+            <option value="manager">manager</option>
+            <option value="customer">customer</option>
+          </select>
+          <label><input type="checkbox" id="user-onboarded"> onboarded</label>
+          <button type="submit" class="primary">Сохранить</button>
+          <button type="button" id="user-cancel-edit" hidden>Отмена</button>
+        </form>
+      </div>
+    </div>
+  </main>
+
+  <script src="common.js"></script>
+  <script src="admin.js"></script>
+</body>
+</html>
