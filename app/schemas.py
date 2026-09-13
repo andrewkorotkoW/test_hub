@@ -33,6 +33,11 @@ class StandUpdate(BaseModel):
     login: Optional[str] = None
 
 
+class RunCreate(BaseModel):
+    stand: Optional[str] = None
+    target: str = "all"
+
+
 class UserCreate(BaseModel):
     login: str
     password: str
