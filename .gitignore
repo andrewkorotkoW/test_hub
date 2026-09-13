@@ -1,0 +1,10 @@
+.venv/
+.env
+__pycache__/
+*.pyc
+.pytest_cache/
+.idea/
+.DS_Store
+workspace/*.db
+workspace/runs/
+workspace/allure-results/
