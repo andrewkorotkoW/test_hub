@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Test Hub — вход</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="card login-card">
+      <h1>Test Hub</h1>
+      <p class="muted">Войдите, чтобы увидеть проекты и прогоны тестов.</p>
+      <div id="login-error" class="error-box" hidden></div>
+      <form id="login-form">
+        <div class="field">
+          <label for="login">Логин</label>
+          <input id="login" name="login" type="text" autocomplete="username" required>
+        </div>
+        <div class="field">
+          <label for="password">Пароль</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" required>
+        </div>
+        <button type="submit" class="primary">Войти</button>
+      </form>
+    </div>
+  </div>
+
+  <script src="common.js"></script>
+  <script src="login.js"></script>
+</body>
+</html>

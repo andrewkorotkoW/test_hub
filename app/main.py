@@ -1,6 +1,8 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from .config import settings
 from .db import init_db
@@ -20,6 +22,11 @@ app.include_router(projects.router)
 app.include_router(runs.router)
 app.include_router(runs.ws_router)
 app.include_router(users.router)
+
+# Статика фронтенда (ui/) монтируется последней, чтобы её catch-all "/" не
+# перехватывал API-маршруты, зарегистрированные выше.
+UI_DIR = Path(__file__).resolve().parent.parent / "ui"
+app.mount("/", StaticFiles(directory=UI_DIR, html=True), name="ui")
 
 
 if __name__ == "__main__":
