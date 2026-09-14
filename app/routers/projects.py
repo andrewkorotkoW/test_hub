@@ -1,3 +1,4 @@
+import os
 import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -48,6 +49,11 @@ def create_project(
     exists = conn.execute("SELECT 1 FROM projects WHERE name = ?", (body.name,)).fetchone()
     if exists:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Project already exists")
+    if not os.path.isdir(body.path):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Path does not exist or is not a directory",
+        )
     conn.execute(
         "INSERT INTO projects (name, path, venv, stands) VALUES (?, ?, ?, '[]')",
         (body.name, body.path, body.venv),

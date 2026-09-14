@@ -175,6 +175,8 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
 .login-card button { width: 100%; }
 
 /* ---------- projects list ---------- */
+.page-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+.page-head h1 { margin: 0; }
 .project-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -320,6 +322,8 @@ tbody tr.clickable:hover { background: #f7f8fa; }
   width: 100%;
 }
 .modal-box h2 { margin-bottom: 4px; }
+.modal-box .field { margin-bottom: 12px; }
+.modal-box .field:first-of-type { margin-top: 14px; }
 .modal-step { display: none; }
 .modal-step.active { display: block; }
 .modal-dots { display: flex; gap: 6px; margin: 14px 0; }

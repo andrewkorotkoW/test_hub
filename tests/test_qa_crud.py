@@ -5,14 +5,16 @@
 """
 
 
-async def test_qa_project_crud(qa_client):
+async def test_qa_project_crud(qa_client, tmp_path):
+    project_dir = tmp_path / "demo_proj"
+    project_dir.mkdir()
     create_resp = await qa_client.post(
-        "/api/projects", json={"name": "demo_proj", "path": "/tmp/demo_proj", "venv": ".venv"}
+        "/api/projects", json={"name": "demo_proj", "path": str(project_dir), "venv": ".venv"}
     )
     assert create_resp.status_code == 201
     body = create_resp.json()
     assert body["name"] == "demo_proj"
-    assert body["path"] == "/tmp/demo_proj"
+    assert body["path"] == str(project_dir)
     assert body["stands"] == []
 
     list_resp = await qa_client.get("/api/projects")
@@ -34,6 +36,35 @@ async def test_qa_project_create_duplicate_conflicts(qa_client):
         "/api/projects", json={"name": "bike_fit", "path": "/anything", "venv": ".venv"}
     )
     assert resp.status_code == 409
+
+
+async def test_qa_project_create_nonexistent_path_is_422(qa_client, tmp_path):
+    missing_dir = tmp_path / "does_not_exist"
+    resp = await qa_client.post(
+        "/api/projects", json={"name": "ghost_proj", "path": str(missing_dir), "venv": ".venv"}
+    )
+    assert resp.status_code == 422
+
+
+async def test_qa_project_create_existing_path_appears_in_list(qa_client, tmp_path):
+    project_dir = tmp_path / "real_proj"
+    project_dir.mkdir()
+    create_resp = await qa_client.post(
+        "/api/projects", json={"name": "real_proj", "path": str(project_dir), "venv": ".venv"}
+    )
+    assert create_resp.status_code == 201
+
+    list_resp = await qa_client.get("/api/projects")
+    assert "real_proj" in {p["name"] for p in list_resp.json()}
+
+
+async def test_customer_project_create_is_403(customer_client, tmp_path):
+    project_dir = tmp_path / "forbidden_proj"
+    project_dir.mkdir()
+    resp = await customer_client.post(
+        "/api/projects", json={"name": "forbidden_proj", "path": str(project_dir), "venv": ".venv"}
+    )
+    assert resp.status_code == 403
 
 
 async def test_qa_project_update_missing_is_404(qa_client):
