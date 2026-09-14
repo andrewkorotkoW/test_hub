@@ -1,6 +1,6 @@
 """Разбор allure-results (JSON-файлы *-result.json) в отчёт по прогону.
 
-Адаптация логики ~/PycharmProjects/agent_office/app/core/allure.py под test_hub:
+Адаптация логики ~/PycharmProjects/cyber_office/app/core/allure.py под test_hub:
 здесь нет отдельного TestRun-объекта (статус/длительность хранятся в SQLite runs),
 поэтому модуль занимается только разбором каталога allure-results в список тестов
 и подсчёт по статусам."""

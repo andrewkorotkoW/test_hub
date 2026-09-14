@@ -1,6 +1,6 @@
 """Обнаружение тестов и исполнение прогонов pytest в целевом проекте.
 
-Адаптация логики ~/PycharmProjects/agent_office/app/core/testlab.py под test_hub:
+Адаптация логики ~/PycharmProjects/cyber_office/app/core/testlab.py под test_hub:
 там прогоны хранились в JSON-файле на диск, здесь — в общей SQLite (таблицы runs и
 run_events из app.db), поэтому раннер работает через короткоживущие sqlite3-соединения
 (та же схема, что и в роутерах: открыть, сделать запрос, закрыть) и не хранит состояние

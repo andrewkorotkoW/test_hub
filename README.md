@@ -1,6 +1,6 @@
 # test_hub — система запуска автотестов с ролями
 
-Отдельный продукт (не agent_office): веб-система, где QA хранит и записывает тесты,
+Отдельный продукт (не cyber_office): веб-система, где QA хранит и записывает тесты,
 менеджеры и заказчики запускают прогоны и смотрят отчёты в реальном времени.
 
 ## Установка и запуск
@@ -125,6 +125,6 @@ test_hub только запускает `pytest` внутри их собств
 FastAPI + SQLite (sqlite3) + WebSocket, фронт — чистый JS/CSS без сборки (`ui/`),
 прогоны — `pytest` в `.venv` целевого проекта, e2e — Playwright, отчёты —
 `allure-pytest` results. Референс-реализация запуска тестов и разбора
-allure-results есть в `~/PycharmProjects/agent_office/app/core/testlab.py`,
+allure-results есть в `~/PycharmProjects/cyber_office/app/core/testlab.py`,
 `scenarios.py`, `allure.py` — можно переносить с адаптацией (это другой проект,
 импортировать напрямую нельзя).
