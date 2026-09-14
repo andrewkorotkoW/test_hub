@@ -9,9 +9,37 @@
 <body>
   <header id="app-header" class="site-header"></header>
   <main class="page">
-    <h1>Проекты</h1>
+    <div class="page-head">
+      <h1>Проекты</h1>
+      <button type="button" id="add-project-btn" class="primary" hidden>+ Добавить проект</button>
+    </div>
     <div id="projects-error" class="error-box" hidden></div>
     <div id="projects-grid" class="project-grid"></div>
+
+    <div id="add-project-overlay" class="modal-overlay" hidden>
+      <div class="modal-box">
+        <h2>Новый проект</h2>
+        <form id="add-project-form">
+          <div class="field">
+            <label for="new-project-name">Название</label>
+            <input id="new-project-name" placeholder="my-project" required>
+          </div>
+          <div class="field">
+            <label for="new-project-path">Путь к репозиторию</label>
+            <input id="new-project-path" placeholder="/Users/.../my-project" required>
+          </div>
+          <div class="field">
+            <label for="new-project-venv">Venv</label>
+            <input id="new-project-venv" placeholder=".venv" value=".venv">
+          </div>
+          <div id="add-project-error" class="error-box" hidden></div>
+          <div class="modal-actions">
+            <button type="button" id="add-project-cancel">Отмена</button>
+            <button type="submit" class="primary">Создать</button>
+          </div>
+        </form>
+      </div>
+    </div>
   </main>
 
   <script src="common.js"></script>
