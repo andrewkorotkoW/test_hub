@@ -5,7 +5,7 @@
   const adminContent = document.getElementById("admin-content");
   const adminError = document.getElementById("admin-error");
 
-  if (user.role !== "qa") {
+  if (user.role !== "qa" && user.role !== "superadmin") {
     accessDenied.hidden = false;
     adminContent.hidden = true;
     return;

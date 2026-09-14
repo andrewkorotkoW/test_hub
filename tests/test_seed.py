@@ -18,10 +18,11 @@ def test_seed_users_have_expected_roles(db_path):
     finally:
         conn.close()
 
-    assert set(rows.keys()) == {"qa", "manager", "customer"}
+    assert set(rows.keys()) == {"qa", "manager", "customer", "admin"}
     assert rows["qa"]["role"] == "qa"
     assert rows["manager"]["role"] == "manager"
     assert rows["customer"]["role"] == "customer"
+    assert rows["admin"]["role"] == "superadmin"
     # sanity: пароли захешированы, не хранятся в открытом виде
     for login_, row in rows.items():
         assert row["password_hash"] != login_
@@ -36,6 +37,7 @@ def test_seed_onboarded_flags_match_seed_table(db_path):
         conn.close()
 
     expected = {login_: onboarded for login_, _password, _role, onboarded in SEED_USERS}
+    expected["admin"] = 1
     assert rows == expected
 
 
@@ -69,7 +71,7 @@ def test_seed_is_idempotent(db_path):
     finally:
         conn.close()
 
-    assert after_users == before_users == 3
+    assert after_users == before_users == 4
     assert after_projects == before_projects == 2
 
 

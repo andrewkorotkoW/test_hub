@@ -63,6 +63,18 @@ async def customer_client(client):
     return client
 
 
+@pytest_asyncio.fixture()
+async def superadmin_client(db_path):
+    # Собственный AsyncClient (не переиспользует фикстуру `client`): тестам этого
+    # файла нужно одновременно держать сессию qa/manager/customer и superadmin —
+    # при общем клиенте второй login() затирал бы cookie первого.
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
+        resp = await login(ac, "admin", "admin")
+        assert resp.status_code == 200
+        yield ac
+
+
 # ---------------------------------------------------------------- фикстурные проекты для тестов раннера
 #
 # _FIXTURE_TESTS содержит 3 проходящих и 2 падающих теста (один из них в классе), чтобы

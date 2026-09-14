@@ -62,8 +62,11 @@ function renderHeader(user) {
   const navLinks = [
     { href: "projects.html", label: "Проекты" },
   ];
-  if (user.role === "qa") {
+  if (user.role === "qa" || user.role === "superadmin") {
     navLinks.push({ href: "admin.html", label: "Стенды и пользователи" });
+  }
+  if (user.role === "superadmin") {
+    navLinks.push({ href: "admin_all.html", label: "Суперадминка" });
   }
   const nav = navLinks
     .map((l) => `<a href="${l.href}" class="${l.href === page ? "active" : ""}">${l.label}</a>`)

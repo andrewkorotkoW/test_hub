@@ -7,7 +7,7 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
     login TEXT PRIMARY KEY,
     password_hash TEXT NOT NULL,
-    role TEXT NOT NULL CHECK (role IN ('qa', 'manager', 'customer')),
+    role TEXT NOT NULL CHECK (role IN ('qa', 'manager', 'customer', 'superadmin')),
     onboarded INTEGER NOT NULL DEFAULT 0
 );
 
@@ -59,6 +59,9 @@ SEED_PROJECTS = [
     ("Velo_bot", "/Users/andreykorotkow/PycharmProjects/Velo_bot", ".venv"),
 ]
 
+SUPERADMIN_LOGIN = "admin"
+SUPERADMIN_PASSWORD = "admin"
+
 
 def get_connection() -> sqlite3.Connection:
     settings.DB_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -90,11 +93,56 @@ def _seed_if_empty(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def _users_role_check_outdated(conn: sqlite3.Connection) -> bool:
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'users'"
+    ).fetchone()
+    return row is not None and "superadmin" not in (row["sql"] or "")
+
+
+def _migrate_users_role_check(conn: sqlite3.Connection) -> None:
+    """Существующая БД (workspace/test_hub.db) уже содержит таблицу users с CHECK,
+    не знающим про 'superadmin' — CREATE TABLE IF NOT EXISTS в SCHEMA её не трогает.
+    SQLite не умеет ALTER TABLE ... DROP/ADD CONSTRAINT, поэтому пересоздаём таблицу
+    с новым CHECK и переносим данные, не теряя существующих пользователей."""
+    conn.execute("ALTER TABLE users RENAME TO users_old")
+    conn.execute(
+        "CREATE TABLE users ("
+        "login TEXT PRIMARY KEY,"
+        "password_hash TEXT NOT NULL,"
+        "role TEXT NOT NULL CHECK (role IN ('qa', 'manager', 'customer', 'superadmin')),"
+        "onboarded INTEGER NOT NULL DEFAULT 0"
+        ")"
+    )
+    conn.execute(
+        "INSERT INTO users (login, password_hash, role, onboarded) "
+        "SELECT login, password_hash, role, onboarded FROM users_old"
+    )
+    conn.execute("DROP TABLE users_old")
+    conn.commit()
+
+
+def _seed_superadmin(conn: sqlite3.Connection) -> None:
+    exists = conn.execute(
+        "SELECT 1 FROM users WHERE login = ?", (SUPERADMIN_LOGIN,)
+    ).fetchone()
+    if exists:
+        return
+    conn.execute(
+        "INSERT INTO users (login, password_hash, role, onboarded) VALUES (?, ?, ?, ?)",
+        (SUPERADMIN_LOGIN, hash_password(SUPERADMIN_PASSWORD), "superadmin", 1),
+    )
+    conn.commit()
+
+
 def init_db() -> None:
     conn = get_connection()
     try:
         conn.executescript(SCHEMA)
         conn.commit()
+        if _users_role_check_outdated(conn):
+            _migrate_users_role_check(conn)
         _seed_if_empty(conn)
+        _seed_superadmin(conn)
     finally:
         conn.close()

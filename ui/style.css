@@ -296,6 +296,30 @@ tbody tr.clickable:hover { background: #f7f8fa; }
   margin: 0;
 }
 
+/* ---------- superadmin tabs / inline confirm / json cell ---------- */
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.tabs button { padding: 6px 12px; font-size: 13px; }
+.tabs button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.confirm-inline { display: inline-flex; align-items: center; gap: 6px; }
+.confirm-inline span { font-size: 12px; color: var(--text-muted); }
+.json-cell details summary { cursor: pointer; color: var(--accent); font-size: 12px; }
+.json-cell pre {
+  margin: 6px 0 0;
+  background: #14161b;
+  color: #d7dae0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-width: 320px;
+}
+.pagination-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+.pagination-bar span { font-size: 12px; color: var(--text-muted); }
+.reset-pw-row { display: inline-flex; align-items: center; gap: 6px; margin-left: 6px; }
+.reset-pw-row input { width: 120px; padding: 4px 8px; font-size: 12px; }
+
 /* ---------- admin forms ---------- */
 .form-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
 .form-row input, .form-row select { flex: 1 1 140px; }

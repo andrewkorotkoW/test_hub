@@ -334,4 +334,11 @@
 
   setupTreeEvents();
   await Promise.all([loadStands(), loadTests(), loadHistory()]);
+
+  // Глубокая ссылка из суперадминки (admin_all.html): project.html?name=...&run=<id>
+  // сразу открывает отчёт конкретного прогона.
+  const runParam = params.get("run");
+  if (runParam) {
+    await openRun(Number(runParam));
+  }
 })();
