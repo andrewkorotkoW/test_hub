@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Test Hub — суперадминка</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header id="app-header" class="site-header"></header>
+  <main class="page">
+    <h1>Суперадминка</h1>
+    <div id="access-denied" class="error-box" hidden>
+      Этот раздел доступен только роли superadmin. <a href="projects.html">Перейти к проектам</a>.
+    </div>
+    <div id="admin-all-error" class="error-box" hidden></div>
+
+    <div id="admin-all-content">
+      <div class="card">
+        <h2>Обзор</h2>
+        <div id="overview-badges" class="summary-badges"></div>
+        <h3>Последние 10 прогонов</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>ID</th><th>Проект</th><th>Статус</th><th>Начат</th><th>Кем запущен</th><th></th></tr></thead>
+            <tbody id="recent-runs-rows"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="page-head">
+          <nav id="admin-tabs" class="tabs"></nav>
+          <input id="table-search" placeholder="Поиск...">
+        </div>
+        <div id="table-error" class="error-box" hidden></div>
+        <div class="table-wrap">
+          <table>
+            <thead id="table-head"></thead>
+            <tbody id="table-rows"></tbody>
+          </table>
+        </div>
+        <div id="table-pagination" class="pagination-bar"></div>
+      </div>
+    </div>
+  </main>
+
+  <script src="common.js"></script>
+  <script src="admin_all.js"></script>
+</body>
+</html>

@@ -29,7 +29,10 @@ def get_current_user(request: Request, conn: sqlite3.Connection = Depends(get_db
 
 def require_roles(*roles: str):
     def checker(user: sqlite3.Row = Depends(get_current_user)) -> sqlite3.Row:
-        if user["role"] not in roles:
+        # superadmin проходит через любой require_roles(...) без перечисления явно:
+        # каждый существующий вызов уже включает "qa", а superadmin обязан иметь всё,
+        # что есть у qa (плюс доступ к /api/admin/*, где роль указана явно).
+        if user["role"] != "superadmin" and user["role"] not in roles:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
         return user
 

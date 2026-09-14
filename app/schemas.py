@@ -2,7 +2,7 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel
 
-Role = Literal["qa", "manager", "customer"]
+Role = Literal["qa", "manager", "customer", "superadmin"]
 
 
 class LoginRequest(BaseModel):
@@ -49,3 +49,8 @@ class UserUpdate(BaseModel):
     password: Optional[str] = None
     role: Optional[Role] = None
     onboarded: Optional[bool] = None
+
+
+class AdminUserUpdate(BaseModel):
+    role: Optional[Role] = None
+    password: Optional[str] = None
