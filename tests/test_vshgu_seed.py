@@ -101,3 +101,20 @@ async def test_init_db_does_not_reset_use_env_flag_disabled_via_api(qa_client, d
         "выключен через API — это дефект: повторный старт сервера должен уважать "
         "ручное отключение флага пользователем, а не молча его включать"
     )
+
+
+async def test_vshgu_project_visible_via_api_with_env_flag_and_stands(qa_client):
+    # На свежей БД (фикстура db_path -> qa_client вызывает init_db() один раз) сид-проект
+    # должен быть виден через тот же HTTP API, которым пользуется UI/раннер, а не только
+    # напрямую в БД (это уже проверяют test_init_db_seeds_vshgu_project_on_empty_db выше).
+    list_resp = await qa_client.get("/api/projects")
+    assert list_resp.status_code == 200
+    project = next(p for p in list_resp.json() if p["name"] == VSHGU_PROJECT_NAME)
+    assert project["use_env_flag"] is True
+    assert project["path"] == VSHGU_PROJECT_PATH
+    assert project["venv"] == VSHGU_PROJECT_VENV
+
+    stands_resp = await qa_client.get(f"/api/projects/{VSHGU_PROJECT_NAME}/stands")
+    assert stands_resp.status_code == 200
+    stand_names = {s["name"] for s in stands_resp.json()}
+    assert stand_names == set(VSHGU_STANDS)
