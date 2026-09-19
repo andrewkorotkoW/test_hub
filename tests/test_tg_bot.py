@@ -8,17 +8,25 @@ from httpx import ASGITransport
 
 from app.config import _parse_allowed_ids, settings
 from app.db import get_connection
-from app.main import app
+from app.main import app, lifespan
 from app.security import verify_password
 from app.tg_bot import (
     HubClient,
     _is_allowed,
+    build_callback,
+    build_confirm_keyboard,
+    build_marker_keyboard,
+    build_run_args,
+    build_run_keyboard,
+    build_stands_keyboard,
     format_projects,
     format_report,
     format_status,
+    parse_callback,
     parse_optional_run_id,
     parse_project_name,
     parse_run_args,
+    parse_run_command,
     parse_run_id,
 )
 
@@ -239,3 +247,123 @@ async def test_hub_client_full_run_cycle_matches_report_format(
         assert f"run={run_id}" in text
     finally:
         await client.aclose()
+
+
+# ------------------------------------------------------------------ парсинг /run без исключений
+def test_parse_run_command_happy_path():
+    assert parse_run_command("bike_fit stage smoke") == ("bike_fit", "stage", "smoke")
+
+
+@pytest.mark.parametrize("text", ["", "bike_fit"])
+def test_parse_run_command_invalid_returns_none(text):
+    assert parse_run_command(text) is None
+
+
+# ------------------------------------------------------------------ аргументы pytest (зеркалит runner._execute)
+def test_build_run_args_env_flag_and_marker():
+    assert build_run_args(True, "stage", "smoke") == ["--env", "stage", "-m", "smoke"]
+
+
+def test_build_run_args_without_env_flag_skips_env():
+    assert build_run_args(False, "stage", "smoke") == ["-m", "smoke"]
+
+
+def test_build_run_args_no_stand_skips_env_even_if_flag_set():
+    assert build_run_args(True, None, "smoke") == ["-m", "smoke"]
+
+
+def test_build_run_args_no_marker_skips_dash_m():
+    assert build_run_args(True, "stage", None) == ["--env", "stage"]
+
+
+def test_build_run_args_all_none_is_empty():
+    assert build_run_args(False, None, None) == []
+
+
+# ------------------------------------------------------------------ callback_data кнопок
+def test_build_callback_round_trips_through_parse_callback():
+    data = build_callback("marker", project="bike_fit", stand="stage", marker="smoke")
+    assert parse_callback(data) == {
+        "action": "marker",
+        "project": "bike_fit",
+        "stand": "stage",
+        "marker": "smoke",
+    }
+
+
+def test_build_callback_encodes_none_as_placeholder_and_decodes_back():
+    data = build_callback("stand", project="bike_fit", stand=None)
+    assert parse_callback(data) == {"action": "stand", "project": "bike_fit", "stand": None}
+
+
+def test_parse_callback_menu():
+    assert parse_callback("menu") == {"action": "menu"}
+
+
+def test_parse_callback_project():
+    assert parse_callback("project:bike_fit") == {"action": "project", "project": "bike_fit"}
+
+
+def test_parse_callback_confirm_with_none_marker():
+    assert parse_callback("confirm:bike_fit:stage:_") == {
+        "action": "confirm",
+        "project": "bike_fit",
+        "stand": "stage",
+        "marker": None,
+    }
+
+
+@pytest.mark.parametrize("action", ["run_status", "run_report", "run_cancel"])
+def test_parse_callback_run_actions(action):
+    assert parse_callback(f"{action}:42") == {"action": action, "run_id": 42}
+
+
+@pytest.mark.parametrize(
+    "data",
+    ["", "unknown", "project", "project:a:b", "run_status:not-a-number", "marker:a:b"],
+)
+def test_parse_callback_invalid_returns_invalid_action(data):
+    assert parse_callback(data) == {"action": "invalid", "raw": data}
+
+
+# ------------------------------------------------------------------ inline-клавиатуры
+def test_build_stands_keyboard_lists_stand_buttons():
+    markup = build_stands_keyboard("bike_fit", [{"name": "stage"}, {"name": "prod"}])
+    data = [btn.callback_data for row in markup.inline_keyboard for btn in row]
+    assert "stand:bike_fit:stage" in data
+    assert "stand:bike_fit:prod" in data
+
+
+def test_build_stands_keyboard_no_stands_shows_no_stand_button():
+    markup = build_stands_keyboard("bike_fit", [])
+    data = [btn.callback_data for row in markup.inline_keyboard for btn in row]
+    assert "stand:bike_fit:_" in data
+
+
+def test_build_marker_keyboard_covers_all_four_options():
+    markup = build_marker_keyboard("bike_fit", "stage")
+    data = [btn.callback_data for row in markup.inline_keyboard for btn in row]
+    assert "marker:bike_fit:stage:smoke" in data
+    assert "marker:bike_fit:stage:api" in data
+    assert "marker:bike_fit:stage:ui" in data
+    assert "marker:bike_fit:stage:_" in data  # "Все" -> marker=None
+
+
+def test_build_confirm_keyboard_has_yes_and_cancel():
+    markup = build_confirm_keyboard("bike_fit", "stage", "smoke")
+    data = [btn.callback_data for row in markup.inline_keyboard for btn in row]
+    assert "confirm:bike_fit:stage:smoke" in data
+    assert "menu" in data
+
+
+def test_build_run_keyboard_has_status_report_cancel():
+    markup = build_run_keyboard(7)
+    data = [btn.callback_data for row in markup.inline_keyboard for btn in row]
+    assert data == ["run_status:7", "run_report:7", "run_cancel:7"]
+
+
+# ------------------------------------------------------------------ lifespan: без токена бот не создаётся
+async def test_lifespan_without_token_skips_bot(db_path, monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_BOT_TOKEN", "")
+    async with lifespan(app):
+        assert app.state.tg_bot is None
