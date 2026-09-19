@@ -18,11 +18,12 @@ def test_seed_users_have_expected_roles(db_path):
     finally:
         conn.close()
 
-    assert set(rows.keys()) == {"qa", "manager", "customer", "admin"}
+    assert set(rows.keys()) == {"qa", "manager", "customer", "admin", "tg_bot"}
     assert rows["qa"]["role"] == "qa"
     assert rows["manager"]["role"] == "manager"
     assert rows["customer"]["role"] == "customer"
     assert rows["admin"]["role"] == "superadmin"
+    assert rows["tg_bot"]["role"] == "customer"
     # sanity: пароли захешированы, не хранятся в открытом виде
     for login_, row in rows.items():
         assert row["password_hash"] != login_
@@ -38,6 +39,7 @@ def test_seed_onboarded_flags_match_seed_table(db_path):
 
     expected = {login_: onboarded for login_, _password, _role, onboarded in SEED_USERS}
     expected["admin"] = 1
+    expected["tg_bot"] = 1
     assert rows == expected
 
 
@@ -71,7 +73,8 @@ def test_seed_is_idempotent(db_path):
     finally:
         conn.close()
 
-    assert after_users == before_users == 4
+    # qa, manager, customer, admin (SUPERADMIN) + tg_bot (Telegram-бот, app/tg_bot.py)
+    assert after_users == before_users == 5
     # bike_fit, Velo_bot (SEED_PROJECTS) + auto_tests_vshgu_cloude (всегда обеспечиваемый init_db)
     assert after_projects == before_projects == 3
 

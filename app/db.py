@@ -176,6 +176,28 @@ def _seed_superadmin(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def _seed_tg_bot_user(conn: sqlite3.Connection) -> None:
+    """Сервисная учётка Telegram-бота (app/tg_bot.py): роль 'customer' — ровно те
+    права, что нужны боту (смотреть проекты/стенды/дерево, запускать прогоны,
+    смотреть отчёты, без CRUD и без отмены). Идемпотентно, как _seed_superadmin:
+    если логин уже есть (в т.ч. с паролем, изменённым вручную), не трогаем."""
+    exists = conn.execute(
+        "SELECT 1 FROM users WHERE login = ?", (settings.TH_TG_SERVICE_LOGIN,)
+    ).fetchone()
+    if exists:
+        return
+    conn.execute(
+        "INSERT INTO users (login, password_hash, role, onboarded) VALUES (?, ?, ?, ?)",
+        (
+            settings.TH_TG_SERVICE_LOGIN,
+            hash_password(settings.TH_TG_SERVICE_PASSWORD),
+            "customer",
+            1,
+        ),
+    )
+    conn.commit()
+
+
 def init_db() -> None:
     conn = get_connection()
     try:
@@ -188,5 +210,6 @@ def init_db() -> None:
         _seed_if_empty(conn)
         _seed_superadmin(conn)
         _seed_vshgu_project(conn)
+        _seed_tg_bot_user(conn)
     finally:
         conn.close()
