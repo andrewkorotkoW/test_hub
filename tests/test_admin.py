@@ -49,8 +49,8 @@ async def test_overview_counts_match_fixture_data(superadmin_client):
     resp = await superadmin_client.get("/api/admin/overview")
     assert resp.status_code == 200
     body = resp.json()
-    # seed: qa, manager, customer, admin
-    assert body["counts"]["users"] == 4
+    # seed: qa, manager, customer, admin, tg_bot
+    assert body["counts"]["users"] == 5
     assert body["counts"]["projects"] == 3  # bike_fit, Velo_bot, auto_tests_vshgu_cloude
     assert body["counts"]["stands"] == 2  # develop, stage у auto_tests_vshgu_cloude
     assert body["counts"]["runs"] == 0
@@ -77,7 +77,7 @@ async def test_users_password_hash_not_leaked(superadmin_client):
     resp = await superadmin_client.get("/api/admin/users")
     assert resp.status_code == 200
     body = resp.json()
-    assert body["total"] == 4
+    assert body["total"] == 5
     for row in body["items"]:
         assert "password_hash" not in row
         assert set(row.keys()) == {"login", "role", "onboarded"}
@@ -92,7 +92,7 @@ async def test_users_pagination(superadmin_client, qa_client):
 
     resp = await superadmin_client.get("/api/admin/users?page=1&per_page=3&sort=login&order=asc")
     body = resp.json()
-    assert body["total"] == 9  # 4 seed + 5 extra
+    assert body["total"] == 10  # 5 seed + 5 extra
     assert body["page"] == 1
     assert len(body["items"]) == 3
     logins_page1 = [u["login"] for u in body["items"]]
@@ -166,8 +166,11 @@ async def test_admin_can_delete_other_user(superadmin_client):
     resp = await superadmin_client.delete("/api/admin/users/customer")
     assert resp.status_code == 204
 
+    # q=customer теперь также матчится по role="customer" (tg_bot, app/tg_bot.py),
+    # поэтому проверяем отсутствие самого удалённого логина, а не total==0.
     resp = await superadmin_client.get("/api/admin/users?q=customer")
-    assert resp.json()["total"] == 0
+    logins = {u["login"] for u in resp.json()["items"]}
+    assert "customer" not in logins
 
 
 async def test_admin_delete_unknown_user_is_404(superadmin_client):
