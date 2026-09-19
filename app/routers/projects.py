@@ -21,6 +21,7 @@ def _project_payload(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
         "name": row["name"],
         "path": row["path"],
         "venv": row["venv"],
+        "use_env_flag": bool(row["use_env_flag"]),
         "stands": _stands_for(conn, row["name"]),
     }
 
@@ -55,8 +56,8 @@ def create_project(
             detail="Path does not exist or is not a directory",
         )
     conn.execute(
-        "INSERT INTO projects (name, path, venv, stands) VALUES (?, ?, ?, '[]')",
-        (body.name, body.path, body.venv),
+        "INSERT INTO projects (name, path, venv, stands, use_env_flag) VALUES (?, ?, ?, '[]', ?)",
+        (body.name, body.path, body.venv, int(body.use_env_flag)),
     )
     conn.commit()
     return _project_payload(conn, _get_project_or_404(conn, body.name))
@@ -72,7 +73,11 @@ def update_project(
     row = _get_project_or_404(conn, name)
     path = body.path if body.path is not None else row["path"]
     venv = body.venv if body.venv is not None else row["venv"]
-    conn.execute("UPDATE projects SET path = ?, venv = ? WHERE name = ?", (path, venv, name))
+    use_env_flag = body.use_env_flag if body.use_env_flag is not None else bool(row["use_env_flag"])
+    conn.execute(
+        "UPDATE projects SET path = ?, venv = ?, use_env_flag = ? WHERE name = ?",
+        (path, venv, int(use_env_flag), name),
+    )
     conn.commit()
     return _project_payload(conn, _get_project_or_404(conn, name))
 

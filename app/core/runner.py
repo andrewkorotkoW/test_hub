@@ -89,7 +89,9 @@ def _get_stand(conn: sqlite3.Connection, project: str, name: str) -> sqlite3.Row
     return conn.execute("SELECT * FROM stands WHERE project = ? AND name = ?", (project, name)).fetchone()
 
 
-async def submit_run(project_name: str, stand_name: str | None, target: str, requested_by: str) -> int:
+async def submit_run(
+    project_name: str, stand_name: str | None, target: str, requested_by: str, marker: str | None = None
+) -> int:
     """Создаёт запись прогона (running, если для проекта нет активного, иначе queued)
     и, если она стартует сразу, запускает фоновую задачу исполнения."""
     async with _lock_for(project_name):
@@ -102,10 +104,10 @@ async def submit_run(project_name: str, stand_name: str | None, target: str, req
             start_now = active is None
             now = datetime.now().isoformat(timespec="seconds")
             cur = conn.execute(
-                "INSERT INTO runs (project, stand, target, status, started, requested_by, counts) "
-                "VALUES (?, ?, ?, ?, ?, ?, '{}')",
+                "INSERT INTO runs (project, stand, target, status, started, requested_by, counts, marker) "
+                "VALUES (?, ?, ?, ?, ?, ?, '{}', ?)",
                 (project_name, stand_name, target, "running" if start_now else "queued",
-                 now if start_now else None, requested_by),
+                 now if start_now else None, requested_by, marker),
             )
             conn.commit()
             run_id = cur.lastrowid
@@ -113,7 +115,7 @@ async def submit_run(project_name: str, stand_name: str | None, target: str, req
             conn.close()
 
     if start_now:
-        asyncio.create_task(_execute(run_id, project_name, stand_name, target))
+        asyncio.create_task(_execute(run_id, project_name, stand_name, target, marker))
     return run_id
 
 
@@ -208,10 +210,12 @@ async def _advance_queue(project_name: str) -> None:
         finally:
             conn.close()
     if nxt is not None:
-        asyncio.create_task(_execute(nxt["id"], project_name, nxt["stand"], nxt["target"]))
+        asyncio.create_task(_execute(nxt["id"], project_name, nxt["stand"], nxt["target"], nxt["marker"]))
 
 
-async def _execute(run_id: int, project_name: str, stand_name: str | None, target: str) -> None:
+async def _execute(
+    run_id: int, project_name: str, stand_name: str | None, target: str, marker: str | None = None
+) -> None:
     conn = get_connection()
     try:
         project = _get_project(conn, project_name)
@@ -241,6 +245,11 @@ async def _execute(run_id: int, project_name: str, stand_name: str | None, targe
     if stand is not None:
         env["STAND_URL"] = stand["url"] or ""
         env["STAND_LOGIN"] = stand["login"] or ""
+        if project["use_env_flag"]:
+            args.extend(["--env", stand_name])
+            env["HEADLESS"] = "1"
+    if marker:
+        args.extend(["-m", marker])
 
     try:
         proc = await asyncio.create_subprocess_exec(

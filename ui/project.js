@@ -11,6 +11,7 @@
   document.getElementById("project-title").textContent = projectName;
   const pageError = document.getElementById("page-error");
   const standSelect = document.getElementById("stand-select");
+  const markerSelect = document.getElementById("marker-select");
   const testsError = document.getElementById("tests-error");
   const treeBox = document.getElementById("tests-tree");
   const runAllBtn = document.getElementById("run-all-btn");
@@ -280,7 +281,7 @@
     try {
       const run = await api(`/api/projects/${encodeURIComponent(projectName)}/runs`, {
         method: "POST",
-        json: { stand: standSelect.value || null, target },
+        json: { stand: standSelect.value || null, target, marker: markerSelect.value || null },
       });
       await openRun(run.id);
       await loadHistory();

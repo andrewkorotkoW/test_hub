@@ -11,6 +11,7 @@ const PROJECT_NAME_RE = /^[a-zA-Z0-9_-]+$/;
   const nameInput = document.getElementById("new-project-name");
   const pathInput = document.getElementById("new-project-path");
   const venvInput = document.getElementById("new-project-venv");
+  const useEnvFlagInput = document.getElementById("new-project-use-env-flag");
   const formError = document.getElementById("add-project-error");
   const cancelBtn = document.getElementById("add-project-cancel");
 
@@ -76,7 +77,10 @@ const PROJECT_NAME_RE = /^[a-zA-Z0-9_-]+$/;
       const submitBtn = form.querySelector('button[type="submit"]');
       submitBtn.disabled = true;
       try {
-        await api("/api/projects", { method: "POST", json: { name, path, venv } });
+        await api("/api/projects", {
+          method: "POST",
+          json: { name, path, venv, use_env_flag: useEnvFlagInput.checked },
+        });
         closeModal();
         await loadProjects();
       } catch (err) {
