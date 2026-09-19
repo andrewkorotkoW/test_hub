@@ -14,11 +14,13 @@ class ProjectCreate(BaseModel):
     name: str
     path: str
     venv: str = ".venv"
+    use_env_flag: bool = False
 
 
 class ProjectUpdate(BaseModel):
     path: Optional[str] = None
     venv: Optional[str] = None
+    use_env_flag: Optional[bool] = None
 
 
 class StandCreate(BaseModel):
@@ -36,6 +38,7 @@ class StandUpdate(BaseModel):
 class RunCreate(BaseModel):
     stand: Optional[str] = None
     target: str = "all"
+    marker: Optional[str] = None
 
 
 class UserCreate(BaseModel):

@@ -15,7 +15,8 @@ CREATE TABLE IF NOT EXISTS projects (
     name TEXT PRIMARY KEY,
     path TEXT NOT NULL,
     venv TEXT NOT NULL,
-    stands TEXT NOT NULL DEFAULT '[]'
+    stands TEXT NOT NULL DEFAULT '[]',
+    use_env_flag INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS stands (
@@ -37,7 +38,8 @@ CREATE TABLE IF NOT EXISTS runs (
     finished TEXT,
     duration REAL,
     requested_by TEXT,
-    counts TEXT NOT NULL DEFAULT '{}'
+    counts TEXT NOT NULL DEFAULT '{}',
+    marker TEXT
 );
 
 CREATE TABLE IF NOT EXISTS run_events (
@@ -61,6 +63,11 @@ SEED_PROJECTS = [
 
 SUPERADMIN_LOGIN = "admin"
 SUPERADMIN_PASSWORD = "admin"
+
+VSHGU_PROJECT_NAME = "auto_tests_vshgu_cloude"
+VSHGU_PROJECT_PATH = "/Users/andreykorotkow/PycharmProjects/auto_tests_vshgu_cloude"
+VSHGU_PROJECT_VENV = ".venv"
+VSHGU_STANDS = ("develop", "stage")
 
 
 def get_connection() -> sqlite3.Connection:
@@ -122,6 +129,40 @@ def _migrate_users_role_check(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def _migrate_add_column(conn: sqlite3.Connection, table: str, column: str, ddl: str) -> None:
+    """PRAGMA table_info + ALTER TABLE ... ADD COLUMN для колонок, добавленных к уже
+    существующей таблице (CREATE TABLE IF NOT EXISTS в SCHEMA их не тронет)."""
+    cols = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+    if column not in cols:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {ddl}")
+        conn.commit()
+
+
+def _seed_vshgu_project(conn: sqlite3.Connection) -> None:
+    """Гарантирует наличие проекта auto_tests_vshgu_cloude и его стендов develop/stage.
+    Идемпотентно и вызывается на каждом старте (не только _seed_if_empty — боевая БД
+    непустая): вставляет только отсутствующие записи, не трогая поля, изменённые
+    пользователем вручную (например, use_env_flag, выключенный через API)."""
+    exists = conn.execute(
+        "SELECT 1 FROM projects WHERE name = ?", (VSHGU_PROJECT_NAME,)
+    ).fetchone()
+    if not exists:
+        conn.execute(
+            "INSERT INTO projects (name, path, venv, stands, use_env_flag) VALUES (?, ?, ?, '[]', 1)",
+            (VSHGU_PROJECT_NAME, VSHGU_PROJECT_PATH, VSHGU_PROJECT_VENV),
+        )
+    for stand_name in VSHGU_STANDS:
+        stand_exists = conn.execute(
+            "SELECT 1 FROM stands WHERE project = ? AND name = ?", (VSHGU_PROJECT_NAME, stand_name)
+        ).fetchone()
+        if not stand_exists:
+            conn.execute(
+                "INSERT INTO stands (project, name, url, login) VALUES (?, ?, '', NULL)",
+                (VSHGU_PROJECT_NAME, stand_name),
+            )
+    conn.commit()
+
+
 def _seed_superadmin(conn: sqlite3.Connection) -> None:
     exists = conn.execute(
         "SELECT 1 FROM users WHERE login = ?", (SUPERADMIN_LOGIN,)
@@ -142,7 +183,10 @@ def init_db() -> None:
         conn.commit()
         if _users_role_check_outdated(conn):
             _migrate_users_role_check(conn)
+        _migrate_add_column(conn, "projects", "use_env_flag", "use_env_flag INTEGER NOT NULL DEFAULT 0")
+        _migrate_add_column(conn, "runs", "marker", "marker TEXT")
         _seed_if_empty(conn)
         _seed_superadmin(conn)
+        _seed_vshgu_project(conn)
     finally:
         conn.close()

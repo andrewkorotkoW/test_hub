@@ -72,7 +72,8 @@ def test_seed_is_idempotent(db_path):
         conn.close()
 
     assert after_users == before_users == 4
-    assert after_projects == before_projects == 2
+    # bike_fit, Velo_bot (SEED_PROJECTS) + auto_tests_vshgu_cloude (всегда обеспечиваемый init_db)
+    assert after_projects == before_projects == 3
 
 
 async def test_seed_projects_visible_via_api(qa_client):
