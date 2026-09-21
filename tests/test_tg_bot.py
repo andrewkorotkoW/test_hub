@@ -17,7 +17,7 @@ from httpx import ASGITransport
 from unittest.mock import AsyncMock
 
 from aiogram import Bot, Dispatcher
-from aiogram.methods import AnswerCallbackQuery, EditMessageText, SendMessage
+from aiogram.methods import AnswerCallbackQuery, EditMessageText, SendMessage, SendPhoto
 from aiogram.types import CallbackQuery, Chat, Message, Update, User
 
 from app import tg_bot
@@ -374,10 +374,10 @@ def test_build_confirm_keyboard_has_yes_and_cancel():
     assert "menu" in data
 
 
-def test_build_run_keyboard_has_status_report_cancel():
+def test_build_run_keyboard_has_status_report_cancel_trend():
     markup = build_run_keyboard(7)
     data = [btn.callback_data for row in markup.inline_keyboard for btn in row]
-    assert data == ["run_status:7", "run_report:7", "run_cancel:7"]
+    assert data == ["run_status:7", "run_report:7", "run_cancel:7", "run_trend:7"]
 
 
 # ------------------------------------------------------------------ lifespan: без токена бот не создаётся
@@ -578,7 +578,7 @@ async def test_button_flow_edits_single_message_and_submits_expected_run(monkeyp
     final_message = edited[-1]
     assert "Прогон #42 поставлен в очередь." in final_message.text
     callback_datas = [btn.callback_data for row in final_message.reply_markup.inline_keyboard for btn in row]
-    assert callback_datas == ["run_status:42", "run_report:42", "run_cancel:42"]
+    assert callback_datas == ["run_status:42", "run_report:42", "run_cancel:42", "run_trend:42"]
 
 
 async def test_button_flow_without_env_flag_omits_env_in_confirm_hint(monkeypatch):
@@ -635,3 +635,126 @@ async def test_button_flow_stand_step_does_not_call_hub_client(monkeypatch):
     edited = [c for c in session.calls if isinstance(c, EditMessageText)]
     assert len(edited) == 1
     assert "Выберите набор тестов" in edited[0].text
+
+
+# ------------------------------------------------------------------ фото-отчёт: кнопка «Отчёт»/«Тренд»
+_SHORT_REPORT = {
+    "id": 42,
+    "project": "bike_fit",
+    "status": "failed",
+    "duration": 3.5,
+    "counts": {"passed": 1, "failed": 1, "broken": 0, "skipped": 0},
+    "tests": [{"name": "test_x", "status": "failed", "message": "boom"}],
+}
+
+
+def _long_report(n_failed: int = 40) -> dict:
+    """Отчёт, чей format_report() заведомо длиннее TELEGRAM_CAPTION_LIMIT (1024) —
+    длинные имена и сообщения на каждый из n_failed упавших тестов."""
+    tests = [
+        {
+            "name": f"test_case_number_{i:03d}_with_a_fairly_long_and_descriptive_name",
+            "status": "failed",
+            "message": "AssertionError: " + "x" * 130,
+        }
+        for i in range(n_failed)
+    ]
+    return {
+        "id": 43,
+        "project": "bike_fit",
+        "status": "failed",
+        "duration": 12.0,
+        "counts": {"passed": 0, "failed": n_failed, "broken": 0, "skipped": 0},
+        "tests": tests,
+    }
+
+
+async def test_cb_run_report_sends_photo_with_caption(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    client.get_report.return_value = _SHORT_REPORT
+    client.get_report_png.return_value = b"\x89PNGfakereportbytes"
+    dispatcher = _make_dispatcher(client)
+
+    flow_message = _message(bot, text="Прогон #42 поставлен в очередь.")
+    await dispatcher.feed_update(
+        bot,
+        Update(update_id=1, callback_query=_callback(bot, flow_message, "run_report:42", cb_id="c1")),
+    )
+
+    client.get_report.assert_awaited_once_with(42)
+    client.get_report_png.assert_awaited_once_with(42)
+    assert [type(c).__name__ for c in session.calls] == ["AnswerCallbackQuery", "SendPhoto"]
+    sent = session.calls[1]
+    assert isinstance(sent, SendPhoto)
+    assert sent.photo.data == b"\x89PNGfakereportbytes"
+    assert "Прогон #42 (bike_fit) — провален" in sent.caption
+    assert "passed: 1, failed: 1" in sent.caption
+
+
+async def test_cb_run_report_long_caption_sends_photo_and_separate_text(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    long_report = _long_report()
+    full_caption = format_report(long_report)
+    assert len(full_caption) > 1024, "фикстура должна гарантированно превышать лимит подписи"
+    client.get_report.return_value = long_report
+    client.get_report_png.return_value = b"\x89PNGfakereportbytes"
+    dispatcher = _make_dispatcher(client)
+
+    flow_message = _message(bot, text="Прогон #43 поставлен в очередь.")
+    await dispatcher.feed_update(
+        bot,
+        Update(update_id=1, callback_query=_callback(bot, flow_message, "run_report:43", cb_id="c1")),
+    )
+
+    assert [type(c).__name__ for c in session.calls] == ["AnswerCallbackQuery", "SendPhoto", "SendMessage"]
+    photo_call, text_call = session.calls[1], session.calls[2]
+    assert isinstance(photo_call, SendPhoto)
+    assert photo_call.caption is None  # подпись не влезла -> фото без подписи
+    assert isinstance(text_call, SendMessage)
+    assert text_call.text == full_caption
+
+
+async def test_cb_run_trend_sends_photo(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    client.get_trend_png.return_value = b"\x89PNGfaketrendbytes"
+    dispatcher = _make_dispatcher(client)
+
+    flow_message = _message(bot, text="Прогон #42 поставлен в очередь.")
+    await dispatcher.feed_update(
+        bot,
+        Update(update_id=1, callback_query=_callback(bot, flow_message, "run_trend:42", cb_id="c1")),
+    )
+
+    client.get_trend_png.assert_awaited_once_with(42)
+    assert [type(c).__name__ for c in session.calls] == ["AnswerCallbackQuery", "SendPhoto"]
+    sent = session.calls[1]
+    assert sent.photo.data == b"\x89PNGfaketrendbytes"
+    assert sent.caption == "Тренд последних прогонов"
+
+
+async def test_access_middleware_denies_run_report_callback_without_hitting_client_or_photo(monkeypatch):
+    """Тот же сценарий, что test_access_middleware_denies_unknown_user_callback, но на
+    callback_data кнопки «Отчёт» — убеждаемся, что новая ветка с фото тоже не достижима
+    для пользователя не из allowlist: ни SendPhoto, ни обращений к HubClient."""
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    dispatcher = _make_dispatcher(client)
+
+    msg = _message(bot, user_id=999)
+    cb = _callback(bot, msg, "run_report:42", user_id=999)
+    await dispatcher.feed_update(bot, Update(update_id=1, callback_query=cb))
+
+    assert [type(c).__name__ for c in session.calls] == ["AnswerCallbackQuery"]
+    answer = session.calls[0]
+    assert answer.text == ACCESS_DENIED_MESSAGE
+    assert answer.show_alert is True
+    client.get_report.assert_not_called()
+    client.get_report_png.assert_not_called()
+    client.get_trend_png.assert_not_called()
