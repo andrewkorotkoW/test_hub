@@ -185,6 +185,10 @@
       if (col.json) return `<td>${jsonCell(value)}</td>`;
       if (col.key === "onboarded") return `<td>${value ? "да" : "нет"}</td>`;
       if (col.key === "status") return `<td class="status-text ${escapeHtml(value)}">${escapeHtml(value)}</td>`;
+      if (col.key === "target" && value && value !== "all") {
+        const ids = value.split("\n").filter(Boolean);
+        return `<td title="${escapeHtml(ids.join(", "))}">выборочно (${ids.length})</td>`;
+      }
       if ((col.key === "started" || col.key === "finished" || col.key === "ts") && value) return `<td>${escapeHtml(fmtDate(value))}</td>`;
       if (col.key === "duration") return `<td>${fmtDuration(value)}</td>`;
       return `<td>${escapeHtml(value ?? "—")}</td>`;
