@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import functools
 import logging
 from dataclasses import dataclass, field
 
@@ -28,7 +29,7 @@ import httpx
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, CommandObject, CommandStart
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
+from aiogram.types import BufferedInputFile, CallbackQuery, InlineKeyboardMarkup, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from .config import settings
@@ -121,6 +122,14 @@ class HubClient:
     async def get_report(self, run_id: int) -> dict:
         resp = await self._request("GET", f"/api/runs/{run_id}/report")
         return resp.json()
+
+    async def get_report_png(self, run_id: int) -> bytes:
+        resp = await self._request("GET", f"/api/runs/{run_id}/report.png")
+        return resp.content
+
+    async def get_trend_png(self, run_id: int) -> bytes:
+        resp = await self._request("GET", f"/api/runs/{run_id}/trend.png")
+        return resp.content
 
     async def list_runs(self, project: str) -> list[dict]:
         resp = await self._request("GET", f"/api/projects/{project}/runs")
