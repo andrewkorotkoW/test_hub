@@ -21,6 +21,7 @@
   const pill = document.getElementById("run-status-pill");
   const cancelBtn = document.getElementById("cancel-run-btn");
   const logBox = document.getElementById("run-log");
+  const reportChart = document.getElementById("report-chart");
   const reportSection = document.getElementById("report-section");
   const badgesBox = document.getElementById("summary-badges");
   const reportRows = document.getElementById("report-rows");
@@ -167,12 +168,14 @@
     return `${proto}//${window.location.host}/ws/runs/${runId}`;
   }
 
-  function renderReport(payload) {
+  function renderReport(payload, runId) {
     currentTests = payload.tests || [];
     const counts = payload.counts || {};
     badgesBox.innerHTML = ["passed", "failed", "broken", "skipped"]
       .map((s) => `<span class="badge ${s}">${s}: ${counts[s] || 0}</span>`)
       .join("");
+    reportChart.src = `/api/runs/${runId}/report.png`;
+    reportChart.hidden = false;
     reportSection.hidden = false;
     renderReportRows();
   }
@@ -227,7 +230,7 @@
       const payload = await api(`/api/runs/${runId}/report`);
       setPill(payload.status);
       cancelBtn.hidden = user.role === "customer" || !["queued", "running"].includes(payload.status);
-      renderReport(payload);
+      renderReport(payload, runId);
       return payload;
     } catch (err) {
       showPageError(`Не удалось загрузить отчёт: ${err.message}`);
@@ -242,6 +245,8 @@
     runIdLabel.textContent = runId;
     logBox.textContent = "";
     reportSection.hidden = true;
+    reportChart.hidden = true;
+    reportChart.removeAttribute("src");
     setPill("queued");
 
     await refreshReport(runId);

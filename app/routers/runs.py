@@ -2,9 +2,10 @@ import json
 import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
+from fastapi.responses import Response
 
 from ..config import settings
-from ..core import allure_report, runner
+from ..core import allure_report, charts, runner
 from ..core.ws import hub
 from ..db import get_connection
 from ..deps import get_current_user, get_db, require_roles
@@ -99,6 +100,40 @@ def get_report(
     payload["counts"] = counts
     payload["tests"] = tests
     return payload
+
+
+def _run_history(conn: sqlite3.Connection, row: sqlite3.Row, limit: int) -> list[dict]:
+    rows = conn.execute(
+        "SELECT * FROM runs WHERE project = ? AND stand IS ? ORDER BY id DESC LIMIT ?",
+        (row["project"], row["stand"], limit),
+    ).fetchall()
+    return [_run_payload(r) for r in rows]
+
+
+@router.get("/runs/{run_id}/report.png")
+def get_report_png(
+    run_id: int,
+    conn: sqlite3.Connection = Depends(get_db),
+    _user: sqlite3.Row = Depends(get_current_user),
+) -> Response:
+    row = _get_run_or_404(conn, run_id)
+    run = _run_payload(row)
+    history = _run_history(conn, row, 10)
+    results = allure_report.parse_results(runner.allure_dir(run_id))
+    png = charts.build_report_png(run, history, results)
+    return Response(content=png, media_type="image/png")
+
+
+@router.get("/runs/{run_id}/trend.png")
+def get_trend_png(
+    run_id: int,
+    conn: sqlite3.Connection = Depends(get_db),
+    _user: sqlite3.Row = Depends(get_current_user),
+) -> Response:
+    row = _get_run_or_404(conn, run_id)
+    history = _run_history(conn, row, 30)
+    png = charts.build_trend_png(history)
+    return Response(content=png, media_type="image/png")
 
 
 @router.post("/runs/{run_id}/cancel")
