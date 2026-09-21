@@ -254,6 +254,7 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
   word-break: break-word;
 }
 
+.report-chart { display: block; width: 100%; max-width: 600px; height: auto; margin: 0 auto 14px; border-radius: var(--radius); }
 .summary-badges { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
 .badge {
   border-radius: var(--radius);
