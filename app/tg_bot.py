@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import functools
 import logging
 from dataclasses import dataclass, field
 
@@ -28,7 +29,7 @@ import httpx
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, CommandObject, CommandStart
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
+from aiogram.types import BufferedInputFile, CallbackQuery, InlineKeyboardMarkup, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from .config import settings
@@ -39,6 +40,7 @@ POLL_INTERVAL_SECONDS = 3.0
 TERMINAL_STATUSES = {"passed", "failed", "cancelled"}
 MAX_FAILED_LISTED = 15
 MAX_REASON_LEN = 120
+TELEGRAM_CAPTION_LIMIT = 1024
 
 STATUS_RU = {
     "queued": "в очереди",
@@ -121,6 +123,14 @@ class HubClient:
     async def get_report(self, run_id: int) -> dict:
         resp = await self._request("GET", f"/api/runs/{run_id}/report")
         return resp.json()
+
+    async def get_report_png(self, run_id: int) -> bytes:
+        resp = await self._request("GET", f"/api/runs/{run_id}/report.png")
+        return resp.content
+
+    async def get_trend_png(self, run_id: int) -> bytes:
+        resp = await self._request("GET", f"/api/runs/{run_id}/trend.png")
+        return resp.content
 
     async def list_runs(self, project: str) -> list[dict]:
         resp = await self._request("GET", f"/api/projects/{project}/runs")
@@ -219,7 +229,7 @@ def parse_callback(data: str) -> dict:
             "stand": _decode_token(rest[1]),
             "marker": _decode_token(rest[2]),
         }
-    if action in ("run_status", "run_report", "run_cancel") and len(rest) == 1:
+    if action in ("run_status", "run_report", "run_cancel", "run_trend") and len(rest) == 1:
         try:
             run_id = int(rest[0])
         except ValueError:
@@ -360,7 +370,8 @@ def build_run_keyboard(run_id: int) -> InlineKeyboardMarkup:
     builder.button(text="Статус", callback_data=build_callback("run_status", run_id=str(run_id)))
     builder.button(text="Отчёт", callback_data=build_callback("run_report", run_id=str(run_id)))
     builder.button(text="Отменить", callback_data=build_callback("run_cancel", run_id=str(run_id)))
-    builder.adjust(3)
+    builder.button(text="Тренд", callback_data=build_callback("run_trend", run_id=str(run_id)))
+    builder.adjust(2, 2)
     return builder.as_markup()
 
 
@@ -402,6 +413,26 @@ async def _reply_http_error(message: Message, exc: httpx.HTTPError, action: str,
     await message.answer(f"Не удалось {action}.")
 
 
+async def _send_report_png(
+    send_photo,
+    send_text,
+    run_id: int,
+    png: bytes,
+    caption: str,
+    reply_markup: InlineKeyboardMarkup | None = None,
+) -> None:
+    """send_photo/send_text — уже связанные с получателем (chat_id/message) корутины
+    вида send_photo(photo, caption=..., reply_markup=...) и send_text(text, reply_markup=...).
+    Подпись к фото в Telegram ограничена TELEGRAM_CAPTION_LIMIT символами — если отчёт
+    длиннее, фото уходит без подписи, а полный текст следом отдельным сообщением."""
+    photo = BufferedInputFile(png, filename=f"report_{run_id}.png")
+    if len(caption) <= TELEGRAM_CAPTION_LIMIT:
+        await send_photo(photo, caption=caption, reply_markup=reply_markup)
+    else:
+        await send_photo(photo)
+        await send_text(caption, reply_markup=reply_markup)
+
+
 async def _project_use_env_flag(client: HubClient, project: str) -> bool:
     try:
         projects = await client.list_projects()
@@ -423,7 +454,20 @@ async def _watch_run(bot: Bot, client: HubClient, run_chats: dict[int, int], run
         if report["status"] in TERMINAL_STATUSES:
             chat_id = run_chats.pop(run_id, None)
             if chat_id is not None:
-                await bot.send_message(chat_id, format_report(report))
+                caption = format_report(report)
+                try:
+                    png = await client.get_report_png(run_id)
+                except httpx.HTTPError as exc:
+                    logger.warning("tg_bot: не удалось получить report.png для прогона #%s: %s", run_id, exc)
+                    await bot.send_message(chat_id, caption)
+                else:
+                    await _send_report_png(
+                        functools.partial(bot.send_photo, chat_id),
+                        functools.partial(bot.send_message, chat_id),
+                        run_id,
+                        png,
+                        caption,
+                    )
             return
 
 
@@ -565,7 +609,41 @@ async def cb_run_report(query: CallbackQuery, client: HubClient) -> None:
         logger.warning("tg_bot: не удалось получить отчёт прогона #%s: %s", run_id, exc)
         await _safe_edit(query.message, f"Не удалось получить отчёт прогона #{run_id}.", build_run_keyboard(run_id))
         return
-    await _safe_edit(query.message, format_report(report), build_run_keyboard(run_id))
+    caption = format_report(report)
+    try:
+        png = await client.get_report_png(run_id)
+    except httpx.HTTPError as exc:
+        logger.warning("tg_bot: не удалось получить report.png для прогона #%s: %s", run_id, exc)
+        await _safe_edit(query.message, caption, build_run_keyboard(run_id))
+        return
+    # edit_text не умеет заменять сообщение на фото — вместо редактирования шлём
+    # новое сообщение с фото, а кнопки навешиваем прямо на него.
+    await _send_report_png(
+        query.message.answer_photo,
+        query.message.answer,
+        run_id,
+        png,
+        caption,
+        reply_markup=build_run_keyboard(run_id),
+    )
+
+
+@router.callback_query(F.data.startswith("run_trend:"))
+async def cb_run_trend(query: CallbackQuery, client: HubClient) -> None:
+    await query.answer()
+    if query.message is None:
+        return
+    run_id = parse_callback(query.data)["run_id"]
+    try:
+        png = await client.get_trend_png(run_id)
+    except httpx.HTTPError as exc:
+        logger.warning("tg_bot: не удалось получить trend.png для прогона #%s: %s", run_id, exc)
+        await _reply_http_error(query.message, exc, "получить тренд", not_found=f"Прогон #{run_id} не найден.")
+        return
+    await query.message.answer_photo(
+        BufferedInputFile(png, filename=f"trend_{run_id}.png"),
+        caption="Тренд последних прогонов",
+    )
 
 
 @router.callback_query(F.data.startswith("run_cancel:"))
@@ -675,7 +753,14 @@ async def cmd_report(message: Message, command: CommandObject, client: HubClient
     except httpx.HTTPError as exc:
         await _reply_http_error(message, exc, "получить отчёт", not_found=f"Прогон #{run_id} не найден.")
         return
-    await message.answer(format_report(report))
+    caption = format_report(report)
+    try:
+        png = await client.get_report_png(run_id)
+    except httpx.HTTPError as exc:
+        logger.warning("tg_bot: не удалось получить report.png для прогона #%s: %s", run_id, exc)
+        await message.answer(caption)
+        return
+    await _send_report_png(message.answer_photo, message.answer, run_id, png, caption)
 
 
 @router.message(Command("last"))
@@ -696,12 +781,20 @@ async def cmd_last(message: Message, command: CommandObject, client: HubClient) 
         await message.answer(f"У проекта «{project}» ещё нет прогонов.")
         return
 
+    run_id = runs[0]["id"]
     try:
-        report = await client.get_report(runs[0]["id"])
+        report = await client.get_report(run_id)
     except httpx.HTTPError as exc:
         await _reply_http_error(message, exc, "получить отчёт")
         return
-    await message.answer(format_report(report))
+    caption = format_report(report)
+    try:
+        png = await client.get_report_png(run_id)
+    except httpx.HTTPError as exc:
+        logger.warning("tg_bot: не удалось получить report.png для прогона #%s: %s", run_id, exc)
+        await message.answer(caption)
+        return
+    await _send_report_png(message.answer_photo, message.answer, run_id, png, caption)
 
 
 # ------------------------------------------------------------------ запуск/остановка приложения
