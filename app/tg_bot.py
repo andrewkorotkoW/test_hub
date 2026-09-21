@@ -23,13 +23,20 @@ import asyncio
 import contextlib
 import functools
 import logging
+import time
 from dataclasses import dataclass, field
 
 import httpx
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, CommandObject, CommandStart
-from aiogram.types import BufferedInputFile, CallbackQuery, InlineKeyboardMarkup, Message
+from aiogram.types import (
+    BufferedInputFile,
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+)
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from .config import settings
@@ -52,6 +59,9 @@ STATUS_RU = {
 
 MARKER_BUTTONS = [("Smoke", "smoke"), ("API", "api"), ("UI", "ui"), ("Все", None)]
 MARKER_LABELS = dict(MARKER_BUTTONS)
+
+TREE_CACHE_TTL_SECONDS = 300
+TREE_PAGE_SIZE = 8
 
 RUN_USAGE = "Использование: /run <проект> <стенд> [маркер]"
 STATUS_USAGE = "id прогона должен быть числом: /status [id]"
@@ -113,11 +123,15 @@ class HubClient:
         resp = await self._request("GET", f"/api/projects/{project}/stands")
         return resp.json()
 
-    async def submit_run(self, project: str, stand: str | None, marker: str | None) -> dict:
-        payload: dict = {"stand": stand, "target": "all"}
+    async def submit_run(self, project: str, stand: str | None, marker: str | None, target: str = "all") -> dict:
+        payload: dict = {"stand": stand, "target": target}
         if marker:
             payload["marker"] = marker
         resp = await self._request("POST", f"/api/projects/{project}/runs", json=payload)
+        return resp.json()
+
+    async def get_tests(self, project: str) -> dict:
+        resp = await self._request("GET", f"/api/projects/{project}/tests")
         return resp.json()
 
     async def get_report(self, run_id: int) -> dict:
@@ -235,6 +249,17 @@ def parse_callback(data: str) -> dict:
         except ValueError:
             return {"action": "invalid", "raw": data}
         return {"action": action, "run_id": run_id}
+    if action == "tests" and len(rest) == 2:
+        return {"action": "tests", "project": rest[0], "stand": _decode_token(rest[1])}
+    if action in ("tree_open", "tree_page") and len(rest) == 1:
+        try:
+            value = int(rest[0])
+        except ValueError:
+            return {"action": "invalid", "raw": data}
+        key = "node" if action == "tree_open" else "page"
+        return {"action": action, key: value}
+    if action in ("tree_up", "tree_refresh", "tree_select_file", "tree_clear", "tree_run") and not rest:
+        return {"action": action}
     return {"action": "invalid", "raw": data}
 
 
@@ -250,6 +275,80 @@ def build_run_args(env_flag: bool, stand: str | None, marker: str | None) -> lis
     if marker:
         args.extend(["-m", marker])
     return args
+
+
+# ------------------------------------------------------------------ дерево тестов (discover() -> плоский список узлов)
+def build_flat_tree(tree: dict) -> list[dict]:
+    """{file: {cls: [test, ...]}} (см. app/core/runner.py::discover) -> плоский
+    список узлов dir/file/class/test с parent/children-индексами. Узел [0] —
+    корень. Индекс узла в этом списке и есть то, что кодируется в callback_data
+    (см. п.6 задачи) — путь файла/тест-функции туда не попадает, так что 64-байтный
+    лимит Telegram не проблема независимо от длины реальных путей/имён тестов.
+    nodeid зеркалит ui/project.js::nodeIdOf (file::cls::test либо file::test)."""
+    nodes: list[dict] = [{"kind": "dir", "label": "", "parent": None, "children": []}]
+    dir_index: dict[tuple[str, ...], int] = {(): 0}
+
+    def get_dir(parts: tuple[str, ...]) -> int:
+        if parts in dir_index:
+            return dir_index[parts]
+        parent_idx = get_dir(parts[:-1])
+        idx = len(nodes)
+        nodes.append({"kind": "dir", "label": parts[-1], "parent": parent_idx, "children": []})
+        nodes[parent_idx]["children"].append(idx)
+        dir_index[parts] = idx
+        return idx
+
+    for file_path in sorted(tree):
+        parts = tuple(file_path.split("/"))
+        parent_idx = get_dir(parts[:-1])
+        file_idx = len(nodes)
+        nodes.append({"kind": "file", "label": parts[-1], "parent": parent_idx, "children": []})
+        nodes[parent_idx]["children"].append(file_idx)
+
+        classes = tree[file_path]
+        for cls_name in sorted(classes):
+            tests = classes[cls_name]
+            if cls_name:
+                owner_idx = len(nodes)
+                nodes.append({"kind": "class", "label": cls_name, "parent": file_idx, "children": []})
+                nodes[file_idx]["children"].append(owner_idx)
+            else:
+                owner_idx = file_idx
+            for test_name in tests:
+                nodeid = f"{file_path}::{cls_name}::{test_name}" if cls_name else f"{file_path}::{test_name}"
+                test_idx = len(nodes)
+                nodes.append(
+                    {"kind": "test", "label": test_name, "nodeid": nodeid, "parent": owner_idx, "children": []}
+                )
+                nodes[owner_idx]["children"].append(test_idx)
+    return nodes
+
+
+def _sorted_children(nodes: list[dict], index: int) -> list[int]:
+    return sorted(nodes[index]["children"], key=lambda i: nodes[i]["label"].lower())
+
+
+def _breadcrumb(nodes: list[dict], index: int) -> str:
+    parts = []
+    node: int | None = index
+    while node is not None:
+        label = nodes[node]["label"]
+        if label:
+            parts.append(label)
+        node = nodes[node]["parent"]
+    return "/".join(reversed(parts)) or "/"
+
+
+def _collect_test_nodeids(nodes: list[dict], index: int) -> list[str]:
+    result: list[str] = []
+    stack = [index]
+    while stack:
+        node = nodes[stack.pop()]
+        if node["kind"] == "test":
+            result.append(node["nodeid"])
+        else:
+            stack.extend(node["children"])
+    return result
 
 
 # ------------------------------------------------------------------ форматирование
@@ -352,8 +451,9 @@ def build_marker_keyboard(project: str, stand: str | None) -> InlineKeyboardMark
     builder = InlineKeyboardBuilder()
     for label, marker in MARKER_BUTTONS:
         builder.button(text=label, callback_data=build_callback("marker", project=project, stand=stand, marker=marker))
+    builder.button(text="Выбрать тесты", callback_data=build_callback("tests", project=project, stand=stand))
     builder.button(text="« К стендам", callback_data=build_callback("project", project=project))
-    builder.adjust(2, 2, 1)
+    builder.adjust(2, 2, 1, 1)
     return builder.as_markup()
 
 
@@ -372,6 +472,65 @@ def build_run_keyboard(run_id: int) -> InlineKeyboardMarkup:
     builder.button(text="Отменить", callback_data=build_callback("run_cancel", run_id=str(run_id)))
     builder.button(text="Тренд", callback_data=build_callback("run_trend", run_id=str(run_id)))
     builder.adjust(2, 2)
+    return builder.as_markup()
+
+
+def _tree_item_label(node: dict, selected: set[str]) -> str:
+    if node["kind"] == "test":
+        mark = "✅" if node["nodeid"] in selected else "▫️"
+        return f"{mark} {node['label']}"
+    icon = {"dir": "📁", "file": "📄", "class": "🗂"}[node["kind"]]
+    return f"{icon} {node['label']}"
+
+
+def build_tree_text(nodes: list[dict], project: str, stand: str | None, node: int, selected: set[str], error: str | None) -> str:
+    lines = [f"Проект: {project}", f"Стенд: {_stand_label(stand)}"]
+    if error:
+        lines.append(f"⚠️ {error}")
+    lines.append(f"Путь: {_breadcrumb(nodes, node)}")
+    lines.append(f"Выбрано тестов: {len(selected)}")
+    lines.append("Выберите папку, файл или тест:" if nodes[node]["children"] else "Здесь пусто.")
+    return "\n".join(lines)
+
+
+def build_tree_keyboard(
+    nodes: list[dict], project: str, stand: str | None, node: int, page: int, selected: set[str]
+) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    children = _sorted_children(nodes, node)
+    start = page * TREE_PAGE_SIZE
+    page_items = children[start : start + TREE_PAGE_SIZE]
+    for child_idx in page_items:
+        child = nodes[child_idx]
+        builder.row(
+            InlineKeyboardButton(
+                text=_tree_item_label(child, selected),
+                callback_data=build_callback("tree_open", node=str(child_idx)),
+            )
+        )
+
+    nav_row = []
+    if start > 0:
+        nav_row.append(InlineKeyboardButton(text="‹ назад", callback_data=build_callback("tree_page", page=str(page - 1))))
+    if start + TREE_PAGE_SIZE < len(children):
+        nav_row.append(InlineKeyboardButton(text="вперёд ›", callback_data=build_callback("tree_page", page=str(page + 1))))
+    if nav_row:
+        builder.row(*nav_row)
+
+    top_row = []
+    if nodes[node]["parent"] is not None:
+        top_row.append(InlineKeyboardButton(text="⬆ уровень выше", callback_data="tree_up"))
+    top_row.append(InlineKeyboardButton(text="Обновить дерево", callback_data="tree_refresh"))
+    builder.row(*top_row)
+
+    if nodes[node]["kind"] == "file":
+        builder.row(InlineKeyboardButton(text="Выбрать все в файле", callback_data="tree_select_file"))
+
+    builder.row(
+        InlineKeyboardButton(text="Сбросить", callback_data="tree_clear"),
+        InlineKeyboardButton(text=f"Запустить выбранные ({len(selected)})", callback_data="tree_run"),
+    )
+    builder.row(InlineKeyboardButton(text="« К набору", callback_data=build_callback("stand", project=project, stand=stand)))
     return builder.as_markup()
 
 
@@ -440,6 +599,33 @@ async def _project_use_env_flag(client: HubClient, project: str) -> bool:
         return False
     row = next((p for p in projects if p["name"] == project), None)
     return bool(row and row.get("use_env_flag"))
+
+
+# ------------------------------------------------------------------ кэш дерева тестов (per project, TTL ~5 минут)
+async def _load_tree(
+    client: HubClient, tree_cache: dict[str, tuple[float, list[dict], str | None]], project: str, force: bool = False
+) -> tuple[list[dict] | None, str | None]:
+    cached = tree_cache.get(project)
+    now = time.monotonic()
+    if not force and cached is not None and now - cached[0] < TREE_CACHE_TTL_SECONDS:
+        return cached[1], cached[2]
+    try:
+        data = await client.get_tests(project)
+    except httpx.HTTPError as exc:
+        logger.warning("tg_bot: не удалось получить дерево тестов проекта %s: %s", project, exc)
+        return None, "Не удалось получить дерево тестов."
+    error = data.get("error")
+    nodes = build_flat_tree(data.get("tree") or {})
+    tree_cache[project] = (now, nodes, error)
+    return nodes, error
+
+
+async def _render_tree(
+    message: Message, nodes: list[dict], project: str, stand: str | None, node: int, page: int, selected: set[str], error: str | None
+) -> None:
+    text = build_tree_text(nodes, project, stand, node, selected, error)
+    keyboard = build_tree_keyboard(nodes, project, stand, node, page, selected)
+    await _safe_edit(message, text, keyboard)
 
 
 # ------------------------------------------------------------------ фоновое ожидание прогона
@@ -556,6 +742,253 @@ async def cb_marker(query: CallbackQuery, client: HubClient) -> None:
     args = build_run_args(env_flag, stand, marker)
     text = _confirm_text(project, stand, marker, args)
     await _safe_edit(query.message, text, build_confirm_keyboard(project, stand, marker))
+
+
+@router.callback_query(F.data.startswith("tests:"))
+async def cb_tests(
+    query: CallbackQuery,
+    client: HubClient,
+    tree_cache: dict,
+    browse_state: dict[int, dict],
+    selections: dict[int, set[str]],
+) -> None:
+    await query.answer()
+    if query.message is None:
+        return
+    parsed = parse_callback(query.data)
+    project, stand = parsed["project"], parsed["stand"]
+    nodes, error = await _load_tree(client, tree_cache, project)
+    if nodes is None:
+        await _safe_edit(query.message, error or "Не удалось получить дерево тестов.")
+        return
+    chat_id = query.message.chat.id
+    browse_state[chat_id] = {"project": project, "stand": stand}
+    selected = selections.setdefault(chat_id, set())
+    await _render_tree(query.message, nodes, project, stand, 0, 0, selected, error)
+
+
+def _tree_nav_state(browse_state: dict[int, dict], chat_id: int) -> dict | None:
+    return browse_state.get(chat_id)
+
+
+@router.callback_query(F.data.startswith("tree_open:"))
+async def cb_tree_open(
+    query: CallbackQuery,
+    client: HubClient,
+    tree_cache: dict,
+    browse_state: dict[int, dict],
+    selections: dict[int, set[str]],
+) -> None:
+    await query.answer()
+    if query.message is None:
+        return
+    chat_id = query.message.chat.id
+    state = _tree_nav_state(browse_state, chat_id)
+    if state is None:
+        return
+    parsed = parse_callback(query.data)
+    if parsed["action"] != "tree_open":
+        return
+    nodes, error = await _load_tree(client, tree_cache, state["project"])
+    if nodes is None:
+        await _safe_edit(query.message, error or "Не удалось получить дерево тестов.")
+        return
+    node_index = parsed["node"]
+    if node_index < 0 or node_index >= len(nodes):
+        return
+    selected = selections.setdefault(chat_id, set())
+    node = nodes[node_index]
+    if node["kind"] == "test":
+        selected.symmetric_difference_update({node["nodeid"]})
+    else:
+        state["node"] = node_index
+        state["page"] = 0
+    await _render_tree(
+        query.message, nodes, state["project"], state["stand"], state.get("node", 0), state.get("page", 0), selected, error
+    )
+
+
+@router.callback_query(F.data.startswith("tree_page:"))
+async def cb_tree_page(
+    query: CallbackQuery,
+    client: HubClient,
+    tree_cache: dict,
+    browse_state: dict[int, dict],
+    selections: dict[int, set[str]],
+) -> None:
+    await query.answer()
+    if query.message is None:
+        return
+    chat_id = query.message.chat.id
+    state = _tree_nav_state(browse_state, chat_id)
+    if state is None:
+        return
+    parsed = parse_callback(query.data)
+    if parsed["action"] != "tree_page":
+        return
+    nodes, error = await _load_tree(client, tree_cache, state["project"])
+    if nodes is None:
+        await _safe_edit(query.message, error or "Не удалось получить дерево тестов.")
+        return
+    state["page"] = parsed["page"]
+    selected = selections.setdefault(chat_id, set())
+    await _render_tree(
+        query.message, nodes, state["project"], state["stand"], state.get("node", 0), state["page"], selected, error
+    )
+
+
+@router.callback_query(F.data == "tree_up")
+async def cb_tree_up(
+    query: CallbackQuery,
+    client: HubClient,
+    tree_cache: dict,
+    browse_state: dict[int, dict],
+    selections: dict[int, set[str]],
+) -> None:
+    await query.answer()
+    if query.message is None:
+        return
+    chat_id = query.message.chat.id
+    state = _tree_nav_state(browse_state, chat_id)
+    if state is None:
+        return
+    nodes, error = await _load_tree(client, tree_cache, state["project"])
+    if nodes is None:
+        await _safe_edit(query.message, error or "Не удалось получить дерево тестов.")
+        return
+    parent = nodes[state.get("node", 0)]["parent"]
+    if parent is not None:
+        state["node"] = parent
+        state["page"] = 0
+    selected = selections.setdefault(chat_id, set())
+    await _render_tree(
+        query.message, nodes, state["project"], state["stand"], state.get("node", 0), state.get("page", 0), selected, error
+    )
+
+
+@router.callback_query(F.data == "tree_refresh")
+async def cb_tree_refresh(
+    query: CallbackQuery,
+    client: HubClient,
+    tree_cache: dict,
+    browse_state: dict[int, dict],
+    selections: dict[int, set[str]],
+) -> None:
+    await query.answer("Дерево обновлено")
+    if query.message is None:
+        return
+    chat_id = query.message.chat.id
+    state = _tree_nav_state(browse_state, chat_id)
+    if state is None:
+        return
+    nodes, error = await _load_tree(client, tree_cache, state["project"], force=True)
+    if nodes is None:
+        await _safe_edit(query.message, error or "Не удалось получить дерево тестов.")
+        return
+    state["node"] = 0
+    state["page"] = 0
+    selected = selections.setdefault(chat_id, set())
+    await _render_tree(query.message, nodes, state["project"], state["stand"], 0, 0, selected, error)
+
+
+@router.callback_query(F.data == "tree_select_file")
+async def cb_tree_select_file(
+    query: CallbackQuery,
+    client: HubClient,
+    tree_cache: dict,
+    browse_state: dict[int, dict],
+    selections: dict[int, set[str]],
+) -> None:
+    await query.answer()
+    if query.message is None:
+        return
+    chat_id = query.message.chat.id
+    state = _tree_nav_state(browse_state, chat_id)
+    if state is None:
+        return
+    nodes, error = await _load_tree(client, tree_cache, state["project"])
+    if nodes is None:
+        await _safe_edit(query.message, error or "Не удалось получить дерево тестов.")
+        return
+    selected = selections.setdefault(chat_id, set())
+    node_index = state.get("node", 0)
+    if nodes[node_index]["kind"] == "file":
+        selected.update(_collect_test_nodeids(nodes, node_index))
+    await _render_tree(
+        query.message, nodes, state["project"], state["stand"], node_index, state.get("page", 0), selected, error
+    )
+
+
+@router.callback_query(F.data == "tree_clear")
+async def cb_tree_clear(
+    query: CallbackQuery,
+    client: HubClient,
+    tree_cache: dict,
+    browse_state: dict[int, dict],
+    selections: dict[int, set[str]],
+) -> None:
+    await query.answer("Выбор сброшен")
+    if query.message is None:
+        return
+    chat_id = query.message.chat.id
+    state = _tree_nav_state(browse_state, chat_id)
+    if state is None:
+        return
+    nodes, error = await _load_tree(client, tree_cache, state["project"])
+    if nodes is None:
+        await _safe_edit(query.message, error or "Не удалось получить дерево тестов.")
+        return
+    selections[chat_id] = set()
+    await _render_tree(
+        query.message,
+        nodes,
+        state["project"],
+        state["stand"],
+        state.get("node", 0),
+        state.get("page", 0),
+        selections[chat_id],
+        error,
+    )
+
+
+@router.callback_query(F.data == "tree_run")
+async def cb_tree_run(
+    query: CallbackQuery,
+    client: HubClient,
+    browse_state: dict[int, dict],
+    selections: dict[int, set[str]],
+    run_chats: dict[int, int],
+    last_run: dict[int, int],
+    bot: Bot,
+) -> None:
+    if query.message is None:
+        await query.answer()
+        return
+    chat_id = query.message.chat.id
+    state = _tree_nav_state(browse_state, chat_id)
+    selected = selections.get(chat_id) or set()
+    if state is None or not selected:
+        await query.answer("Сначала выберите хотя бы один тест.", show_alert=True)
+        return
+    await query.answer()
+
+    target = "\n".join(sorted(selected))
+    try:
+        run = await client.submit_run(state["project"], state["stand"], None, target=target)
+    except httpx.HTTPError as exc:
+        logger.warning("tg_bot: не удалось поставить прогон по выбранным тестам: %s", exc)
+        await _safe_edit(query.message, "Не удалось поставить прогон.")
+        return
+
+    run_id = run["id"]
+    run_chats[run_id] = chat_id
+    last_run[chat_id] = run_id
+    selections[chat_id] = set()
+    browse_state.pop(chat_id, None)
+    await _safe_edit(
+        query.message, f"Прогон #{run_id} поставлен в очередь ({len(selected)} тест(ов)).", build_run_keyboard(run_id)
+    )
+    asyncio.create_task(_watch_run(bot, client, run_chats, run_id))
 
 
 @router.callback_query(F.data.startswith("confirm:"))
@@ -809,7 +1242,9 @@ class TgApplication:
 def build_application() -> TgApplication:
     bot = Bot(token=settings.TH_TG_BOT_TOKEN)
     client = HubClient()
-    dispatcher = Dispatcher(client=client, run_chats={}, last_run={})
+    dispatcher = Dispatcher(
+        client=client, run_chats={}, last_run={}, tree_cache={}, browse_state={}, selections={}
+    )
     dispatcher.message.outer_middleware(AccessMiddleware())
     dispatcher.callback_query.outer_middleware(AccessMiddleware())
     dispatcher.include_router(router)
