@@ -40,9 +40,13 @@ class FakeMessage:
     def __init__(self, chat_id: int = 555) -> None:
         self.chat = FakeChat(chat_id)
         self.answers: list[str] = []
+        self.photos: list[dict] = []
 
     async def answer(self, text: str, **kwargs) -> None:
         self.answers.append(text)
+
+    async def answer_photo(self, photo, **kwargs) -> None:
+        self.photos.append({"photo": photo, **kwargs})
 
 
 class FakeCommand:
@@ -309,13 +313,38 @@ async def test_cmd_report_formats_full_report():
         "counts": {"passed": 1, "failed": 1, "broken": 0, "skipped": 0},
         "tests": [{"name": "test_x", "status": "failed", "message": "boom"}],
     }
+    client.get_report_png.return_value = b"\x89PNGfakebytes"
     message = FakeMessage()
     command = FakeCommand("9")
 
     await cmd_report(message, command, client)
 
+    # Отчёт короче лимита подписи -> уходит фото с подписью, без отдельного текста.
+    assert message.answers == []
+    assert len(message.photos) == 1
+    caption = message.photos[0]["caption"]
+    assert "Прогон #9 (bike_fit) — провален" in caption
+    assert "test_x" in caption
+
+
+async def test_cmd_report_png_error_falls_back_to_text():
+    client = make_client()
+    client.get_report.return_value = {
+        "id": 9,
+        "project": "bike_fit",
+        "status": "failed",
+        "duration": 3.5,
+        "counts": {"passed": 1, "failed": 1, "broken": 0, "skipped": 0},
+        "tests": [{"name": "test_x", "status": "failed", "message": "boom"}],
+    }
+    client.get_report_png.side_effect = httpx.ConnectError("boom")
+    message = FakeMessage()
+    command = FakeCommand("9")
+
+    await cmd_report(message, command, client)
+
+    assert message.photos == []
     assert "Прогон #9 (bike_fit) — провален" in message.answers[0]
-    assert "test_x" in message.answers[0]
 
 
 # ------------------------------------------------------------------ /last
@@ -354,13 +383,16 @@ async def test_cmd_last_reports_most_recent_run():
         "counts": {"passed": 1, "failed": 0, "broken": 0, "skipped": 0},
         "tests": [],
     }
+    client.get_report_png.return_value = b"\x89PNGfakebytes"
     message = FakeMessage()
     command = FakeCommand("bike_fit")
 
     await cmd_last(message, command, client)
 
     client.get_report.assert_awaited_once_with(9)
-    assert "Прогон #9 (bike_fit) — пройден" in message.answers[0]
+    assert message.answers == []
+    assert len(message.photos) == 1
+    assert "Прогон #9 (bike_fit) — пройден" in message.photos[0]["caption"]
 
 
 async def test_cmd_last_unknown_project():
