@@ -1,17 +1,34 @@
 """Telegram-бот (app/tg_bot.py): чистые функции парсинга/форматирования без
 сети и без объектов telegram, плюс HubClient поверх реального ASGI-приложения
-(тот же трюк, что и в tests/conftest.py::client — ASGITransport вместо сокета)."""
+(тот же трюк, что и в tests/conftest.py::client — ASGITransport вместо сокета).
+
+Ниже также интеграционные тесты кнопочного флоу и контроля доступа поверх
+настоящего aiogram Dispatcher/Router из app/tg_bot.py, но с полностью
+замоканным Telegram (см. FakeTelegramSession — подменяет transport-сессию
+aiogram.Bot, никаких запросов к api.telegram.org) и замоканным HTTP test_hub
+(httpx.MockTransport вместо реального сервера/сокета)."""
+
+import json
+import time
 
 import httpx
 import pytest
 from httpx import ASGITransport
+from unittest.mock import AsyncMock
 
+from aiogram import Bot, Dispatcher
+from aiogram.methods import AnswerCallbackQuery, EditMessageText, SendMessage
+from aiogram.types import CallbackQuery, Chat, Message, Update, User
+
+from app import tg_bot
 from app.config import _parse_allowed_ids, settings
 from app.db import get_connection
 from app.main import app, lifespan
 from app.security import verify_password
 from app.tg_bot import (
+    ACCESS_DENIED_MESSAGE,
     HubClient,
+    AccessMiddleware,
     _is_allowed,
     build_callback,
     build_confirm_keyboard,
@@ -28,6 +45,7 @@ from app.tg_bot import (
     parse_run_args,
     parse_run_command,
     parse_run_id,
+    router,
 )
 
 from .conftest import poll_until, register_project
@@ -367,3 +385,253 @@ async def test_lifespan_without_token_skips_bot(db_path, monkeypatch):
     monkeypatch.setattr(settings, "TH_TG_BOT_TOKEN", "")
     async with lifespan(app):
         assert app.state.tg_bot is None
+
+
+# ------------------------------------------------------------------ мок Telegram: Bot/Dispatcher без сети
+class FakeTelegramSession:
+    """Подменяет aiogram BaseSession (Bot.session): не делает запросов к
+    api.telegram.org, только записывает переданные TelegramMethod (SendMessage/
+    EditMessageText/AnswerCallbackQuery/...). aiogram вызывает её как
+    `await self.session(self, method, timeout=...)` (см. Bot.__call__) и не
+    проверяет тип возврата в коде app/tg_bot.py — везде используется только
+    факт вызова метода."""
+
+    def __init__(self) -> None:
+        self.calls: list = []
+
+    async def __call__(self, bot, method, timeout=None):
+        self.calls.append(method)
+        return None
+
+    async def close(self) -> None:
+        return None
+
+
+def _make_bot() -> tuple[Bot, FakeTelegramSession]:
+    session = FakeTelegramSession()
+    # Токен формально валиден (validate_token хочет "<цифры>:<непусто>"), но
+    # никогда не используется для реального похода в сеть — вся отправка идёт
+    # через FakeTelegramSession выше.
+    bot = Bot(token="123456:FAKE-TEST-TOKEN", session=session)
+    return bot, session
+
+
+def _make_dispatcher(client) -> Dispatcher:
+    # `router` — модульный синглтон app/tg_bot.py, использованный уже прошлым
+    # тестом с его собственным (выброшенным) Dispatcher; include_router второй
+    # раз на другом родителе иначе кидает RuntimeError ("already attached").
+    router._parent_router = None
+    dispatcher = Dispatcher(client=client, run_chats={}, last_run={})
+    dispatcher.message.outer_middleware(AccessMiddleware())
+    dispatcher.callback_query.outer_middleware(AccessMiddleware())
+    dispatcher.include_router(router)
+    return dispatcher
+
+
+def _message(bot: Bot, *, chat_id: int = 555, user_id: int = 111, text: str = "/start") -> Message:
+    return Message(
+        message_id=1,
+        date=int(time.time()),
+        chat=Chat(id=chat_id, type="private"),
+        from_user=User(id=user_id, is_bot=False, first_name="U"),
+        text=text,
+    ).as_(bot)
+
+
+def _callback(bot: Bot, message: Message, data: str, *, user_id: int = 111, cb_id: str = "cb") -> CallbackQuery:
+    return CallbackQuery(
+        id=cb_id,
+        from_user=User(id=user_id, is_bot=False, first_name="U"),
+        chat_instance="1",
+        data=data,
+        message=message,
+    ).as_(bot)
+
+
+# ------------------------------------------------------------------ контроль доступа: не из allowlist не доходит до HubClient
+async def test_access_middleware_denies_unknown_user_message(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    dispatcher = _make_dispatcher(client)
+
+    message = _message(bot, user_id=999, text="/start")
+    await dispatcher.feed_update(bot, Update(update_id=1, message=message))
+
+    assert [type(c).__name__ for c in session.calls] == ["SendMessage"]
+    assert session.calls[0].text == ACCESS_DENIED_MESSAGE
+    client.list_projects.assert_not_called()
+
+
+async def test_access_middleware_denies_unknown_user_callback(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    dispatcher = _make_dispatcher(client)
+
+    msg = _message(bot, user_id=999)
+    cb = _callback(bot, msg, "project:bike_fit", user_id=999)
+    await dispatcher.feed_update(bot, Update(update_id=1, callback_query=cb))
+
+    assert [type(c).__name__ for c in session.calls] == ["AnswerCallbackQuery"]
+    answer = session.calls[0]
+    assert answer.text == ACCESS_DENIED_MESSAGE
+    assert answer.show_alert is True
+    client.list_stands.assert_not_called()
+
+
+async def test_access_middleware_allows_listed_user(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    client.list_projects.return_value = []
+    dispatcher = _make_dispatcher(client)
+
+    message = _message(bot, user_id=111, text="/start")
+    await dispatcher.feed_update(bot, Update(update_id=1, message=message))
+
+    client.list_projects.assert_awaited_once()
+    assert [type(c).__name__ for c in session.calls] == ["SendMessage"]
+    assert session.calls[0].text != ACCESS_DENIED_MESSAGE
+
+
+# ------------------------------------------------------------------ кнопочный флоу целиком: /start -> проект -> стенд -> маркер -> подтверждение
+async def test_button_flow_edits_single_message_and_submits_expected_run(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    # Фоновый опрос прогона (_watch_run) не относится к этому сценарию — не
+    # даём asyncio.create_task заспавнить реально спящую на 3с задачу, которая
+    # переживёт тест и попытается сходить в замоканный HTTP уже после его конца.
+    monkeypatch.setattr(tg_bot, "_watch_run", AsyncMock())
+
+    bot, session = _make_bot()
+    submitted_runs: list[dict] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET" and request.url.path == "/api/projects":
+            return httpx.Response(
+                200,
+                json=[{"name": "bike_fit", "stands": [{"name": "stage"}], "use_env_flag": True}],
+            )
+        if request.method == "GET" and request.url.path == "/api/projects/bike_fit/stands":
+            return httpx.Response(200, json=[{"name": "stage"}])
+        if request.method == "POST" and request.url.path == "/api/projects/bike_fit/runs":
+            submitted_runs.append(json.loads(request.content))
+            return httpx.Response(200, json={"id": 42, "status": "queued"})
+        raise AssertionError(f"неожиданный запрос к test_hub: {request.method} {request.url}")
+
+    client = HubClient()
+    client._client = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://testserver")
+    client._logged_in = True  # логин сервисной учётки бота тестируется отдельно в test_hub_client_*
+
+    dispatcher = _make_dispatcher(client)
+
+    try:
+        start_message = _message(bot, text="/start")
+        await dispatcher.feed_update(bot, Update(update_id=1, message=start_message))
+
+        # Дальше всё — редактирование одного и того же сообщения кнопками,
+        # как в реальном боте (edit_text на query.message).
+        flow_message = _message(bot, text="Выберите проект:")
+        await dispatcher.feed_update(
+            bot,
+            Update(update_id=2, callback_query=_callback(bot, flow_message, "project:bike_fit", cb_id="c1")),
+        )
+        await dispatcher.feed_update(
+            bot,
+            Update(update_id=3, callback_query=_callback(bot, flow_message, "stand:bike_fit:stage", cb_id="c2")),
+        )
+        await dispatcher.feed_update(
+            bot,
+            Update(
+                update_id=4,
+                callback_query=_callback(bot, flow_message, "marker:bike_fit:stage:smoke", cb_id="c3"),
+            ),
+        )
+        await dispatcher.feed_update(
+            bot,
+            Update(
+                update_id=5,
+                callback_query=_callback(bot, flow_message, "confirm:bike_fit:stage:smoke", cb_id="c4"),
+            ),
+        )
+    finally:
+        await client.aclose()
+
+    sent = [c for c in session.calls if isinstance(c, SendMessage)]
+    edited = [c for c in session.calls if isinstance(c, EditMessageText)]
+    answered = [c for c in session.calls if isinstance(c, AnswerCallbackQuery)]
+
+    # Одно исходное меню отправлено send_message, всё остальное — правки того
+    # же сообщения: новые сообщения на каждый шаг клавиатуры не плодятся.
+    assert len(sent) == 1
+    assert len(edited) == 4
+    assert len(answered) == 4  # каждая callback_query отвечена (query.answer())
+
+    assert "Выберите проект" in sent[0].text
+
+    assert submitted_runs == [{"stand": "stage", "target": "all", "marker": "smoke"}]
+
+    confirm_text = edited[2].text
+    assert "Запустить bike_fit / stage / smoke?" in confirm_text
+    assert "--env stage -m smoke" in confirm_text  # use_env_flag=True у проекта -> --env в подсказке
+
+    final_message = edited[-1]
+    assert "Прогон #42 поставлен в очередь." in final_message.text
+    callback_datas = [btn.callback_data for row in final_message.reply_markup.inline_keyboard for btn in row]
+    assert callback_datas == ["run_status:42", "run_report:42", "run_cancel:42"]
+
+
+async def test_button_flow_without_env_flag_omits_env_in_confirm_hint(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    monkeypatch.setattr(tg_bot, "_watch_run", AsyncMock())
+    bot, session = _make_bot()
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET" and request.url.path == "/api/projects":
+            return httpx.Response(
+                200,
+                json=[{"name": "bike_fit", "stands": [], "use_env_flag": False}],
+            )
+        raise AssertionError(f"неожиданный запрос к test_hub: {request.method} {request.url}")
+
+    client = HubClient()
+    client._client = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://testserver")
+    client._logged_in = True
+    dispatcher = _make_dispatcher(client)
+
+    try:
+        flow_message = _message(bot, text="Выберите проект:")
+        await dispatcher.feed_update(
+            bot,
+            Update(
+                update_id=1,
+                callback_query=_callback(bot, flow_message, "marker:bike_fit:_:_", cb_id="c1"),
+            ),
+        )
+    finally:
+        await client.aclose()
+
+    edited = [c for c in session.calls if isinstance(c, EditMessageText)]
+    assert len(edited) == 1
+    assert "Аргументы pytest" not in edited[0].text  # use_env_flag=False и маркер "Все" -> build_run_args == []
+
+
+async def test_button_flow_stand_step_does_not_call_hub_client(monkeypatch):
+    """cb_stand только строит клавиатуру маркеров из уже известных project/stand
+    в callback_data — HTTP не нужен (в отличие от cb_project/cb_marker)."""
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    dispatcher = _make_dispatcher(client)
+
+    flow_message = _message(bot, text="Выберите стенд:")
+    await dispatcher.feed_update(
+        bot,
+        Update(update_id=1, callback_query=_callback(bot, flow_message, "stand:bike_fit:stage", cb_id="c1")),
+    )
+
+    client.list_projects.assert_not_called()
+    client.list_stands.assert_not_called()
+    edited = [c for c in session.calls if isinstance(c, EditMessageText)]
+    assert len(edited) == 1
+    assert "Выберите набор тестов" in edited[0].text
