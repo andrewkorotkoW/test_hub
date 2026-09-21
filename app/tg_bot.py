@@ -48,6 +48,9 @@ TERMINAL_STATUSES = {"passed", "failed", "cancelled"}
 MAX_FAILED_LISTED = 15
 MAX_REASON_LEN = 120
 TELEGRAM_CAPTION_LIMIT = 1024
+MAX_FAILED_BUTTONS = 10
+MAX_FAILED_LABEL_LEN = 40
+MAX_ERROR_TEXT_LEN = 1500
 
 STATUS_RU = {
     "queued": "в очереди",
@@ -260,6 +263,18 @@ def parse_callback(data: str) -> dict:
         return {"action": action, key: value}
     if action in ("tree_up", "tree_refresh", "tree_select_file", "tree_clear", "tree_run") and not rest:
         return {"action": action}
+    if action in ("fail_open", "fail_restart_one") and len(rest) == 2:
+        try:
+            run_id, index = int(rest[0]), int(rest[1])
+        except ValueError:
+            return {"action": "invalid", "raw": data}
+        return {"action": action, "run_id": run_id, "index": index}
+    if action == "fail_restart_all" and len(rest) == 1:
+        try:
+            run_id = int(rest[0])
+        except ValueError:
+            return {"action": "invalid", "raw": data}
+        return {"action": action, "run_id": run_id}
     return {"action": "invalid", "raw": data}
 
 
@@ -351,6 +366,39 @@ def _collect_test_nodeids(nodes: list[dict], index: int) -> list[str]:
     return result
 
 
+def _strip_param_suffix(nodeid: str) -> str:
+    if nodeid.endswith("]") and "[" in nodeid:
+        return nodeid[: nodeid.rindex("[")]
+    return nodeid
+
+
+def _nodeid_to_full_name(nodeid: str) -> str:
+    """Пересчитывает pytest nodeid (file.py::Class::test[param], см. build_flat_tree)
+    в то же представление, что allure_pytest кладёт в fullName результата
+    (allure_pytest.utils.allure_full_name: "{dotted.module.path}{.Class}?#{test}",
+    без параметров parametrize) — так падающий тест из отчёта можно сопоставить
+    с реальным nodeid для перезапуска."""
+    file_part, _, rest = nodeid.partition("::")
+    module = file_part[:-3] if file_part.endswith(".py") else file_part
+    module = module.replace("/", ".")
+    if not rest:
+        return module
+    segments = rest.split("::")
+    test = segments[-1].split("[")[0]
+    class_name = f".{segments[-2]}" if len(segments) > 1 else ""
+    return f"{module}{class_name}#{test}"
+
+
+def build_full_name_index(nodes: list[dict]) -> dict[str, str]:
+    """fullName (см. _nodeid_to_full_name) -> реальный nodeid без параметров
+    parametrize (pytest сам подберёт по такому базовому id все его вариации)."""
+    index: dict[str, str] = {}
+    for node in nodes:
+        if node["kind"] == "test":
+            index.setdefault(_nodeid_to_full_name(node["nodeid"]), _strip_param_suffix(node["nodeid"]))
+    return index
+
+
 # ------------------------------------------------------------------ форматирование
 def _stand_label(stand: str | None) -> str:
     return stand if stand is not None else "без стенда"
@@ -386,11 +434,35 @@ def format_status(report: dict) -> str:
     return "\n".join(lines)
 
 
+def _bad_tests(report: dict) -> list[dict]:
+    return [t for t in report.get("tests", []) if t.get("status") in ("failed", "broken")]
+
+
 def _short_reason(test: dict) -> str:
     message = (test.get("message") or "").strip()
     if not message:
         return ""
     return message.splitlines()[0][:MAX_REASON_LEN]
+
+
+def _short_test_label(name: str) -> str:
+    """allure fullName — "{dotted.module.path}{.Class}?#{test}" (см. allure_pytest.utils.
+    allure_full_name) — короткое имя это часть после "#", как label теста в дереве
+    (build_flat_tree), а не полный путь модуля."""
+    short = (name or "").rsplit("#", 1)[-1] or "?"
+    if len(short) > MAX_FAILED_LABEL_LEN:
+        short = short[: MAX_FAILED_LABEL_LEN - 1] + "…"
+    return short
+
+
+def _error_text(test: dict) -> str:
+    parts = [p for p in (test.get("message"), test.get("trace")) if p]
+    text = "\n\n".join(parts).strip()
+    if not text:
+        return "Текст ошибки недоступен."
+    if len(text) > MAX_ERROR_TEXT_LEN:
+        text = text[:MAX_ERROR_TEXT_LEN].rstrip() + "…"
+    return text
 
 
 def format_report(report: dict) -> str:
@@ -402,7 +474,7 @@ def format_report(report: dict) -> str:
         _counts_line(report.get("counts") or {}),
         f"Длительность: {duration_str}",
     ]
-    bad_tests = [t for t in report.get("tests", []) if t.get("status") in ("failed", "broken")]
+    bad_tests = _bad_tests(report)
     if bad_tests:
         lines.append("Упавшие тесты:")
         shown = bad_tests[:MAX_FAILED_LISTED]
@@ -472,6 +544,34 @@ def build_run_keyboard(run_id: int) -> InlineKeyboardMarkup:
     builder.button(text="Отменить", callback_data=build_callback("run_cancel", run_id=str(run_id)))
     builder.button(text="Тренд", callback_data=build_callback("run_trend", run_id=str(run_id)))
     builder.adjust(2, 2)
+    return builder.as_markup()
+
+
+def build_report_keyboard(run_id: int, failed: list[dict]) -> InlineKeyboardMarkup:
+    """Обычная клавиатура прогона (build_run_keyboard) + до MAX_FAILED_BUTTONS кнопок
+    упавших/сломанных тестов. Индекс кнопки — позиция в этом же списке `failed`,
+    закэшированном per run_id (см. failed_cache) — сам callback_data хранит только
+    run_id и индекс, не имя теста, поэтому укладывается в лимит Telegram (64 байта)
+    независимо от длины nodeid/fullName (тот же приём, что и в дереве тестов)."""
+    builder = InlineKeyboardBuilder(markup=build_run_keyboard(run_id).inline_keyboard)
+    for index, test in enumerate(failed[:MAX_FAILED_BUTTONS]):
+        builder.row(
+            InlineKeyboardButton(
+                text=f"❌ {_short_test_label(test.get('name') or '')}",
+                callback_data=build_callback("fail_open", run_id=str(run_id), index=str(index)),
+            )
+        )
+    return builder.as_markup()
+
+
+def build_fail_detail_keyboard(run_id: int, index: int) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text="Перезапустить этот тест",
+        callback_data=build_callback("fail_restart_one", run_id=str(run_id), index=str(index)),
+    )
+    builder.button(text="Перезапустить все упавшие", callback_data=build_callback("fail_restart_all", run_id=str(run_id)))
+    builder.adjust(1)
     return builder.as_markup()
 
 
@@ -620,6 +720,13 @@ async def _load_tree(
     return nodes, error
 
 
+async def _resolve_nodeid(client: HubClient, tree_cache: dict, project: str, test: dict) -> str | None:
+    nodes, _error = await _load_tree(client, tree_cache, project)
+    if nodes is None:
+        return None
+    return build_full_name_index(nodes).get(test.get("name") or "")
+
+
 async def _render_tree(
     message: Message, nodes: list[dict], project: str, stand: str | None, node: int, page: int, selected: set[str], error: str | None
 ) -> None:
@@ -629,7 +736,9 @@ async def _render_tree(
 
 
 # ------------------------------------------------------------------ фоновое ожидание прогона
-async def _watch_run(bot: Bot, client: HubClient, run_chats: dict[int, int], run_id: int) -> None:
+async def _watch_run(
+    bot: Bot, client: HubClient, run_chats: dict[int, int], run_id: int, failed_cache: dict[int, list[dict]]
+) -> None:
     while True:
         await asyncio.sleep(POLL_INTERVAL_SECONDS)
         try:
@@ -641,11 +750,14 @@ async def _watch_run(bot: Bot, client: HubClient, run_chats: dict[int, int], run
             chat_id = run_chats.pop(run_id, None)
             if chat_id is not None:
                 caption = format_report(report)
+                failed = _bad_tests(report)
+                failed_cache[run_id] = failed
+                keyboard = build_report_keyboard(run_id, failed)
                 try:
                     png = await client.get_report_png(run_id)
                 except httpx.HTTPError as exc:
                     logger.warning("tg_bot: не удалось получить report.png для прогона #%s: %s", run_id, exc)
-                    await bot.send_message(chat_id, caption)
+                    await bot.send_message(chat_id, caption, reply_markup=keyboard)
                 else:
                     await _send_report_png(
                         functools.partial(bot.send_photo, chat_id),
@@ -653,6 +765,7 @@ async def _watch_run(bot: Bot, client: HubClient, run_chats: dict[int, int], run
                         run_id,
                         png,
                         caption,
+                        keyboard,
                     )
             return
 
@@ -960,6 +1073,7 @@ async def cb_tree_run(
     run_chats: dict[int, int],
     last_run: dict[int, int],
     bot: Bot,
+    failed_cache: dict[int, list[dict]] | None = None,
 ) -> None:
     if query.message is None:
         await query.answer()
@@ -988,12 +1102,17 @@ async def cb_tree_run(
     await _safe_edit(
         query.message, f"Прогон #{run_id} поставлен в очередь ({len(selected)} тест(ов)).", build_run_keyboard(run_id)
     )
-    asyncio.create_task(_watch_run(bot, client, run_chats, run_id))
+    asyncio.create_task(_watch_run(bot, client, run_chats, run_id, failed_cache if failed_cache is not None else {}))
 
 
 @router.callback_query(F.data.startswith("confirm:"))
 async def cb_confirm(
-    query: CallbackQuery, client: HubClient, run_chats: dict[int, int], last_run: dict[int, int], bot: Bot
+    query: CallbackQuery,
+    client: HubClient,
+    run_chats: dict[int, int],
+    last_run: dict[int, int],
+    bot: Bot,
+    failed_cache: dict[int, list[dict]] | None = None,
 ) -> None:
     await query.answer()
     if query.message is None:
@@ -1012,7 +1131,7 @@ async def cb_confirm(
     run_chats[run_id] = chat_id
     last_run[chat_id] = run_id
     await _safe_edit(query.message, f"Прогон #{run_id} поставлен в очередь.", build_run_keyboard(run_id))
-    asyncio.create_task(_watch_run(bot, client, run_chats, run_id))
+    asyncio.create_task(_watch_run(bot, client, run_chats, run_id, failed_cache if failed_cache is not None else {}))
 
 
 @router.callback_query(F.data.startswith("run_status:"))
@@ -1031,7 +1150,9 @@ async def cb_run_status(query: CallbackQuery, client: HubClient) -> None:
 
 
 @router.callback_query(F.data.startswith("run_report:"))
-async def cb_run_report(query: CallbackQuery, client: HubClient) -> None:
+async def cb_run_report(
+    query: CallbackQuery, client: HubClient, failed_cache: dict[int, list[dict]] | None = None
+) -> None:
     await query.answer()
     if query.message is None:
         return
@@ -1043,11 +1164,15 @@ async def cb_run_report(query: CallbackQuery, client: HubClient) -> None:
         await _safe_edit(query.message, f"Не удалось получить отчёт прогона #{run_id}.", build_run_keyboard(run_id))
         return
     caption = format_report(report)
+    failed = _bad_tests(report)
+    if failed_cache is not None:
+        failed_cache[run_id] = failed
+    keyboard = build_report_keyboard(run_id, failed)
     try:
         png = await client.get_report_png(run_id)
     except httpx.HTTPError as exc:
         logger.warning("tg_bot: не удалось получить report.png для прогона #%s: %s", run_id, exc)
-        await _safe_edit(query.message, caption, build_run_keyboard(run_id))
+        await _safe_edit(query.message, caption, keyboard)
         return
     # edit_text не умеет заменять сообщение на фото — вместо редактирования шлём
     # новое сообщение с фото, а кнопки навешиваем прямо на него.
@@ -1057,7 +1182,7 @@ async def cb_run_report(query: CallbackQuery, client: HubClient) -> None:
         run_id,
         png,
         caption,
-        reply_markup=build_run_keyboard(run_id),
+        reply_markup=keyboard,
     )
 
 
@@ -1095,6 +1220,134 @@ async def cb_run_cancel(query: CallbackQuery, client: HubClient) -> None:
     await _safe_edit(query.message, f"Прогон #{run_id}: {status_ru}.", build_run_keyboard(run_id))
 
 
+# ------------------------------------------------------------------ упавшие тесты: текст ошибки и перезапуск
+async def _restart_tests(
+    message: Message,
+    client: HubClient,
+    run_chats: dict[int, int],
+    last_run: dict[int, int],
+    failed_cache: dict[int, list[dict]],
+    bot: Bot,
+    project: str,
+    stand: str | None,
+    nodeids: list[str],
+) -> None:
+    target = "\n".join(nodeids)
+    try:
+        run = await client.submit_run(project, stand, None, target=target)
+    except httpx.HTTPError as exc:
+        logger.warning("tg_bot: не удалось перезапустить тесты проекта %s: %s", project, exc)
+        await message.answer("Не удалось поставить прогон.")
+        return
+
+    run_id = run["id"]
+    chat_id = message.chat.id
+    run_chats[run_id] = chat_id
+    last_run[chat_id] = run_id
+    await message.answer(
+        f"Прогон #{run_id} поставлен в очередь ({len(nodeids)} тест(ов)).", reply_markup=build_run_keyboard(run_id)
+    )
+    asyncio.create_task(_watch_run(bot, client, run_chats, run_id, failed_cache))
+
+
+@router.callback_query(F.data.startswith("fail_open:"))
+async def cb_fail_open(query: CallbackQuery, failed_cache: dict[int, list[dict]]) -> None:
+    await query.answer()
+    if query.message is None:
+        return
+    parsed = parse_callback(query.data)
+    if parsed["action"] != "fail_open":
+        return
+    run_id, index = parsed["run_id"], parsed["index"]
+    failed = failed_cache.get(run_id)
+    if failed is None or not (0 <= index < len(failed)):
+        await query.message.answer("Информация об этом тесте устарела, откройте отчёт заново.")
+        return
+    test = failed[index]
+    text = f"❌ {test.get('name') or '?'}\n\n{_error_text(test)}"
+    await query.message.answer(text, reply_markup=build_fail_detail_keyboard(run_id, index))
+
+
+@router.callback_query(F.data.startswith("fail_restart_one:"))
+async def cb_fail_restart_one(
+    query: CallbackQuery,
+    client: HubClient,
+    failed_cache: dict[int, list[dict]],
+    tree_cache: dict,
+    run_chats: dict[int, int],
+    last_run: dict[int, int],
+    bot: Bot,
+) -> None:
+    if query.message is None:
+        await query.answer()
+        return
+    parsed = parse_callback(query.data)
+    if parsed["action"] != "fail_restart_one":
+        await query.answer()
+        return
+    run_id, index = parsed["run_id"], parsed["index"]
+    failed = failed_cache.get(run_id)
+    if failed is None or not (0 <= index < len(failed)):
+        await query.answer("Информация об этом тесте устарела, откройте отчёт заново.", show_alert=True)
+        return
+    try:
+        report = await client.get_report(run_id)
+    except httpx.HTTPError as exc:
+        logger.warning("tg_bot: не удалось получить прогон #%s для перезапуска: %s", run_id, exc)
+        await query.answer("Не удалось получить данные прогона.", show_alert=True)
+        return
+    nodeid = await _resolve_nodeid(client, tree_cache, report["project"], failed[index])
+    if nodeid is None:
+        await query.answer("Не удалось найти этот тест в дереве проекта.", show_alert=True)
+        return
+    await query.answer()
+    await _restart_tests(
+        query.message, client, run_chats, last_run, failed_cache, bot, report["project"], report.get("stand"), [nodeid]
+    )
+
+
+@router.callback_query(F.data.startswith("fail_restart_all:"))
+async def cb_fail_restart_all(
+    query: CallbackQuery,
+    client: HubClient,
+    failed_cache: dict[int, list[dict]],
+    tree_cache: dict,
+    run_chats: dict[int, int],
+    last_run: dict[int, int],
+    bot: Bot,
+) -> None:
+    if query.message is None:
+        await query.answer()
+        return
+    parsed = parse_callback(query.data)
+    if parsed["action"] != "fail_restart_all":
+        await query.answer()
+        return
+    run_id = parsed["run_id"]
+    failed = failed_cache.get(run_id)
+    if not failed:
+        await query.answer("Информация об упавших тестах устарела, откройте отчёт заново.", show_alert=True)
+        return
+    try:
+        report = await client.get_report(run_id)
+    except httpx.HTTPError as exc:
+        logger.warning("tg_bot: не удалось получить прогон #%s для перезапуска: %s", run_id, exc)
+        await query.answer("Не удалось получить данные прогона.", show_alert=True)
+        return
+    nodeids: list[str] = []
+    for test in failed:
+        nodeid = await _resolve_nodeid(client, tree_cache, report["project"], test)
+        if nodeid and nodeid not in nodeids:
+            nodeids.append(nodeid)
+    if not nodeids:
+        await query.answer("Не удалось найти эти тесты в дереве проекта.", show_alert=True)
+        return
+    await query.answer()
+    await _restart_tests(
+        query.message, client, run_chats, last_run, failed_cache, bot, report["project"], report.get("stand"), nodeids
+    )
+
+
 # ------------------------------------------------------------------ текстовые команды (дублируют кнопки)
 @router.message(Command("projects"))
 async def cmd_projects(message: Message, client: HubClient) -> None:
@@ -1114,6 +1367,7 @@ async def cmd_run(
     run_chats: dict[int, int],
     last_run: dict[int, int],
     bot: Bot,
+    failed_cache: dict[int, list[dict]] | None = None,
 ) -> None:
     parsed = parse_run_command(command.args or "")
     if parsed is None:
@@ -1147,7 +1401,7 @@ async def cmd_run(
     run_chats[run_id] = chat_id
     last_run[chat_id] = run_id
     await message.answer(f"Прогон #{run_id} поставлен в очередь.")
-    asyncio.create_task(_watch_run(bot, client, run_chats, run_id))
+    asyncio.create_task(_watch_run(bot, client, run_chats, run_id, failed_cache if failed_cache is not None else {}))
 
 
 @router.message(Command("status"))
@@ -1174,7 +1428,9 @@ async def cmd_status(message: Message, command: CommandObject, client: HubClient
 
 
 @router.message(Command("report"))
-async def cmd_report(message: Message, command: CommandObject, client: HubClient) -> None:
+async def cmd_report(
+    message: Message, command: CommandObject, client: HubClient, failed_cache: dict[int, list[dict]] | None = None
+) -> None:
     try:
         run_id = parse_run_id(command.args or "", REPORT_USAGE)
     except ValueError as exc:
@@ -1187,17 +1443,23 @@ async def cmd_report(message: Message, command: CommandObject, client: HubClient
         await _reply_http_error(message, exc, "получить отчёт", not_found=f"Прогон #{run_id} не найден.")
         return
     caption = format_report(report)
+    failed = _bad_tests(report)
+    if failed_cache is not None:
+        failed_cache[run_id] = failed
+    keyboard = build_report_keyboard(run_id, failed)
     try:
         png = await client.get_report_png(run_id)
     except httpx.HTTPError as exc:
         logger.warning("tg_bot: не удалось получить report.png для прогона #%s: %s", run_id, exc)
-        await message.answer(caption)
+        await message.answer(caption, reply_markup=keyboard)
         return
-    await _send_report_png(message.answer_photo, message.answer, run_id, png, caption)
+    await _send_report_png(message.answer_photo, message.answer, run_id, png, caption, keyboard)
 
 
 @router.message(Command("last"))
-async def cmd_last(message: Message, command: CommandObject, client: HubClient) -> None:
+async def cmd_last(
+    message: Message, command: CommandObject, client: HubClient, failed_cache: dict[int, list[dict]] | None = None
+) -> None:
     try:
         project = parse_project_name(command.args or "", LAST_USAGE)
     except ValueError as exc:
@@ -1221,13 +1483,17 @@ async def cmd_last(message: Message, command: CommandObject, client: HubClient) 
         await _reply_http_error(message, exc, "получить отчёт")
         return
     caption = format_report(report)
+    failed = _bad_tests(report)
+    if failed_cache is not None:
+        failed_cache[run_id] = failed
+    keyboard = build_report_keyboard(run_id, failed)
     try:
         png = await client.get_report_png(run_id)
     except httpx.HTTPError as exc:
         logger.warning("tg_bot: не удалось получить report.png для прогона #%s: %s", run_id, exc)
-        await message.answer(caption)
+        await message.answer(caption, reply_markup=keyboard)
         return
-    await _send_report_png(message.answer_photo, message.answer, run_id, png, caption)
+    await _send_report_png(message.answer_photo, message.answer, run_id, png, caption, keyboard)
 
 
 # ------------------------------------------------------------------ запуск/остановка приложения
@@ -1243,7 +1509,7 @@ def build_application() -> TgApplication:
     bot = Bot(token=settings.TH_TG_BOT_TOKEN)
     client = HubClient()
     dispatcher = Dispatcher(
-        client=client, run_chats={}, last_run={}, tree_cache={}, browse_state={}, selections={}
+        client=client, run_chats={}, last_run={}, tree_cache={}, browse_state={}, selections={}, failed_cache={}
     )
     dispatcher.message.outer_middleware(AccessMiddleware())
     dispatcher.callback_query.outer_middleware(AccessMiddleware())
