@@ -74,6 +74,32 @@ ROUTES_TSV = (
     "bar.destroy\tDELETE\t/api/v1/bar/{bar}\n"
 )
 
+PAGE_OBJECT_SRC = '''\
+class FooPage:
+    LIST_PATH = "/admin/foo"
+
+    def __init__(self, page):
+        self.page = page
+
+    def open_list(self):
+        self.page.goto(self.LIST_PATH)
+'''
+
+PAGE_TESTS_SRC = '''\
+from ui.pages.foo_page import FooPage
+
+
+def test_open_foo_list(page):
+    FooPage(page).open_list()
+'''
+
+# страница /admin/foo уже открывается тестом выше; /admin/reports нет ни в одном
+# UI-тесте — должна попасть в инвентарь непокрытой через routes.tsv
+ROUTES_TSV_WITH_FRONTEND = ROUTES_TSV + (
+    "frontend.foo.list\tGET\t/admin/foo\n"
+    "frontend.reports\tGET\t/admin/reports\n"
+)
+
 ROLE_CREDENTIALS = {"qa": ("qa", "qa"), "manager": ("manager", "manager"), "customer": ("customer", "customer")}
 
 
@@ -90,6 +116,15 @@ def coverage_project_dir(tmp_path):
     (proj / "conftest.py").write_text(CONFTEST_SRC)
     (proj / "tests").mkdir()
     (proj / "tests" / "test_foo.py").write_text(TESTS_SRC)
+    return proj
+
+
+@pytest.fixture()
+def coverage_project_dir_with_pages(coverage_project_dir):
+    proj = coverage_project_dir
+    (proj / "ui" / "pages").mkdir(parents=True)
+    (proj / "ui" / "pages" / "foo_page.py").write_text(PAGE_OBJECT_SRC)
+    (proj / "tests" / "test_foo_page.py").write_text(PAGE_TESTS_SRC)
     return proj
 
 
@@ -114,10 +149,10 @@ async def role_client(db_path):
         await ac.aclose()
 
 
-def _write_routes_tsv(name: str) -> None:
+def _write_routes_tsv(name: str, content: str = ROUTES_TSV) -> None:
     path = coverage.routes_tsv_path(name)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(ROUTES_TSV, encoding="utf-8")
+    path.write_text(content, encoding="utf-8")
 
 
 async def _register_with_stands(qa_client, name, project_dir):
@@ -331,4 +366,125 @@ async def test_get_test_coverage_404_for_unknown_test(qa_client, isolated_covera
     resp = await qa_client.get(
         "/api/projects/cov_proj/coverage/test", params={"id": "tests/test_foo.py::test_does_not_exist"}
     )
+    assert resp.status_code == 404
+
+
+# ------------------------------------------------------------------ слой UI-страниц
+
+async def test_coverage_summary_includes_pages_area_and_totals(
+    qa_client, isolated_coverage_dir, coverage_project_dir_with_pages
+):
+    await _register_with_stands(qa_client, "cov_proj", coverage_project_dir_with_pages)
+    _write_routes_tsv("cov_proj", ROUTES_TSV_WITH_FRONTEND)
+
+    resp = await qa_client.get("/api/projects/cov_proj/coverage")
+    assert resp.status_code == 200
+    body = resp.json()
+
+    # /admin/foo и /admin/reports из routes.tsv не должны попасть в routes_total
+    # (это не /api/ маршруты) — только foo.*/bar.* из ROUTES_TSV
+    assert body["routes_total"] == 4
+    assert body["pages_total"] == 2
+    assert body["pages_covered"] == 1
+
+    areas = {a["area"]: a for a in body["map"]}
+    assert "UI: страницы" in areas
+    pages_by_path = {r["path"]: r for r in areas["UI: страницы"]["routes"]}
+    assert set(pages_by_path) == {"/admin/foo", "/admin/reports"}
+    assert pages_by_path["/admin/foo"]["tests_count"] == 1
+    assert pages_by_path["/admin/foo"]["kind"] == "page"
+    assert pages_by_path["/admin/reports"]["tests_count"] == 0
+    # области без покрытия учитывают и слой страниц
+    assert "UI: страницы" not in body["zero_coverage_areas"]
+
+
+async def test_get_page_coverage_lists_tests(qa_client, isolated_coverage_dir, coverage_project_dir_with_pages):
+    await _register_with_stands(qa_client, "cov_proj", coverage_project_dir_with_pages)
+    _write_routes_tsv("cov_proj", ROUTES_TSV_WITH_FRONTEND)
+    await qa_client.post("/api/projects/cov_proj/coverage/recalc")
+
+    resp = await qa_client.get("/api/projects/cov_proj/coverage/page", params={"path": "/admin/foo"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["path"] == "/admin/foo"
+    assert {t["nodeid"] for t in body["tests"]} == {"tests/test_foo_page.py::test_open_foo_list"}
+
+
+async def test_get_page_coverage_404_for_unknown_page(qa_client, isolated_coverage_dir, coverage_project_dir_with_pages):
+    await _register_with_stands(qa_client, "cov_proj", coverage_project_dir_with_pages)
+    _write_routes_tsv("cov_proj", ROUTES_TSV_WITH_FRONTEND)
+
+    resp = await qa_client.get("/api/projects/cov_proj/coverage/page", params={"path": "/does-not-exist"})
+    assert resp.status_code == 404
+
+
+async def test_get_test_coverage_includes_pages(qa_client, isolated_coverage_dir, coverage_project_dir_with_pages):
+    await _register_with_stands(qa_client, "cov_proj", coverage_project_dir_with_pages)
+    _write_routes_tsv("cov_proj", ROUTES_TSV_WITH_FRONTEND)
+    await qa_client.post("/api/projects/cov_proj/coverage/recalc")
+
+    resp = await qa_client.get(
+        "/api/projects/cov_proj/coverage/test",
+        params={"id": "tests/test_foo_page.py::test_open_foo_list"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["routes"] == []
+    assert {p["path"] for p in body["pages"]} == {"/admin/foo"}
+
+
+# ------------------------------------------------------------------ /coverage/graph
+
+async def test_get_coverage_graph_by_area(qa_client, isolated_coverage_dir, coverage_project_dir):
+    await _register_with_stands(qa_client, "cov_proj", coverage_project_dir)
+    _write_routes_tsv("cov_proj")
+    await qa_client.post("/api/projects/cov_proj/coverage/recalc")
+
+    resp = await qa_client.get("/api/projects/cov_proj/coverage/graph", params={"area": "foo"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["truncated"] is False
+    node_kinds = {n["kind"] for n in body["nodes"]}
+    assert node_kinds == {"route", "test"}
+    route_ids = {n["id"] for n in body["nodes"] if n["kind"] == "route"}
+    test_ids = {n["id"] for n in body["nodes"] if n["kind"] == "test"}
+    assert route_ids == {"route:foo.index", "route:foo.show", "route:foo.create"}
+    assert test_ids == {
+        "test:tests/test_foo.py::test_list_foo",
+        "test:tests/test_foo.py::test_get_foo",
+        "test:tests/test_foo.py::test_get_foo_develop_only",
+    }
+    for edge in body["edges"]:
+        assert edge["source"] in test_ids
+        assert edge["target"] in route_ids
+
+
+async def test_get_coverage_graph_by_test(qa_client, isolated_coverage_dir, coverage_project_dir_with_pages):
+    await _register_with_stands(qa_client, "cov_proj", coverage_project_dir_with_pages)
+    _write_routes_tsv("cov_proj", ROUTES_TSV_WITH_FRONTEND)
+    await qa_client.post("/api/projects/cov_proj/coverage/recalc")
+
+    resp = await qa_client.get(
+        "/api/projects/cov_proj/coverage/graph",
+        params={"test": "tests/test_foo_page.py::test_open_foo_list"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    kinds = {n["kind"] for n in body["nodes"]}
+    assert kinds == {"test", "page"}
+
+
+async def test_get_coverage_graph_requires_area_or_test(qa_client, isolated_coverage_dir, coverage_project_dir):
+    await _register_with_stands(qa_client, "cov_proj", coverage_project_dir)
+    _write_routes_tsv("cov_proj")
+
+    resp = await qa_client.get("/api/projects/cov_proj/coverage/graph")
+    assert resp.status_code == 422
+
+
+async def test_get_coverage_graph_unknown_area_404(qa_client, isolated_coverage_dir, coverage_project_dir):
+    await _register_with_stands(qa_client, "cov_proj", coverage_project_dir)
+    _write_routes_tsv("cov_proj")
+
+    resp = await qa_client.get("/api/projects/cov_proj/coverage/graph", params={"area": "does-not-exist"})
     assert resp.status_code == 404

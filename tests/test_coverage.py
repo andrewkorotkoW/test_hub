@@ -417,3 +417,71 @@ def test_match_route_tests_true_and_false_positives(sample_project_dir, routes_t
     assert matched_names("l5-swagger.default.api") == set()
     assert matched_names("passport.token") == set()
     assert matched_names("sanctum.csrf-cookie") == set()
+
+
+# ------------------------------------------------------------------ инвентарь UI-страниц
+
+_FRONTEND_ROUTES_TSV = """\
+programs.index\tGET\t/api/v1/programs
+frontend.programs.list\tGET\t/admin/programs
+frontend.programs.show\tGET\t/admin/programs/{id}
+frontend.reports\tGET\t/admin/reports
+"""
+
+
+@pytest.fixture()
+def frontend_routes_tsv_file(tmp_path):
+    path = tmp_path / "routes_frontend.tsv"
+    path.write_text(_FRONTEND_ROUTES_TSV, encoding="utf-8")
+    return path
+
+
+def test_frontend_routes_keeps_only_non_api_paths(frontend_routes_tsv_file):
+    tsv_routes = coverage.parse_routes_tsv(frontend_routes_tsv_file)
+    frontend = coverage._frontend_routes(tsv_routes)
+    assert {r.name for r in frontend} == {"frontend.programs.list", "frontend.programs.show", "frontend.reports"}
+
+
+def test_page_inventory_merges_discovered_and_tsv_pages_and_dedupes(sample_project_dir, frontend_routes_tsv_file):
+    tests = coverage.analyze_project(str(sample_project_dir))
+    tsv_routes = coverage.parse_routes_tsv(frontend_routes_tsv_file)
+    frontend_routes = coverage._frontend_routes(tsv_routes)
+
+    pages = coverage._page_inventory(tests, frontend_routes)
+    normalized = {p.normalized for p in pages}
+
+    # /admin/programs и /admin/programs/{} уже открываются тестами (sample_project_dir) —
+    # tsv-запись не создаёт дубликат, просто совпадает по нормализованному пути
+    assert "/admin/programs" in normalized
+    assert "/admin/programs/{}" in normalized
+    # страница, которую не открывает ни один тест, но есть в routes.tsv — тоже попадает
+    # в инвентарь (просто окажется непокрытой)
+    assert "/admin/reports" in normalized
+    # login-страница открывается только тестом, в routes.tsv её нет — тоже должна попасть
+    assert "/login" in normalized
+
+
+def test_page_inventory_uncovered_tsv_only_page_has_no_tests(sample_project_dir, frontend_routes_tsv_file):
+    tests = coverage.analyze_project(str(sample_project_dir))
+    tsv_routes = coverage.parse_routes_tsv(frontend_routes_tsv_file)
+    frontend_routes = coverage._frontend_routes(tsv_routes)
+
+    pages = coverage._page_inventory(tests, frontend_routes)
+    matches = coverage._match_page_tests(pages, tests)
+
+    by_normalized = {p.normalized: idx for idx, p in enumerate(pages)}
+    reports_idx = by_normalized["/admin/reports"]
+    assert matches[reports_idx] == []
+
+    login_idx = by_normalized["/login"]
+    assert {t.name for t in matches[login_idx]} == {"test_login_direct"}
+
+
+def test_test_status_counts_dedupes_by_nodeid_across_items():
+    stands = ["develop"]
+    items = [
+        {"status": {"develop": {"tests": [{"nodeid": "t::a", "status": "passed"}, {"nodeid": "t::b", "status": "failed"}]}}},
+        {"status": {"develop": {"tests": [{"nodeid": "t::a", "status": "passed"}, {"nodeid": "t::c", "status": "xfail"}]}}},
+    ]
+    counts = coverage._test_status_counts(items, stands)
+    assert counts == {"develop": {"passed": 1, "failed": 1, "xfail": 1}}

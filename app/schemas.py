@@ -79,6 +79,7 @@ class CoverageMapRoute(BaseModel):
     tests_count: int
     shared: bool
     status: dict[str, CoverageRouteStandStatus]
+    kind: Literal["route", "page"] = "route"
 
 
 class CoverageMapArea(BaseModel):
@@ -92,8 +93,11 @@ class CoverageSummary(BaseModel):
     stands: list[CoverageStandSummary]
     routes_total: int
     routes_covered: int
+    pages_total: int
+    pages_covered: int
     zero_coverage_areas: list[str]
     map: list[CoverageMapArea]
+    test_status: dict[str, dict[str, int]]
 
 
 class CoverageRouteTestStatus(BaseModel):
@@ -107,6 +111,34 @@ class CoverageRouteDetail(BaseModel):
     methods: list[str]
     path: str
     tests: list[CoverageRouteTestStatus]
+
+
+class CoveragePageDetail(BaseModel):
+    path: str
+    tests: list[CoverageRouteTestStatus]
+
+
+class CoverageGraphNode(BaseModel):
+    id: str
+    kind: Literal["route", "page", "test"]
+    label: str
+    ref: str  # nodeid (test) / route name (route) / path (page) без префикса id
+    path: Optional[str] = None
+    methods: list[str] = []
+    tests_count: int = 0
+
+
+class CoverageGraphEdge(BaseModel):
+    source: str
+    target: str
+
+
+class CoverageGraph(BaseModel):
+    scope: str
+    nodes: list[CoverageGraphNode]
+    edges: list[CoverageGraphEdge]
+    truncated: bool
+    node_count: int
 
 
 class CoverageTestRoute(BaseModel):

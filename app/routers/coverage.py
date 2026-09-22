@@ -12,8 +12,12 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from ..core import coverage
 from ..deps import get_db, require_roles
 from ..schemas import (
+    CoverageGraph,
+    CoverageGraphEdge,
+    CoverageGraphNode,
     CoverageMapArea,
     CoverageMapRoute,
+    CoveragePageDetail,
     CoverageRouteDetail,
     CoverageRouteStandStatus,
     CoverageRoutesUploadResult,
@@ -28,6 +32,8 @@ from ..schemas import (
 router = APIRouter(prefix="/api/projects", tags=["coverage"])
 
 _VALID_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"}
+PAGES_AREA_NAME = "UI: страницы"
+MAX_GRAPH_NODES = 150
 
 
 def _get_project_or_404(conn: sqlite3.Connection, name: str) -> sqlite3.Row:
@@ -88,9 +94,32 @@ def _build_summary(cached: dict) -> CoverageSummary:
         )
         area_has_covered[area] = area_has_covered.get(area, False) or route["covered"]
 
+    pages = cached["pages"]
+    if pages:
+        page_cells = [
+            CoverageMapRoute(
+                name=page["path"],
+                methods=["PAGE"],
+                path=page["path"],
+                area=PAGES_AREA_NAME,
+                tests_count=len(page["tests"]),
+                shared=len(page["tests"]) > 1,
+                kind="page",
+                status={
+                    stand: CoverageRouteStandStatus(
+                        state=page["status"][stand]["state"], run_id=page["status"][stand]["run_id"]
+                    )
+                    for stand in stands
+                },
+            )
+            for page in pages
+        ]
+        areas[PAGES_AREA_NAME] = sorted(page_cells, key=lambda r: r.path)
+        area_has_covered[PAGES_AREA_NAME] = any(page["covered"] for page in pages)
+
     map_areas = [
-        CoverageMapArea(area=area, routes=sorted(area_routes, key=lambda r: r.path))
-        for area, area_routes in sorted(areas.items())
+        CoverageMapArea(area=area, routes=area_routes if area == PAGES_AREA_NAME else sorted(area_routes, key=lambda r: r.path))
+        for area, area_routes in sorted(areas.items(), key=lambda kv: (kv[0] == PAGES_AREA_NAME, kv[0]))
     ]
     zero_coverage_areas = sorted(area for area, has_covered in area_has_covered.items() if not has_covered)
 
@@ -100,8 +129,11 @@ def _build_summary(cached: dict) -> CoverageSummary:
         stands=stand_summaries,
         routes_total=cached["routes_total"],
         routes_covered=cached["routes_covered"],
+        pages_total=cached["pages_total"],
+        pages_covered=cached["pages_covered"],
         zero_coverage_areas=zero_coverage_areas,
         map=map_areas,
+        test_status=cached["test_status"],
     )
 
 
@@ -184,6 +216,20 @@ async def upload_routes(
     return CoverageRoutesUploadResult(routes_parsed=routes_parsed, coverage=_build_summary(cached))
 
 
+def _tests_with_stand_status(item: dict, stands: list[str]) -> list[CoverageRouteTestStatus]:
+    status_by_stand = {
+        stand: {t["nodeid"]: t["status"] for t in item["status"][stand]["tests"]} for stand in stands
+    }
+    return [
+        CoverageRouteTestStatus(
+            nodeid=t["nodeid"],
+            env=t["env"],
+            status={stand: status_by_stand[stand].get(t["nodeid"]) for stand in stands},
+        )
+        for t in item["tests"]
+    ]
+
+
 @router.get("/{name}/coverage/route")
 def get_route_coverage(
     name: str,
@@ -204,19 +250,27 @@ def get_route_coverage(
     if route is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Route not found")
 
-    stands = cached["stands"]
-    status_by_stand = {
-        stand: {t["nodeid"]: t["status"] for t in route["status"][stand]["tests"]} for stand in stands
-    }
-    tests = [
-        CoverageRouteTestStatus(
-            nodeid=t["nodeid"],
-            env=t["env"],
-            status={stand: status_by_stand[stand].get(t["nodeid"]) for stand in stands},
-        )
-        for t in route["tests"]
-    ]
+    tests = _tests_with_stand_status(route, cached["stands"])
     return CoverageRouteDetail(name=route["name"], methods=route["methods"], path=route["path"], tests=tests)
+
+
+@router.get("/{name}/coverage/page")
+def get_page_coverage(
+    name: str,
+    path: str,
+    conn: sqlite3.Connection = Depends(get_db),
+    _user: sqlite3.Row = Depends(require_roles("qa", "manager", "customer")),
+) -> CoveragePageDetail:
+    _get_project_or_404(conn, name)
+    cached = _ensure_cached(name)
+
+    normalized = coverage._normalize_path(path)
+    page = next((p for p in cached["pages"] if p["normalized"] == normalized), None)
+    if page is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Page not found")
+
+    tests = _tests_with_stand_status(page, cached["stands"])
+    return CoveragePageDetail(path=page["path"], tests=tests)
 
 
 @router.get("/{name}/coverage/test")
@@ -242,3 +296,86 @@ def get_test_coverage(
     if not routes and not pages:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Test not found in coverage data")
     return CoverageTestDetail(nodeid=id, routes=routes, pages=pages)
+
+
+def _area_items(cached: dict, area: str) -> list[dict]:
+    if area == PAGES_AREA_NAME:
+        return cached["pages"]
+    return [r for r in cached["routes"] if _area_of(r["name"]) == area]
+
+
+def _area_graph(area: str, items: list[dict]) -> CoverageGraph:
+    is_pages = area == PAGES_AREA_NAME
+    nodes: dict[str, CoverageGraphNode] = {}
+    edges: list[CoverageGraphEdge] = []
+    for item in items:
+        ref = item["path"] if is_pages else item["name"]
+        item_id = f"page:{ref}" if is_pages else f"route:{ref}"
+        label = item["path"] if is_pages else f"{'/'.join(item['methods'])} {item['path']}"
+        nodes[item_id] = CoverageGraphNode(
+            id=item_id,
+            kind="page" if is_pages else "route",
+            label=label,
+            ref=ref,
+            path=item["path"],
+            methods=[] if is_pages else item["methods"],
+            tests_count=len(item["tests"]),
+        )
+        for t in item["tests"]:
+            test_id = f"test:{t['nodeid']}"
+            nodes.setdefault(test_id, CoverageGraphNode(id=test_id, kind="test", label=t["nodeid"], ref=t["nodeid"]))
+            edges.append(CoverageGraphEdge(source=test_id, target=item_id))
+
+    node_count = len(nodes)
+    if node_count > MAX_GRAPH_NODES:
+        return CoverageGraph(scope=f"area:{area}", nodes=[], edges=[], truncated=True, node_count=node_count)
+    return CoverageGraph(scope=f"area:{area}", nodes=list(nodes.values()), edges=edges, truncated=False, node_count=node_count)
+
+
+def _test_graph(cached: dict, nodeid: str) -> CoverageGraph:
+    test_id = f"test:{nodeid}"
+    nodes: dict[str, CoverageGraphNode] = {test_id: CoverageGraphNode(id=test_id, kind="test", label=nodeid, ref=nodeid)}
+    edges: list[CoverageGraphEdge] = []
+    for r in cached["routes"]:
+        if not any(t["nodeid"] == nodeid for t in r["tests"]):
+            continue
+        route_id = f"route:{r['name']}"
+        nodes[route_id] = CoverageGraphNode(
+            id=route_id, kind="route", label=f"{'/'.join(r['methods'])} {r['path']}",
+            ref=r["name"], path=r["path"], methods=r["methods"], tests_count=len(r["tests"]),
+        )
+        edges.append(CoverageGraphEdge(source=test_id, target=route_id))
+    for p in cached["pages"]:
+        if not any(t["nodeid"] == nodeid for t in p["tests"]):
+            continue
+        page_id = f"page:{p['path']}"
+        nodes[page_id] = CoverageGraphNode(
+            id=page_id, kind="page", label=p["path"], ref=p["path"], path=p["path"], tests_count=len(p["tests"]),
+        )
+        edges.append(CoverageGraphEdge(source=test_id, target=page_id))
+
+    if len(nodes) < 2:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Test not found in coverage data")
+    return CoverageGraph(scope=f"test:{nodeid}", nodes=list(nodes.values()), edges=edges, truncated=False, node_count=len(nodes))
+
+
+@router.get("/{name}/coverage/graph")
+def get_coverage_graph(
+    name: str,
+    area: str | None = None,
+    test: str | None = None,
+    conn: sqlite3.Connection = Depends(get_db),
+    _user: sqlite3.Row = Depends(require_roles("qa", "manager", "customer")),
+) -> CoverageGraph:
+    _get_project_or_404(conn, name)
+    cached = _ensure_cached(name)
+
+    if test:
+        return _test_graph(cached, test)
+    if not area:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Укажите area или test")
+
+    items = _area_items(cached, area)
+    if not items:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Область не найдена")
+    return _area_graph(area, items)
