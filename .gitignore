@@ -8,4 +8,5 @@ __pycache__/
 workspace/*.db
 workspace/runs/
 workspace/allure-results/
+workspace/allure-reports/
 workspace/*.log
