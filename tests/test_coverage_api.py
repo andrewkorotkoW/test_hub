@@ -181,9 +181,10 @@ async def test_recalc_requires_qa_role(role_client, isolated_coverage_dir, cover
     await _register_with_stands(qa, "cov_proj", coverage_project_dir)
     _write_routes_tsv("cov_proj")
 
-    customer = await role_client("customer")
-    forbidden = await customer.post("/api/projects/cov_proj/coverage/recalc")
-    assert forbidden.status_code == 403
+    for role in ("manager", "customer"):
+        forbidden_client = await role_client(role)
+        forbidden = await forbidden_client.post("/api/projects/cov_proj/coverage/recalc")
+        assert forbidden.status_code == 403
 
     ok = await qa.post("/api/projects/cov_proj/coverage/recalc")
     assert ok.status_code == 200
@@ -198,9 +199,13 @@ async def test_upload_routes_replaces_tsv_and_triggers_recalc(
 
     files = {"file": ("routes.tsv", ROUTES_TSV, "text/tab-separated-values")}
 
-    customer = await role_client("customer")
-    forbidden = await customer.post("/api/projects/cov_proj/coverage/routes", files=files)
-    assert forbidden.status_code == 403
+    for role in ("manager", "customer"):
+        forbidden_client = await role_client(role)
+        forbidden = await forbidden_client.post(
+            "/api/projects/cov_proj/coverage/routes",
+            files={"file": ("routes.tsv", ROUTES_TSV, "text/tab-separated-values")},
+        )
+        assert forbidden.status_code == 403
 
     resp = await qa.post("/api/projects/cov_proj/coverage/routes", files=files)
     assert resp.status_code == 200
@@ -223,6 +228,16 @@ async def test_upload_routes_rejects_malformed_tsv(qa_client, isolated_coverage_
 
     empty = {"file": ("routes.tsv", "   \n\n", "text/tab-separated-values")}
     resp = await qa_client.post("/api/projects/cov_proj/coverage/routes", files=empty)
+    assert resp.status_code == 422
+
+    no_leading_slash = {"file": ("routes.tsv", "foo.index\tGET\tapi/v1/foo\n", "text/tab-separated-values")}
+    resp = await qa_client.post("/api/projects/cov_proj/coverage/routes", files=no_leading_slash)
+    assert resp.status_code == 422
+
+    # routes.tsv не в UTF-8 (например, экспортирован в latin-1) — должен быть отклонён
+    # как 422, а не 500 на UnicodeDecodeError внутри file.read()/decode().
+    non_utf8 = {"file": ("routes.tsv", "café.index\tGET\t/api/v1/foo\n".encode("latin-1"))}
+    resp = await qa_client.post("/api/projects/cov_proj/coverage/routes", files=non_utf8)
     assert resp.status_code == 422
 
 
@@ -259,6 +274,35 @@ async def test_get_route_coverage_404_for_unknown_route(qa_client, isolated_cove
         "/api/projects/cov_proj/coverage/route", params={"method": "GET", "path": "/api/v1/does-not-exist"}
     )
     assert resp.status_code == 404
+
+
+async def test_get_route_coverage_404_for_nonsense_method(qa_client, isolated_coverage_dir, coverage_project_dir):
+    """method — произвольная строка (не выбор из ограниченного списка): FastAPI её
+    примет как обычный str-параметр, а не 422, поэтому несуществующий метод должен
+    просто не найти маршрут (404), а не 500."""
+    await _register_with_stands(qa_client, "cov_proj", coverage_project_dir)
+    _write_routes_tsv("cov_proj")
+
+    resp = await qa_client.get(
+        "/api/projects/cov_proj/coverage/route", params={"method": "TRACE", "path": "/api/v1/foo/{foo}"}
+    )
+    assert resp.status_code == 404
+
+
+async def test_coverage_endpoints_404_for_unknown_project(qa_client, isolated_coverage_dir):
+    for method, url, kwargs in (
+        ("get", "/api/projects/no_such_proj/coverage", {}),
+        ("get", "/api/projects/no_such_proj/coverage/route", {"params": {"method": "GET", "path": "/x"}}),
+        ("get", "/api/projects/no_such_proj/coverage/test", {"params": {"id": "tests/test_x.py::test_x"}}),
+        ("post", "/api/projects/no_such_proj/coverage/recalc", {}),
+        (
+            "post",
+            "/api/projects/no_such_proj/coverage/routes",
+            {"files": {"file": ("routes.tsv", ROUTES_TSV, "text/tab-separated-values")}},
+        ),
+    ):
+        resp = await getattr(qa_client, method)(url, **kwargs)
+        assert resp.status_code == 404, f"{method.upper()} {url} -> {resp.status_code}"
 
 
 async def test_get_test_coverage_lists_routes(role_client, isolated_coverage_dir, coverage_project_dir):
