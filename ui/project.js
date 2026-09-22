@@ -8,7 +8,14 @@
 
   const user = await initPage();
 
-  document.getElementById("project-title").textContent = projectName;
+  const titleEl = document.getElementById("project-title");
+  titleEl.textContent = projectName;
+  const logo = document.createElement("img");
+  logo.className = "project-logo project-logo-lg";
+  logo.alt = "";
+  logo.src = `img/logos/${encodeURIComponent(projectName)}_256.png`;
+  logo.onerror = () => logo.remove();          // логотипа нет — просто заголовок
+  titleEl.prepend(logo);
   const pageError = document.getElementById("page-error");
   const standSelect = document.getElementById("stand-select");
   const markerSelect = document.getElementById("marker-select");

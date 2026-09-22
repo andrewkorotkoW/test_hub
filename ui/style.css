@@ -362,3 +362,7 @@ tbody tr.clickable:hover { background: #f7f8fa; }
   .project-grid { grid-template-columns: 1fr; }
   .run-status-bar { flex-direction: column; align-items: flex-start; }
 }
+
+/* логотип проекта: ui/img/logos/<имя проекта>_256.png, если файла нет — не показывается */
+.project-logo { height: 28px; width: auto; vertical-align: middle; margin-right: 8px; }
+.project-logo-lg { height: 44px; margin-right: 12px; }

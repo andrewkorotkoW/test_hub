@@ -22,7 +22,7 @@ const PROJECT_NAME_RE = /^[a-zA-Z0-9_-]+$/;
     }
     grid.innerHTML = projects.map((p) => `
       <a class="project-card" href="project.html?name=${encodeURIComponent(p.name)}">
-        <div class="name">${escapeHtml(p.name)}</div>
+        <div class="name"><img class="project-logo" src="img/logos/${encodeURIComponent(p.name)}_256.png" alt="" onerror="this.remove()">${escapeHtml(p.name)}</div>
         <div class="path">${escapeHtml(p.path)}</div>
         <div class="stands-count">Стендов: ${p.stands.length}</div>
       </a>
