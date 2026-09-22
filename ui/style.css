@@ -463,3 +463,11 @@ tbody tr.clickable:hover { background: #f7f8fa; }
 .project-card:hover .project-logo-big { transform: scale(1.08); filter: brightness(1.08) drop-shadow(0 0 14px rgba(47,111,237,.55)); }
 .project-card:hover .logo-placeholder { transform: scale(1.08); box-shadow: 0 0 18px rgba(47,111,237,.55); }
 .project-card:hover .name { color: var(--accent, #2f6fed); }
+
+/* исходно логотипы чёрно-белые и приглушённые, цвет появляется при наведении; одинаковая высота блоков — ровный ряд */
+.project-card { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; min-height: 210px; }
+.project-card .logo-box { height: 128px; width: 100%; }
+.project-card .project-logo-big, .project-card .logo-placeholder { filter: grayscale(1) opacity(.75); }
+.project-card .name { min-height: 40px; display: flex; align-items: center; }
+.project-card:hover .project-logo-big { filter: grayscale(0) opacity(1) brightness(1.06) drop-shadow(0 0 14px rgba(47,111,237,.55)); }
+.project-card:hover .logo-placeholder { filter: grayscale(0) opacity(1); }
