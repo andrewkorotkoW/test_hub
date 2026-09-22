@@ -561,3 +561,16 @@ async def test_get_coverage_tree_matches_discover_nodeids_with_run_status(
         "tests/test_foo.py::TestBar::test_x": "failed",
     }
     assert body["statuses"]["stage"] == {}
+
+
+def test_stale_cache_without_status_is_recalculated(tmp_path, monkeypatch):
+    """Кэш старого формата (страницы без status) не должен ронять /coverage 500 — пересчитываем."""
+    from app.routers import coverage as router
+    stale = {"project": "p", "generated_at": "x", "stands": ["develop"], "routes_total": 1, "routes_covered": 0,
+             "routes": [{"name": "r", "methods": ["GET"], "path": "/api/v1/x", "covered": False, "tests": []}],
+             "pages": [{"path": "/edu", "normalized": "/edu", "tests": []}]}
+    assert not router._cache_is_current(stale)
+    fresh = {"project": "p", "generated_at": "x", "stands": ["develop"], "routes_total": 0, "routes_covered": 0,
+             "routes": [], "pages": [{"path": "/edu", "normalized": "/edu", "tests": [],
+                                     "status": {"develop": {"state": "none", "run_id": None}}}]}
+    assert router._cache_is_current(fresh)

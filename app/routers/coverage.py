@@ -49,9 +49,17 @@ def _ensure_cached(project_name: str) -> dict:
     зашедшему на страницу «Покрытие» первым, не нужно знать про существование
     отдельной ручки /recalc."""
     cached = coverage.load_cached(project_name)
-    if cached is None:
+    if cached is None or not _cache_is_current(cached):
         cached = coverage.recalc(project_name)
     return cached
+
+
+def _cache_is_current(cached: dict) -> bool:
+    """coverage.json старого формата (до слоя страниц/статусов) — пересчитать, а не падать с KeyError."""
+    if "pages" not in cached or "routes" not in cached:
+        return False
+    items = list(cached.get("pages") or []) + list(cached.get("routes") or [])
+    return all(isinstance(i, dict) and "status" in i and "tests" in i for i in items)
 
 
 def _area_of(route_name: str) -> str:
