@@ -31,6 +31,21 @@
       </div>
       <div id="charts-body">
         <div class="charts-grid">
+          <div class="chart-box chart-box-wide" id="chart-tree-box">
+            <div class="chart-tree-head">
+              <h3>Дерево проекта</h3>
+              <div class="chart-tree-controls">
+                <div class="chart-tree-layout-toggle" role="group" aria-label="Раскладка дерева">
+                  <button type="button" id="tree-layout-topdown" class="active">Сверху вниз</button>
+                  <button type="button" id="tree-layout-radial">Радиальная</button>
+                </div>
+                <button type="button" id="tree-reset-view">Сбросить вид</button>
+              </div>
+            </div>
+            <div id="chart-tree-body" class="chart-tree-body"><p class="muted">Загрузка…</p></div>
+            <p class="muted chart-tree-hint">Колесо — зум, перетаскивание — панорама, клик по узлу — раскрыть/свернуть
+              или открыть связи теста.</p>
+          </div>
           <div class="chart-box" id="chart-rings-box">
             <h3>Покрытие маршрутов по стендам</h3>
             <div id="chart-rings-body" class="chart-rings-row"></div>

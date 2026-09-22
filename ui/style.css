@@ -509,6 +509,57 @@ tbody tr.clickable:hover { background: #f7f8fa; }
 .graph-node-route.cov-3 circle, .graph-node-page.cov-3 circle { fill: #22c55e; }
 .graph-node:hover circle { stroke: var(--accent); }
 
+/* ---------------- дерево проекта (интерактивная диаграмма) ---------------- */
+.chart-tree-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.chart-tree-head h3 { margin: 0; }
+.chart-tree-controls { display: flex; align-items: center; gap: 8px; }
+.chart-tree-layout-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.chart-tree-layout-toggle button { border: none; border-radius: 0; margin: 0; }
+.chart-tree-layout-toggle button + button { border-left: 1px solid var(--border); }
+.chart-tree-layout-toggle button.active { background: var(--accent); color: #fff; }
+.chart-tree-hint { margin: 6px 0 0; font-size: 11px; }
+.chart-tree-body {
+  position: relative;
+  height: 460px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  cursor: grab;
+  touch-action: none;
+}
+.chart-tree-body.dragging { cursor: grabbing; }
+.chart-tree-body svg { display: block; width: 100%; height: 100%; }
+.tree-viewport { transition: transform 120ms ease-out; }
+.tree-edge {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 1.4;
+  opacity: 0;
+  transition: opacity .4s ease, d .3s ease;
+}
+.tree-edge.tree-visible { opacity: .8; }
+.tree-edge.tree-edge-highlighted { stroke: var(--accent); stroke-width: 2.2; opacity: 1; }
+.tree-node { cursor: pointer; opacity: 0; transition: opacity .4s ease, transform .3s ease; }
+.tree-node.tree-visible { opacity: 1; }
+.tree-node circle { stroke: var(--surface); stroke-width: 1.5; transition: fill .2s ease, stroke .2s ease, r .15s ease; }
+.tree-node text { font-size: 10px; fill: var(--text); pointer-events: none; }
+.tree-node .tree-node-count { font-size: 9px; fill: var(--text-muted); }
+.tree-node:hover circle { stroke: var(--accent); stroke-width: 2.5; }
+.tree-node.tree-node-highlighted circle { stroke: var(--accent); stroke-width: 2.5; }
+.tree-node.tree-node-dim { opacity: .25; }
+.tree-node-passed circle { fill: var(--passed); }
+.tree-node-failed circle { fill: var(--failed); }
+.tree-node-xfail circle { fill: var(--xfail); }
+.tree-node-skipped circle { fill: var(--skipped); }
+.tree-node-root circle { fill: var(--accent); }
+.tree-node.tree-node-failed circle { animation: tree-pulse 1.8s ease-in-out infinite; }
+@keyframes tree-pulse {
+  0%, 100% { r: 6; opacity: 1; }
+  50% { r: 8; opacity: .65; }
+}
+.tree-node-collapsed circle { stroke-dasharray: 2 2; }
+
 /* логотип проекта: ui/img/logos/<имя проекта>_256.png, если файла нет — не показывается */
 .project-logo { height: 28px; width: auto; vertical-align: middle; margin-right: 8px; }
 .project-logo-lg { height: 44px; margin-right: 12px; }
