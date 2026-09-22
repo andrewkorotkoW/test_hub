@@ -589,3 +589,38 @@ tbody tr.clickable:hover { background: #f7f8fa; }
 .project-card .name { min-height: 40px; display: flex; align-items: center; }
 .project-card:hover .project-logo-big { filter: grayscale(0) opacity(1) brightness(1.06) drop-shadow(0 0 14px rgba(47,111,237,.55)); }
 .project-card:hover .logo-placeholder { filter: grayscale(0) opacity(1); }
+
+/* ---------- мобильная раскладка (телефон) ---------- */
+.project-layout { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.4fr); } /* minmax(0) — колонки не растягиваются под длинные пути тестов */
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
+.card { min-width: 0; }
+@media (max-width: 640px) {
+  html, body { overflow-x: hidden; }
+  .page { padding: 12px 12px 40px; }
+  .site-header { padding: 8px 12px; gap: 6px; }
+  .site-header nav { gap: 10px; }
+  .site-header nav a, .user-chip { font-size: 13px; }
+  .header-left { gap: 12px; }
+  .page-head h1 { font-size: 20px; word-break: break-word; }
+  .project-logo-lg { height: 32px; margin-right: 8px; }
+  .card { padding: 14px 12px; border-radius: 10px; }
+  .project-layout { grid-template-columns: 1fr; gap: 12px; }
+  .stand-row { gap: 8px; }
+  .stand-row select { max-width: 100%; }
+  .run-buttons button { flex: 1 1 auto; }
+  .test-tree { max-height: 55vh; padding: 6px 6px; font-size: 13px; }
+  .tree-file summary label, .tree-class > label, .tree-tests label { word-break: break-all; }
+  .tree-classes { margin-left: 12px; }
+  .tree-tests { margin-left: 12px; }
+  .run-log { font-size: 11px; max-height: 40vh; }
+  table { font-size: 12px; }
+  th, td { padding: 6px 6px; white-space: nowrap; }
+  .summary-badges { flex-wrap: wrap; gap: 6px; }
+  .report-filters { flex-wrap: wrap; gap: 6px; }
+  .coverage-layout { grid-template-columns: 1fr; }
+  .coverage-toolbar { gap: 8px; }
+  .project-grid { grid-template-columns: repeat(2, 1fr); }
+  .project-card .logo-box { height: 90px; }
+  .project-card .project-logo-big { max-height: 90px; }
+  .project-card .logo-placeholder { width: 72px; height: 72px; font-size: 26px; }
+}
