@@ -57,3 +57,74 @@ class UserUpdate(BaseModel):
 class AdminUserUpdate(BaseModel):
     role: Optional[Role] = None
     password: Optional[str] = None
+
+
+class CoverageStandSummary(BaseModel):
+    stand: str
+    routes_total: int
+    routes_covered: int
+    percent: float
+
+
+class CoverageRouteStandStatus(BaseModel):
+    state: str
+    run_id: Optional[int] = None
+
+
+class CoverageMapRoute(BaseModel):
+    name: str
+    methods: list[str]
+    path: str
+    area: str
+    tests_count: int
+    shared: bool
+    status: dict[str, CoverageRouteStandStatus]
+
+
+class CoverageMapArea(BaseModel):
+    area: str
+    routes: list[CoverageMapRoute]
+
+
+class CoverageSummary(BaseModel):
+    project: str
+    generated_at: str
+    stands: list[CoverageStandSummary]
+    routes_total: int
+    routes_covered: int
+    zero_coverage_areas: list[str]
+    map: list[CoverageMapArea]
+
+
+class CoverageRouteTestStatus(BaseModel):
+    nodeid: str
+    env: Optional[str] = None
+    status: dict[str, Optional[str]]
+
+
+class CoverageRouteDetail(BaseModel):
+    name: str
+    methods: list[str]
+    path: str
+    tests: list[CoverageRouteTestStatus]
+
+
+class CoverageTestRoute(BaseModel):
+    name: str
+    methods: list[str]
+    path: str
+
+
+class CoverageTestPage(BaseModel):
+    path: str
+
+
+class CoverageTestDetail(BaseModel):
+    nodeid: str
+    routes: list[CoverageTestRoute]
+    pages: list[CoverageTestPage]
+
+
+class CoverageRoutesUploadResult(BaseModel):
+    routes_parsed: int
+    coverage: CoverageSummary
