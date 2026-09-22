@@ -45,6 +45,11 @@
 
   const canShare = ["qa", "manager", "superadmin"].includes(user.role);
 
+  const flakyStandSelect = document.getElementById("flaky-stand-select");
+  const flakyRows = document.getElementById("flaky-rows");
+  const flakyError = document.getElementById("flaky-error");
+  const FLAKY_THRESHOLD = 0.3;
+
   let currentTests = [];
   let currentWs = null;
   let sawLine = false;
@@ -60,10 +65,76 @@
       const stands = await api(`/api/projects/${encodeURIComponent(projectName)}/stands`);
       standSelect.innerHTML = `<option value="">— без стенда —</option>` +
         stands.map((s) => `<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)} (${escapeHtml(s.url)})</option>`).join("");
+      flakyStandSelect.innerHTML = `<option value="">— все стенды —</option>` +
+        stands.map((s) => `<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)}</option>`).join("");
     } catch (err) {
       showPageError(`Не удалось загрузить стенды: ${err.message}`);
     }
   }
+
+  // ---------------- flaky tests ----------------
+  function flakyDotsHtml(statuses) {
+    return statuses.slice(-10).map((s) => `<span class="flaky-dot ${escapeHtml(s || "unknown")}" title="${escapeHtml(s)}"></span>`).join("");
+  }
+
+  function renderFlakyRows(items) {
+    if (!items.length) {
+      flakyRows.innerHTML = `<tr><td colspan="6" class="muted">Нестабильных тестов не найдено.</td></tr>`;
+      return;
+    }
+    flakyRows.innerHTML = items.map((item) => {
+      const percent = Math.round(item.score * 100);
+      const shortName = item.test.split("#").pop();
+      const rowClass = item.score >= FLAKY_THRESHOLD ? "flaky-high" : "";
+      const runBtn = item.nodeid
+        ? `<button class="flaky-run-btn" data-nodeid="${escapeHtml(item.nodeid)}" data-stand="${escapeHtml(item.stand)}">Прогнать ×3</button>`
+        : "—";
+      return `
+        <tr class="${rowClass}">
+          <td title="${escapeHtml(item.test)}">${escapeHtml(shortName)}</td>
+          <td>${item.runs}</td>
+          <td>${item.fails}</td>
+          <td>${percent}%</td>
+          <td class="flaky-dots">${flakyDotsHtml(item.last_statuses)}</td>
+          <td>${runBtn}</td>
+        </tr>
+      `;
+    }).join("");
+  }
+
+  async function loadFlaky() {
+    flakyError.hidden = true;
+    try {
+      const params = new URLSearchParams({ min_runs: "3" });
+      if (flakyStandSelect.value) params.set("stand", flakyStandSelect.value);
+      const data = await api(`/api/projects/${encodeURIComponent(projectName)}/flaky?${params}`);
+      renderFlakyRows(data.items || []);
+    } catch (err) {
+      flakyRows.innerHTML = "";
+      flakyError.textContent = `Не удалось загрузить нестабильные тесты: ${err.message}`;
+      flakyError.hidden = false;
+    }
+  }
+
+  flakyStandSelect.addEventListener("change", loadFlaky);
+
+  flakyRows.addEventListener("click", async (ev) => {
+    const btn = ev.target.closest(".flaky-run-btn");
+    if (!btn) return;
+    btn.disabled = true;
+    try {
+      const run = await api(`/api/projects/${encodeURIComponent(projectName)}/runs`, {
+        method: "POST",
+        json: { stand: btn.dataset.stand || null, target: btn.dataset.nodeid, repeat: 3 },
+      });
+      await openRun(run.id);
+      await loadHistory();
+    } catch (err) {
+      alert(`Не удалось запустить прогон: ${err.message}`);
+    } finally {
+      btn.disabled = false;
+    }
+  });
 
   // ---------------- test tree ----------------
   function nodeIdOf(file, cls, test) {
@@ -436,7 +507,7 @@
   });
 
   setupTreeEvents();
-  await Promise.all([loadStands(), loadTests(), loadHistory()]);
+  await Promise.all([loadStands(), loadTests(), loadHistory(), loadFlaky()]);
 
   // Глубокая ссылка из суперадминки (admin_all.html): project.html?name=...&run=<id>
   // сразу открывает отчёт конкретного прогона.

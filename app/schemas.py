@@ -1,6 +1,6 @@
 from typing import Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 Role = Literal["qa", "manager", "customer", "superadmin"]
 
@@ -39,6 +39,7 @@ class RunCreate(BaseModel):
     stand: Optional[str] = None
     target: str = "all"
     marker: Optional[str] = None
+    repeat: int = Field(default=1, ge=1, le=20)
 
 
 class ShareLinkCreate(BaseModel):
@@ -181,3 +182,31 @@ class CoverageTree(BaseModel):
     stands: list[str]
     run_ids: dict[str, Optional[int]]
     statuses: dict[str, dict[str, str]]  # stand -> nodeid -> status
+
+
+class FlakyTestStat(BaseModel):
+    project: str
+    stand: str
+    test: str
+    nodeid: Optional[str] = None
+    runs: int
+    fails: int
+    flips: int
+    score: float
+    last_statuses: list[str]
+    updated_at: Optional[str] = None
+
+
+class FlakyTestList(BaseModel):
+    items: list[FlakyTestStat]
+
+
+class FlakyTestHistoryEntry(BaseModel):
+    run_id: int
+    status: str
+
+
+class FlakyTestHistory(BaseModel):
+    test: str
+    stand: str
+    history: list[FlakyTestHistoryEntry]

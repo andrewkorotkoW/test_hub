@@ -29,7 +29,7 @@ from pathlib import Path
 
 from ..config import settings
 from ..db import get_connection
-from . import allure_report
+from . import allure_report, flaky
 from .ws import hub
 
 _COLLECT_RE = re.compile(r"^(?P<file>[\w./-]+\.py)::(?P<rest>.+)$")
@@ -105,10 +105,18 @@ def _get_stand(conn: sqlite3.Connection, project: str, name: str) -> sqlite3.Row
 
 
 async def submit_run(
-    project_name: str, stand_name: str | None, target: str, requested_by: str, marker: str | None = None
+    project_name: str,
+    stand_name: str | None,
+    target: str,
+    requested_by: str,
+    marker: str | None = None,
+    repeat: int = 1,
 ) -> int:
     """Создаёт запись прогона (running, если для проекта нет активного, иначе queued)
-    и, если она стартует сразу, запускает фоновую задачу исполнения."""
+    и, если она стартует сразу, запускает фоновую задачу исполнения. `repeat` > 1
+    прогоняет одну и ту же цель несколько раз подряд в одном прогоне (см. _execute) —
+    используется флаки-детектором (app/core/flaky.py) для накопления истории на
+    одном и том же снимке кода/стенда."""
     async with _lock_for(project_name):
         conn = get_connection()
         try:
@@ -119,10 +127,10 @@ async def submit_run(
             start_now = active is None
             now = datetime.now().isoformat(timespec="seconds")
             cur = conn.execute(
-                "INSERT INTO runs (project, stand, target, status, started, requested_by, counts, marker) "
-                "VALUES (?, ?, ?, ?, ?, ?, '{}', ?)",
+                "INSERT INTO runs (project, stand, target, status, started, requested_by, counts, marker, repeat) "
+                "VALUES (?, ?, ?, ?, ?, ?, '{}', ?, ?)",
                 (project_name, stand_name, target, "running" if start_now else "queued",
-                 now if start_now else None, requested_by, marker),
+                 now if start_now else None, requested_by, marker, repeat),
             )
             conn.commit()
             run_id = cur.lastrowid
@@ -130,7 +138,7 @@ async def submit_run(
             conn.close()
 
     if start_now:
-        asyncio.create_task(_execute(run_id, project_name, stand_name, target, marker))
+        asyncio.create_task(_execute(run_id, project_name, stand_name, target, marker, repeat))
     return run_id
 
 
@@ -204,9 +212,16 @@ async def _finalize(run_id: int, status: str, started_at: float, counts: dict[st
              json.dumps(counts), run_id),
         )
         conn.commit()
+        row = conn.execute("SELECT project, stand FROM runs WHERE id = ?", (run_id,)).fetchone()
     finally:
         conn.close()
     await hub.broadcast(run_id, {"type": "status", "run_id": run_id, "status": status, "counts": counts})
+
+    if row is not None and row["stand"]:
+        # Флаки-детектор: пересчёт не должен блокировать завершение прогона (recalc
+        # синхронный — читает allure-results с диска и пишет в SQLite), поэтому
+        # уходит в отдельный поток фоновой задачей, а не await'ится здесь.
+        asyncio.create_task(asyncio.to_thread(flaky.recalc, row["project"], row["stand"]))
 
 
 async def _advance_queue(project_name: str) -> None:
@@ -226,11 +241,18 @@ async def _advance_queue(project_name: str) -> None:
         finally:
             conn.close()
     if nxt is not None:
-        asyncio.create_task(_execute(nxt["id"], project_name, nxt["stand"], nxt["target"], nxt["marker"]))
+        asyncio.create_task(
+            _execute(nxt["id"], project_name, nxt["stand"], nxt["target"], nxt["marker"], nxt["repeat"])
+        )
 
 
 async def _execute(
-    run_id: int, project_name: str, stand_name: str | None, target: str, marker: str | None = None
+    run_id: int,
+    project_name: str,
+    stand_name: str | None,
+    target: str,
+    marker: str | None = None,
+    repeat: int = 1,
 ) -> None:
     conn = get_connection()
     try:
@@ -267,31 +289,45 @@ async def _execute(
     if marker:
         args.extend(["-m", marker])
 
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            *args, cwd=project["path"], env=env,
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
-        )
-    except OSError as exc:
-        await _log_line(run_id, f"не удалось запустить pytest: {exc}")
-        await _finalize(run_id, "failed", started_at, {})
-        await _advance_queue(project_name)
-        return
+    # repeat > 1 (флаки-детектор, см. app/core/flaky.py) гоняет ту же цель несколько
+    # раз подряд в один и тот же results_dir: pytest-repeat не в requirements.txt,
+    # поэтому вместо --count используется просто N последовательных subprocess-запусков
+    # — allure-pytest сам называет файлы результатов случайным uuid на каждый запуск,
+    # так что коллизий имён между повторами не бывает и без ручных префиксов.
+    total_returncode = 0
+    for attempt in range(max(1, repeat)):
+        if repeat > 1:
+            await _log_line(run_id, f"=== повтор {attempt + 1}/{repeat} ===")
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *args, cwd=project["path"], env=env,
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+            )
+        except OSError as exc:
+            await _log_line(run_id, f"не удалось запустить pytest: {exc}")
+            await _finalize(run_id, "failed", started_at, {})
+            await _advance_queue(project_name)
+            return
 
-    _active_procs[run_id] = proc
-    try:
-        assert proc.stdout is not None
-        async for raw in proc.stdout:
-            await _log_line(run_id, raw.decode("utf-8", errors="replace").rstrip("\n"))
-        await proc.wait()
-    finally:
-        _active_procs.pop(run_id, None)
+        _active_procs[run_id] = proc
+        try:
+            assert proc.stdout is not None
+            async for raw in proc.stdout:
+                await _log_line(run_id, raw.decode("utf-8", errors="replace").rstrip("\n"))
+            await proc.wait()
+        finally:
+            _active_procs.pop(run_id, None)
+
+        if run_id in _cancelled:
+            break
+        if proc.returncode != 0:
+            total_returncode = proc.returncode
 
     if run_id in _cancelled:
         _cancelled.discard(run_id)
         status = "cancelled"
     else:
-        status = "passed" if proc.returncode == 0 else "failed"
+        status = "passed" if total_returncode == 0 else "failed"
 
     tests = allure_report.parse_results(results_dir)
     counts = allure_report.counts_from_tests(tests)

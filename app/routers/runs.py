@@ -36,6 +36,7 @@ def _run_payload(row: sqlite3.Row) -> dict:
         "stand": row["stand"],
         "target": row["target"],
         "marker": row["marker"],
+        "repeat": row["repeat"],
         "status": row["status"],
         "started": row["started"],
         "finished": row["finished"],
@@ -69,7 +70,9 @@ async def create_run(
         ).fetchone()
         if not stand:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stand not found")
-    run_id = await runner.submit_run(project["name"], body.stand, body.target, user["login"], body.marker)
+    run_id = await runner.submit_run(
+        project["name"], body.stand, body.target, user["login"], body.marker, body.repeat
+    )
     row = _get_run_or_404(conn, run_id)
     return _run_payload(row)
 
