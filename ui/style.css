@@ -517,6 +517,7 @@ tbody tr.clickable:hover { background: #f7f8fa; }
 .chart-tree-layout-toggle button { border: none; border-radius: 0; margin: 0; }
 .chart-tree-layout-toggle button + button { border-left: 1px solid var(--border); }
 .chart-tree-layout-toggle button.active { background: var(--accent); color: #fff; }
+.chart-tree-controls button#tree-failed-only.active { background: var(--failed); border-color: var(--failed); color: #fff; }
 .chart-tree-hint { margin: 6px 0 0; font-size: 11px; }
 .chart-tree-body {
   position: relative;
@@ -529,7 +530,10 @@ tbody tr.clickable:hover { background: #f7f8fa; }
   touch-action: none;
 }
 .chart-tree-body.dragging { cursor: grabbing; }
-.chart-tree-body svg { display: block; width: 100%; height: 100%; }
+/* без width/height:100% — иначе viewBox сам масштабирует SVG под контейнер (в т.ч. по
+   самому узкому измерению) ДО нашего treeView.scale, и широкое развёрнутое дерево
+   получает двойное сжатие («тонкая линия»). Единственный источник масштаба — JS ниже. */
+.chart-tree-body svg { display: block; }
 .tree-viewport { transition: transform 120ms ease-out; }
 .tree-edge {
   fill: none;
@@ -559,6 +563,15 @@ tbody tr.clickable:hover { background: #f7f8fa; }
   50% { r: 8; opacity: .65; }
 }
 .tree-node-collapsed circle { stroke-dasharray: 2 2; }
+.tree-node .tree-node-statusbar rect { rx: 1; }
+.tree-statusbar-empty { fill: var(--border); }
+.tree-statusbar-passed { fill: var(--passed); }
+.tree-statusbar-failed { fill: var(--failed); }
+.tree-statusbar-xfail { fill: var(--xfail); }
+.tree-statusbar-skipped { fill: var(--skipped); }
+/* соседние узлы top-down ближе TREE_LABEL_HIDE_GAP — подпись только на hover, чтобы не наезжали друг на друга */
+.tree-node-label-hoveronly text { opacity: 0; transition: opacity .15s ease; }
+.tree-node-label-hoveronly:hover text { opacity: 1; }
 
 /* логотип проекта: ui/img/logos/<имя проекта>_256.png, если файла нет — не показывается */
 .project-logo { height: 28px; width: auto; vertical-align: middle; margin-right: 8px; }

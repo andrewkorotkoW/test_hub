@@ -63,6 +63,15 @@ test("applyDefaultTreeCollapse: каталоги открыты, файлы и �
   assert.strictEqual(findNode(root, "tests/api/users/test_profile.py::TestProfile").collapsed, true);
 });
 
+test("applyDefaultTreeCollapse: каталоги глубже папки области сворачиваются даже в маленьком дереве", function () {
+  var tree = { "tests/api/area/subarea/test_deep.py": { "": ["test_x"] } };
+  var root = Logic.buildTreeRoot(tree, "proj");
+  Logic.applyDefaultTreeCollapse(root);
+  assert.ok(Logic.countVisibleTreeNodes(root) < 20, "дерево маленькое, бюджет тут ни при чём");
+  assert.strictEqual(findNode(root, "tests/api/area").collapsed, false, "папка области (глубина 3) видна");
+  assert.strictEqual(findNode(root, "tests/api/area/subarea").collapsed, true, "каталог глубже папки области свёрнут по умолчанию");
+});
+
 test("applyDefaultTreeCollapse: видимых узлов в пределах бюджета для маленького дерева", function () {
   var root = Logic.buildTreeRoot(sampleTree(), "proj");
   Logic.applyDefaultTreeCollapse(root);

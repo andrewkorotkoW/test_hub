@@ -72,22 +72,31 @@
     return count;
   }
 
-  // По умолчанию видна только структура каталогов (корень → tests/api → папки
-  // областей), файлы и классы всегда свёрнуты — иначе на проекте с сотнями
-  // тестов top-down раскладка превращается в нечитаемую тонкую линию (узлов
-  // становится больше видимой ширины контейнера). Если даже после этого узлов
-  // больше бюджета (гигантский проект с огромным деревом каталогов), сворачиваем
-  // ещё и глубоко вложенные каталоги (глубже уровня папок областей).
+  // корень(0) → tests/api, tests/ui, tests/e2e(1..2) → папки областей(3) — см. пример
+  // из задачи. Каталоги глубже этого уровня по умолчанию тоже сворачиваются.
+  var AREA_MAX_DEPTH = 3;
+
+  function assignTreeDepths(node, depth) {
+    node.depth = depth;
+    for (var i = 0; i < node.children.length; i++) assignTreeDepths(node.children[i], depth + 1);
+  }
+
+  // По умолчанию видна только структура каталогов до уровня папок областей —
+  // файлы, классы и более глубоко вложенные каталоги всегда свёрнуты, независимо
+  // от размера дерева. Иначе на проекте с сотнями тестов (и тем более после
+  // «Развернуть всё») top-down раскладка превращается в нечитаемую тонкую линию —
+  // узлов-листьев становится больше видимой ширины контейнера. Если даже после
+  // этого узлов больше бюджета (гигантский проект с огромным деревом каталогов
+  // ещё ДО уровня областей), сворачиваем и сами папки областей.
   function applyDefaultTreeCollapse(root, budget) {
     var visibleBudget = budget || TREE_VISIBLE_BUDGET;
+    assignTreeDepths(root, 0);
     forEachTreeNode(root, function (n) {
-      n.collapsed = n.kind === "file" || n.kind === "class";
+      n.collapsed = n.kind === "file" || n.kind === "class" || (n.kind === "dir" && n.depth > AREA_MAX_DEPTH);
     });
     if (countVisibleTreeNodes(root) <= visibleBudget) return;
     forEachTreeNode(root, function (n) {
-      if (n.kind === "dir" && n.parent && n.parent.kind === "dir" && n.parent.parent && n.parent.parent.kind === "dir") {
-        n.collapsed = true;
-      }
+      if (n.kind === "dir" && n.depth >= AREA_MAX_DEPTH) n.collapsed = true;
     });
   }
 

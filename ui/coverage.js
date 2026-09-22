@@ -28,6 +28,9 @@
   const chartTreeBody = document.getElementById("chart-tree-body");
   const treeLayoutTopdownBtn = document.getElementById("tree-layout-topdown");
   const treeLayoutRadialBtn = document.getElementById("tree-layout-radial");
+  const treeExpandAllBtn = document.getElementById("tree-expand-all");
+  const treeCollapseAllBtn = document.getElementById("tree-collapse-all");
+  const treeFailedOnlyBtn = document.getElementById("tree-failed-only");
   const treeResetViewBtn = document.getElementById("tree-reset-view");
   const standSelect = document.getElementById("cov-stand-select");
   const filterUncovered = document.getElementById("cov-filter-uncovered");
@@ -584,17 +587,26 @@
   });
 
   // ---------------- диаграммы: дерево проекта (интерактивное, анимированное) ----------------
+  // Чистая логика построения/раскрытия дерева (без DOM, юнит-тестируется через node —
+  // см. tests/js/test_coverage_tree_logic.js) вынесена в coverage-tree-logic.js.
+  const TreeLogic = window.CoverageTreeLogic;
   const TREE_SVG_NS = "http://www.w3.org/2000/svg";
-  const TREE_VISIBLE_BUDGET = 200;
   const TREE_X_STEP = 42;
   const TREE_LEVEL_HEIGHT = 84;
   const TREE_STATUS_COLORS = { passed: "#16a34a", failed: "#dc2626" };
+  const TREE_MIN_FIT_SCALE = 0.35;
+  const TREE_LABEL_HIDE_GAP = 24; // соседние узлы ближе этого (px, top-down) — подпись только на hover
+  const TREE_LABEL_NARROW_WIDTH = 90; // «ширина узла» меньше этого — имя обрезаем короче
 
   let treeApiData = null;   // сырой ответ GET /coverage/tree
   let treeRoot = null;      // построенная модель дерева (узлы стабильны между рендерами)
   let treeLayoutMode = "topdown";
   let treeView = { scale: 1, panX: 0, panY: 0 };
-  let treeNodeEls = new Map();   // node.id -> {group, circle}
+  let treeUserZoomed = false; // true — пользователь сам покрутил колесо/потаскал, fit-to-view больше не трогаем
+  let treeViewportEl = null;
+  let treeLastLayoutSize = { width: 0, height: 0 };
+  let treeFailedOnlyActive = false;
+  let treeNodeEls = new Map();   // node.id -> {group, circle, text, node}
   let treeEdgeEls = new Map();   // "parentId>childId" -> path
   let treeFirstRender = true;
   let treeRouteCache = new Map(); // nodeid -> Set(route name), кэш для подсветки при наведении
@@ -606,101 +618,15 @@
     return label.length > max ? label.slice(0, max - 1) + "…" : label;
   }
 
-  function buildTreeRoot(tree) {
-    const root = { id: "root", label: projectName, kind: "root", children: [], collapsed: false, parent: null };
-    const dirIndex = new Map([["root", root]]);
-    for (const file of Object.keys(tree).sort()) {
-      const classes = tree[file];
-      const parts = file.split("/");
-      let parent = root;
-      let acc = "";
-      for (let i = 0; i < parts.length - 1; i++) {
-        acc = acc ? `${acc}/${parts[i]}` : parts[i];
-        let dirNode = dirIndex.get(acc);
-        if (!dirNode) {
-          dirNode = { id: acc, label: parts[i], kind: "dir", children: [], collapsed: false, parent };
-          dirIndex.set(acc, dirNode);
-          parent.children.push(dirNode);
-        }
-        parent = dirNode;
-      }
-      const fileName = parts[parts.length - 1];
-      const fileNode = { id: file, label: fileName, kind: "file", children: [], collapsed: false, parent };
-      parent.children.push(fileNode);
-      for (const cls of Object.keys(classes).sort()) {
-        let holder = fileNode;
-        if (cls) {
-          const clsNode = { id: `${file}::${cls}`, label: cls, kind: "class", children: [], collapsed: false, parent: fileNode };
-          fileNode.children.push(clsNode);
-          holder = clsNode;
-        }
-        for (const test of classes[cls]) {
-          const nodeid = cls ? `${file}::${cls}::${test}` : `${file}::${test}`;
-          holder.children.push({ id: nodeid, label: test, kind: "test", nodeid, children: [], collapsed: false, parent: holder });
-        }
-      }
-    }
-    return root;
-  }
-
-  function forEachTreeNode(node, fn) {
-    fn(node);
-    node.children.forEach((c) => forEachTreeNode(c, fn));
-  }
-
-  function countVisibleTreeNodes(node) {
-    let count = 1;
-    if (!node.collapsed) {
-      for (const c of node.children) count += countVisibleTreeNodes(c);
-    }
-    return count;
-  }
-
   function countDescendantTests(node) {
-    if (node.kind === "test") return 1;
-    return node.children.reduce((s, c) => s + countDescendantTests(c), 0);
-  }
-
-  function applyDefaultTreeCollapse(root) {
-    let total = 0;
-    forEachTreeNode(root, () => { total += 1; });
-    if (total <= TREE_VISIBLE_BUDGET) return;
-    // бюджет превышен: сворачиваем тесты внутри файлов/классов, показываем только структуру каталогов
-    forEachTreeNode(root, (n) => { if (n.kind === "file" || n.kind === "class") n.collapsed = true; });
-    if (countVisibleTreeNodes(root) <= TREE_VISIBLE_BUDGET) return;
-    // всё ещё много (гигантский проект) — сворачиваем и глубокие каталоги
-    forEachTreeNode(root, (n) => { if (n.kind === "dir" && n.parent && n.parent.kind === "dir" && n.parent.parent && n.parent.parent.kind === "dir") n.collapsed = true; });
+    return TreeLogic.countDescendantTests(node);
   }
 
   // ---- статусы (перевычисляются при смене стенда, структура дерева не меняется) ----
   function computeTreeStatuses(stand) {
     const statusMap = (treeApiData && treeApiData.statuses && treeApiData.statuses[stand]) || {};
-    function visit(node) {
-      if (node.kind === "test") {
-        const status = statusMap[node.nodeid] || null;
-        node.status = status;
-        const counts = { passed: 0, xfail: 0, skipped: 0, failed: 0, none: 0 };
-        if (status === "passed") counts.passed = 1;
-        else if (status === "xfail") counts.xfail = 1;
-        else if (status === "skipped") counts.skipped = 1;
-        else if (status === "failed" || status === "broken") counts.failed = 1;
-        else counts.none = 1;
-        node.counts = counts;
-        return counts;
-      }
-      const totals = { passed: 0, xfail: 0, skipped: 0, failed: 0, none: 0 };
-      for (const child of node.children) {
-        const c = visit(child);
-        totals.passed += c.passed;
-        totals.xfail += c.xfail;
-        totals.skipped += c.skipped;
-        totals.failed += c.failed;
-        totals.none += c.none;
-      }
-      node.counts = totals;
-      return totals;
-    }
-    visit(treeRoot);
+    TreeLogic.computeTreeStatuses(treeRoot, statusMap);
+    if (treeFailedOnlyActive) TreeLogic.applyFailedOnlyCollapse(treeRoot);
   }
 
   function hexToRgb(hex) {
@@ -792,7 +718,28 @@
       n.px = 40 + n.x * TREE_X_STEP;
       n.py = 40 + n.depth * TREE_LEVEL_HEIGHT;
     }
+    computeTreeLabelGaps(nodes);
     return { nodes, edges, width, height };
+  }
+
+  // top-down: для каждого узла — расстояние (px, в координатах разметки) до ближайшего
+  // соседа в той же строке (той же глубины). Используется, чтобы не накладывать подписи
+  // друг на друга и обрезать длинные имена там, где реально мало места.
+  function computeTreeLabelGaps(nodes) {
+    const byDepth = new Map();
+    for (const n of nodes) {
+      if (!byDepth.has(n.depth)) byDepth.set(n.depth, []);
+      byDepth.get(n.depth).push(n);
+    }
+    for (const n of nodes) n.labelGapPx = Infinity;
+    byDepth.forEach((row) => {
+      row.sort((a, b) => a.px - b.px);
+      for (let i = 0; i < row.length; i++) {
+        const prevGap = i > 0 ? row[i].px - row[i - 1].px : Infinity;
+        const nextGap = i < row.length - 1 ? row[i + 1].px - row[i].px : Infinity;
+        row[i].labelGapPx = Math.min(prevGap, nextGap);
+      }
+    });
   }
 
   function treeEdgePath(edge) {
@@ -818,20 +765,78 @@
     if (node.children.length > 0 && node.collapsed) group.classList.add("tree-node-collapsed");
   }
 
+  const TREE_STATUS_BAR_SEGMENTS = [
+    ["failed", "tree-statusbar-failed"],
+    ["xfail", "tree-statusbar-xfail"],
+    ["none", "tree-statusbar-skipped"],
+    ["skipped", "tree-statusbar-skipped"],
+    ["passed", "tree-statusbar-passed"],
+  ];
+
+  // На свёрнутом узле показываем число тестов внутри и мини-полоску сегментов
+  // passed/failed/xfail/skipped, чтобы папку с упавшими тестами было видно без раскрытия.
   function syncBadge(node, group) {
-    const existing = group.querySelector(".tree-node-count");
-    if (node.collapsed && node.children.length > 0) {
-      const text = String(countDescendantTests(node));
-      if (existing) {
-        existing.textContent = text;
-      } else {
-        const badge = makeSvgEl("text", { class: "tree-node-count", x: "0", y: "3", "text-anchor": "middle" });
-        badge.textContent = text;
-        group.appendChild(badge);
-      }
-    } else if (existing) {
-      existing.remove();
+    const existingCount = group.querySelector(".tree-node-count");
+    const existingBar = group.querySelector(".tree-node-statusbar");
+    const showBadge = node.collapsed && node.children.length > 0;
+    if (!showBadge) {
+      if (existingCount) existingCount.remove();
+      if (existingBar) existingBar.remove();
+      return;
     }
+    const countText = String(countDescendantTests(node));
+    if (existingCount) {
+      existingCount.textContent = countText;
+    } else {
+      const badge = makeSvgEl("text", { class: "tree-node-count", x: "0", y: "-13", "text-anchor": "middle" });
+      badge.textContent = countText;
+      group.appendChild(badge);
+    }
+
+    const barWidth = 22;
+    const barHeight = 4;
+    const barY = 11;
+    let bar = existingBar;
+    if (!bar) {
+      bar = makeSvgEl("g", { class: "tree-node-statusbar" });
+      group.appendChild(bar);
+    }
+    while (bar.firstChild) bar.removeChild(bar.firstChild);
+    const c = node.counts || {};
+    const total = (c.passed || 0) + (c.xfail || 0) + (c.skipped || 0) + (c.failed || 0) + (c.none || 0);
+    if (total > 0) {
+      let x = -barWidth / 2;
+      for (const [key, cls] of TREE_STATUS_BAR_SEGMENTS) {
+        const count = c[key] || 0;
+        if (!count) continue;
+        const w = (count / total) * barWidth;
+        bar.appendChild(makeSvgEl("rect", {
+          class: `tree-statusbar-seg ${cls}`,
+          x: x.toFixed(1), y: String(barY), width: w.toFixed(1), height: String(barHeight),
+        }));
+        x += w;
+      }
+    } else {
+      bar.appendChild(makeSvgEl("rect", {
+        class: "tree-statusbar-seg tree-statusbar-empty",
+        x: String(-barWidth / 2), y: String(barY), width: String(barWidth), height: String(barHeight),
+      }));
+    }
+  }
+
+  // top-down: подпись длиннее свободного места до соседнего узла накладывалась бы на
+  // него — обрезаем короче и/или прячем до наведения (полный текст всегда есть в title).
+  function updateNodeLabel(node, refs) {
+    const rawGap = typeof node.labelGapPx === "number" ? node.labelGapPx : Infinity;
+    // «Ширина узла»/расстояние до соседа — в экранных пикселях, с учётом текущего
+    // масштаба (fit-to-view + ручной зум), а не в сырых координатах разметки.
+    const screenGap = rawGap * treeView.scale;
+    const isTopdown = treeLayoutMode === "topdown";
+    const maxLen = node.kind === "test" ? 16 : 14;
+    const narrow = isTopdown && screenGap < TREE_LABEL_NARROW_WIDTH;
+    const effectiveMaxLen = narrow ? Math.max(3, Math.floor(screenGap / 6)) : maxLen;
+    refs.text.textContent = shortLabel(node.label, Math.min(maxLen, effectiveMaxLen));
+    refs.group.classList.toggle("tree-node-label-hoveronly", isTopdown && screenGap < TREE_LABEL_HIDE_GAP);
   }
 
   function onTreeNodeClick(node) {
@@ -840,6 +845,10 @@
       return;
     }
     if (node.children.length === 0) return;
+    if (treeFailedOnlyActive) {
+      treeFailedOnlyActive = false;
+      treeFailedOnlyBtn.classList.remove("active");
+    }
     node.collapsed = !node.collapsed;
     syncTreeView();
   }
@@ -907,13 +916,13 @@
     const title = makeSvgEl("title", {});
     group.appendChild(title);
     const text = makeSvgEl("text", { x: "0", y: String(r + 12), "text-anchor": "middle" });
-    text.textContent = shortLabel(node.label, node.kind === "test" ? 16 : 14);
     group.appendChild(text);
-    const refs = { group, circle };
+    const refs = { group, circle, text, node };
     updateNodeClasses(group, node);
     if (node.kind !== "root" && node.kind !== "test") circle.style.fill = treeContainerColor(node);
     title.textContent = treeNodeTooltip(node);
     syncBadge(node, group);
+    updateNodeLabel(node, refs);
     group.addEventListener("click", () => onTreeNodeClick(node));
     group.addEventListener("mouseenter", () => onTreeNodeHover(node));
     group.addEventListener("mouseleave", onTreeNodeUnhover);
@@ -927,6 +936,7 @@
     const title = refs.group.querySelector("title");
     if (title) title.textContent = treeNodeTooltip(node);
     syncBadge(node, refs.group);
+    updateNodeLabel(node, refs);
   }
 
   function animateTreeGrowth(nodes) {
@@ -945,17 +955,36 @@
     }
   }
 
+  // Масштаб, при котором натуральный размер разметки (width x height) целиком
+  // помещается в контейнер — без этого широкое развёрнутое дерево (после «Развернуть
+  // всё» на крупном проекте) превращается в нечитаемую тонкую линию. Нижняя граница
+  // не даёт масштабу уйти в нечитаемый минимум — тогда проще панорамировать руками.
+  function computeTreeFitScale(width, height) {
+    const rect = chartTreeBody.getBoundingClientRect();
+    if (!rect.width || !rect.height || !width || !height) return 1;
+    const scale = Math.min(rect.width / width, rect.height / height);
+    return Math.max(TREE_MIN_FIT_SCALE, Math.min(1, scale));
+  }
+
+  function applyTreeTransform() {
+    if (treeViewportEl) treeViewportEl.style.transform = `translate(${treeView.panX}px, ${treeView.panY}px) scale(${treeView.scale})`;
+  }
+
+  function fitTreeView(width, height) {
+    treeView = { scale: computeTreeFitScale(width, height), panX: 0, panY: 0 };
+    applyTreeTransform();
+  }
+
   function attachTreePanZoom(svg, viewport) {
-    function applyTransform() {
-      viewport.style.transform = `translate(${treeView.panX}px, ${treeView.panY}px) scale(${treeView.scale})`;
-    }
-    applyTransform();
+    treeViewportEl = viewport;
+    applyTreeTransform();
 
     svg.addEventListener("wheel", (ev) => {
       ev.preventDefault();
       const factor = ev.deltaY < 0 ? 1.12 : 1 / 1.12;
-      treeView.scale = Math.max(0.25, Math.min(3, treeView.scale * factor));
-      applyTransform();
+      treeView.scale = Math.max(0.15, Math.min(3, treeView.scale * factor));
+      treeUserZoomed = true;
+      applyTreeTransform();
     }, { passive: false });
 
     let dragging = false;
@@ -973,7 +1002,8 @@
       treeView.panY += ev.clientY - lastY;
       lastX = ev.clientX;
       lastY = ev.clientY;
-      applyTransform();
+      treeUserZoomed = true;
+      applyTreeTransform();
     });
     window.addEventListener("mouseup", () => {
       dragging = false;
@@ -981,27 +1011,44 @@
     });
 
     treeResetViewBtn.addEventListener("click", () => {
-      treeView = { scale: 1, panX: 0, panY: 0 };
-      applyTransform();
+      treeUserZoomed = false;
+      fitTreeView(treeLastLayoutSize.width, treeLastLayoutSize.height);
     });
+  }
+
+  // Ближайший видимый (ещё отрисованный после этого рендера) предок узла — то, во что
+  // схлопывается узел при сворачивании его ветки (требование 2: «дети вырастают из
+  // родителя», а при сворачивании — схлопываются обратно в него).
+  function nearestVisibleAncestor(node, visibleIds) {
+    let cur = node.parent;
+    while (cur && !visibleIds.has(cur.id)) cur = cur.parent;
+    return cur || node;
   }
 
   function syncTreeView() {
     if (!treeRoot) return;
     computeTreeStatuses(currentStand());
     const { nodes, edges, width, height } = layoutTree(treeRoot, treeLayoutMode);
+    treeLastLayoutSize = { width, height };
+    // fit-to-view пересчитывается ДО отрисовки узлов — иначе подписи (которые прячутся/
+    // обрезаются по экранной ширине, см. updateNodeLabel) на один кадр использовали бы
+    // масштаб предыдущей раскладки.
+    if (!treeUserZoomed) fitTreeView(width, height);
+    else applyTreeTransform();
 
     let svg = chartTreeBody.querySelector("svg");
     let viewport;
     if (!svg) {
       chartTreeBody.innerHTML = "";
-      svg = makeSvgEl("svg", { viewBox: `0 0 ${width} ${height}`, preserveAspectRatio: "xMidYMid meet" });
+      svg = makeSvgEl("svg", { viewBox: `0 0 ${width} ${height}`, width: String(width), height: String(height) });
       viewport = makeSvgEl("g", { class: "tree-viewport" });
       svg.appendChild(viewport);
       chartTreeBody.appendChild(svg);
       attachTreePanZoom(svg, viewport);
     } else {
       svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+      svg.setAttribute("width", String(width));
+      svg.setAttribute("height", String(height));
       viewport = svg.querySelector(".tree-viewport");
     }
 
@@ -1027,8 +1074,10 @@
       setTimeout(() => path.remove(), 320);
     });
 
-    // узлы
+    // узлы: новые (только что раскрытые) вырастают из родителя тем же стаггером,
+    // что и при первой загрузке — но только между собой, не по всем уровням дерева.
     const seenNodeIds = new Set();
+    const newNodes = [];
     for (const node of nodes) {
       seenNodeIds.add(node.id);
       let refs = treeNodeEls.get(node.id);
@@ -1041,18 +1090,32 @@
         } else {
           const start = node.parent || node;
           refs.group.setAttribute("transform", `translate(${start.px.toFixed(1)},${start.py.toFixed(1)})`);
-          requestAnimationFrame(() => {
-            refs.group.setAttribute("transform", `translate(${node.px.toFixed(1)},${node.py.toFixed(1)})`);
-            refs.group.classList.add("tree-visible");
-          });
+          newNodes.push(node);
         }
       } else {
         updateNodeEl(node, refs);
       }
     }
+    newNodes.forEach((node, i) => {
+      const delay = Math.min(i, 12) * 28;
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          const refs = treeNodeEls.get(node.id);
+          if (!refs) return;
+          refs.group.setAttribute("transform", `translate(${node.px.toFixed(1)},${node.py.toFixed(1)})`);
+          refs.group.classList.add("tree-visible");
+        }, delay);
+      });
+    });
+
+    // схлопнувшиеся узлы уезжают обратно в ближайшего видимого предка, а не просто тают на месте
     treeNodeEls.forEach((refs, id) => {
       if (seenNodeIds.has(id)) return;
+      const anchor = nearestVisibleAncestor(refs.node, seenNodeIds);
       refs.group.classList.remove("tree-visible");
+      requestAnimationFrame(() => {
+        refs.group.setAttribute("transform", `translate(${anchor.px.toFixed(1)},${anchor.py.toFixed(1)})`);
+      });
       treeNodeEls.delete(id);
       setTimeout(() => refs.group.remove(), 320);
     });
@@ -1069,17 +1132,36 @@
     treeLayoutMode = mode;
     treeLayoutTopdownBtn.classList.toggle("active", mode === "topdown");
     treeLayoutRadialBtn.classList.toggle("active", mode === "radial");
-    treeView = { scale: 1, panX: 0, panY: 0 };
-    const svg = chartTreeBody.querySelector("svg");
-    if (svg) {
-      const viewport = svg.querySelector(".tree-viewport");
-      if (viewport) viewport.style.transform = "translate(0px, 0px) scale(1)";
-    }
+    treeUserZoomed = false;
     syncTreeView();
   }
 
   treeLayoutTopdownBtn.addEventListener("click", () => setTreeLayoutMode("topdown"));
   treeLayoutRadialBtn.addEventListener("click", () => setTreeLayoutMode("radial"));
+
+  treeExpandAllBtn.addEventListener("click", () => {
+    if (!treeRoot) return;
+    treeFailedOnlyActive = false;
+    treeFailedOnlyBtn.classList.remove("active");
+    TreeLogic.setAllCollapsed(treeRoot, false);
+    syncTreeView();
+  });
+  treeCollapseAllBtn.addEventListener("click", () => {
+    if (!treeRoot) return;
+    treeFailedOnlyActive = false;
+    treeFailedOnlyBtn.classList.remove("active");
+    TreeLogic.setAllCollapsed(treeRoot, true);
+    syncTreeView();
+  });
+  treeFailedOnlyBtn.addEventListener("click", () => {
+    if (!treeRoot) return;
+    treeFailedOnlyActive = !treeFailedOnlyActive;
+    treeFailedOnlyBtn.classList.toggle("active", treeFailedOnlyActive);
+    // syncTreeView сам вызывает computeTreeStatuses(), которая при treeFailedOnlyActive
+    // применяет applyFailedOnlyCollapse — тут нужно только откатить раскрытие при выключении.
+    if (!treeFailedOnlyActive) TreeLogic.applyDefaultTreeCollapse(treeRoot);
+    syncTreeView();
+  });
 
   async function loadTree() {
     chartTreeBody.innerHTML = `<p class="muted">Загрузка…</p>`;
@@ -1089,9 +1171,12 @@
         chartTreeBody.innerHTML = `<p class="error-box">${escapeHtml(treeApiData.error)}</p>`;
         return;
       }
-      treeRoot = buildTreeRoot(treeApiData.tree || {});
-      applyDefaultTreeCollapse(treeRoot);
+      treeRoot = TreeLogic.buildTreeRoot(treeApiData.tree || {}, projectName);
+      TreeLogic.applyDefaultTreeCollapse(treeRoot);
+      treeFailedOnlyActive = false;
+      treeFailedOnlyBtn.classList.remove("active");
       treeFirstRender = true;
+      treeUserZoomed = false;
       treeNodeEls.clear();
       treeEdgeEls.clear();
       syncTreeView();
