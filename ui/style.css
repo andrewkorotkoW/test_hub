@@ -13,6 +13,7 @@
   --failed: #dc2626;
   --broken: #d97706;
   --skipped: #6b7280;
+  --xfail: #0891b2;
   --unknown: #9333ea;
   --queued: #64748b;
   --running: #2563eb;
@@ -281,6 +282,7 @@ tbody tr.clickable:hover { background: #f7f8fa; }
 .status-text.failed { color: var(--failed); font-weight: 600; }
 .status-text.broken { color: var(--broken); font-weight: 600; }
 .status-text.skipped { color: var(--skipped); font-weight: 600; }
+.status-text.xfail { color: var(--xfail); font-weight: 600; }
 .status-text.unknown { color: var(--unknown); font-weight: 600; }
 .status-text.cancelled { color: var(--cancelled); font-weight: 600; }
 
@@ -441,6 +443,71 @@ tbody tr.clickable:hover { background: #f7f8fa; }
 
 .detail-list { margin: 6px 0 12px; padding-left: 18px; font-size: 13px; }
 .detail-list li { margin-bottom: 4px; }
+.detail-list li.clickable { cursor: pointer; }
+.detail-list li.clickable:hover { color: var(--accent); }
+
+/* ---------- coverage: диаграммы ---------- */
+.charts-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+}
+.charts-toggle-btn {
+  border: none;
+  background: transparent;
+  font-size: 16px;
+  line-height: 1;
+  padding: 4px 8px;
+}
+.charts-toggle-btn:hover { border-color: transparent; color: var(--accent); }
+.charts-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-top: 12px;
+}
+@media (max-width: 900px) {
+  .charts-grid { grid-template-columns: 1fr; }
+}
+.chart-box { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
+.chart-box h3 { margin: 0 0 10px; font-size: 14px; }
+.chart-box-wide { grid-column: 1 / -1; }
+.chart-rings-row { display: flex; flex-wrap: wrap; gap: 24px; }
+.chart-ring { text-align: center; }
+.chart-ring-label { margin-top: 6px; font-size: 12px; color: var(--text-muted); }
+.ring-text { font-size: 18px; font-weight: 600; fill: var(--text); }
+.area-bars { display: flex; flex-direction: column; gap: 6px; }
+.area-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 4px 6px;
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+}
+.area-bar-row:hover { border-color: var(--border); color: var(--text); }
+.area-bar-row-active { border-color: var(--accent); background: rgba(37, 99, 235, 0.08); }
+.area-bar-label { flex: 0 0 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.area-bar-count { flex: 0 0 auto; color: var(--text-muted); }
+.chart-axis-label { font-size: 10px; fill: var(--text-muted); }
+.chart-value-label { font-size: 11px; fill: var(--text); font-weight: 600; }
+.chart-graph-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.chart-graph-head h3 { margin: 0; }
+.graph-svg { max-width: 100%; }
+.graph-edge { stroke: var(--border); stroke-width: 1; }
+.graph-node circle { stroke: var(--surface); stroke-width: 1.5; cursor: pointer; }
+.graph-node-test circle { fill: var(--accent); }
+.graph-node-route circle, .graph-node-page circle { fill: var(--border); }
+.graph-node-route.cov-1 circle, .graph-node-page.cov-1 circle { fill: #dcfce7; }
+.graph-node-route.cov-2 circle, .graph-node-page.cov-2 circle { fill: #86efac; }
+.graph-node-route.cov-3 circle, .graph-node-page.cov-3 circle { fill: #22c55e; }
+.graph-node:hover circle { stroke: var(--accent); }
 
 /* логотип проекта: ui/img/logos/<имя проекта>_256.png, если файла нет — не показывается */
 .project-logo { height: 28px; width: auto; vertical-align: middle; margin-right: 8px; }
