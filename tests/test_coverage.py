@@ -7,9 +7,13 @@ coverage.py работает чисто статически (ast.parse по т�
 testhub-runner-tests): достаточно разложить .py-файлы по tmp_path в ожидаемой
 структуре (api/endpoints, ui/pages, tests/conftest.py + tests/test_*.py)."""
 
+import json
+
 import pytest
 
+from app.config import settings
 from app.core import coverage
+from app.db import get_connection
 
 
 # ------------------------------------------------------------------ _normalize_path
@@ -417,3 +421,121 @@ def test_match_route_tests_true_and_false_positives(sample_project_dir, routes_t
     assert matched_names("l5-swagger.default.api") == set()
     assert matched_names("passport.token") == set()
     assert matched_names("sanctum.csrf-cookie") == set()
+
+
+# ------------------------------------------------------------------ инвентарь UI-страниц
+
+_FRONTEND_ROUTES_TSV = """\
+programs.index\tGET\t/api/v1/programs
+frontend.programs.list\tGET\t/admin/programs
+frontend.programs.show\tGET\t/admin/programs/{id}
+frontend.reports\tGET\t/admin/reports
+"""
+
+
+@pytest.fixture()
+def frontend_routes_tsv_file(tmp_path):
+    path = tmp_path / "routes_frontend.tsv"
+    path.write_text(_FRONTEND_ROUTES_TSV, encoding="utf-8")
+    return path
+
+
+def test_frontend_routes_keeps_only_non_api_paths(frontend_routes_tsv_file):
+    tsv_routes = coverage.parse_routes_tsv(frontend_routes_tsv_file)
+    frontend = coverage._frontend_routes(tsv_routes)
+    assert {r.name for r in frontend} == {"frontend.programs.list", "frontend.programs.show", "frontend.reports"}
+
+
+def test_page_inventory_merges_discovered_and_tsv_pages_and_dedupes(sample_project_dir, frontend_routes_tsv_file):
+    tests = coverage.analyze_project(str(sample_project_dir))
+    tsv_routes = coverage.parse_routes_tsv(frontend_routes_tsv_file)
+    frontend_routes = coverage._frontend_routes(tsv_routes)
+
+    pages = coverage._page_inventory(tests, frontend_routes)
+    normalized = {p.normalized for p in pages}
+
+    # /admin/programs и /admin/programs/{} уже открываются тестами (sample_project_dir) —
+    # tsv-запись не создаёт дубликат, просто совпадает по нормализованному пути
+    assert "/admin/programs" in normalized
+    assert "/admin/programs/{}" in normalized
+    # страница, которую не открывает ни один тест, но есть в routes.tsv — тоже попадает
+    # в инвентарь (просто окажется непокрытой)
+    assert "/admin/reports" in normalized
+    # login-страница открывается только тестом, в routes.tsv её нет — тоже должна попасть
+    assert "/login" in normalized
+
+
+def test_page_inventory_uncovered_tsv_only_page_has_no_tests(sample_project_dir, frontend_routes_tsv_file):
+    tests = coverage.analyze_project(str(sample_project_dir))
+    tsv_routes = coverage.parse_routes_tsv(frontend_routes_tsv_file)
+    frontend_routes = coverage._frontend_routes(tsv_routes)
+
+    pages = coverage._page_inventory(tests, frontend_routes)
+    matches = coverage._match_page_tests(pages, tests)
+
+    by_normalized = {p.normalized: idx for idx, p in enumerate(pages)}
+    reports_idx = by_normalized["/admin/reports"]
+    assert matches[reports_idx] == []
+
+    login_idx = by_normalized["/login"]
+    assert {t.name for t in matches[login_idx]} == {"test_login_direct"}
+
+
+def test_test_status_counts_dedupes_by_nodeid_across_items():
+    stands = ["develop"]
+    items = [
+        {"status": {"develop": {"tests": [{"nodeid": "t::a", "status": "passed"}, {"nodeid": "t::b", "status": "failed"}]}}},
+        {"status": {"develop": {"tests": [{"nodeid": "t::a", "status": "passed"}, {"nodeid": "t::c", "status": "xfail"}]}}},
+    ]
+    counts = coverage._test_status_counts(items, stands)
+    assert counts == {"develop": {"passed": 1, "failed": 1, "xfail": 1}}
+
+
+# ------------------------------------------------------------------ nodeid_status_map (дерево проекта)
+
+def _write_allure_result(results_dir, full_name, status, message=None):
+    results_dir.mkdir(parents=True, exist_ok=True)
+    payload = {"fullName": full_name, "status": status}
+    if message:
+        payload["statusDetails"] = {"message": message}
+    (results_dir / f"{full_name.replace('#', '_')}-result.json").write_text(json.dumps(payload), encoding="utf-8")
+
+
+def test_nodeid_status_map_matches_by_full_name_and_skips_other_stands(db_path, isolated_allure_dir):
+    conn = get_connection()
+    try:
+        conn.execute(
+            "INSERT INTO projects (name, path, venv, stands) VALUES ('p', '/x', '.venv', '[]')"
+        )
+        conn.execute("INSERT INTO stands (project, name, url) VALUES ('p', 'develop', '')")
+        cur = conn.execute(
+            "INSERT INTO runs (project, stand, target, status, counts) VALUES ('p', 'develop', 'all', 'passed', '{}')"
+        )
+        run_id = cur.lastrowid
+        conn.commit()
+
+        results_dir = settings.ALLURE_RESULTS_DIR / str(run_id)
+        _write_allure_result(results_dir, "tests.test_foo#test_passing", "passed")
+        _write_allure_result(results_dir, "tests.test_foo.TestBar#test_broken", "failed")
+        _write_allure_result(results_dir, "tests.test_foo#test_expected_fail", "skipped", message="xfail: reason")
+
+        nodeids = [
+            "tests/test_foo.py::test_passing",
+            "tests/test_foo.py::TestBar::test_broken",
+            "tests/test_foo.py::test_expected_fail",
+            "tests/test_foo.py::test_never_run",
+        ]
+        found_run_id, statuses = coverage.nodeid_status_map(conn, "p", "develop", nodeids)
+        assert found_run_id == run_id
+        assert statuses == {
+            "tests/test_foo.py::test_passing": "passed",
+            "tests/test_foo.py::TestBar::test_broken": "failed",
+            "tests/test_foo.py::test_expected_fail": "xfail",
+        }
+
+        # незавершённых прогонов на другом стенде нет -> run_id None, статусов нет
+        no_run_id, no_statuses = coverage.nodeid_status_map(conn, "p", "stage", nodeids)
+        assert no_run_id is None
+        assert no_statuses == {}
+    finally:
+        conn.close()

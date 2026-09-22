@@ -89,6 +89,16 @@ def load_routes(project_name: str) -> list[TsvRoute]:
     return parse_routes_tsv(routes_tsv_path(project_name))
 
 
+def _is_api_path(path: str) -> bool:
+    return path.startswith("/api/")
+
+
+def _frontend_routes(tsv_routes: list[TsvRoute]) -> list[TsvRoute]:
+    """Маршруты routes.tsv без /api/ префикса — это страницы фронтенда, а не API-эндпоинты;
+    они идут в инвентарь страниц (см. _page_inventory), а не в инвентарь API-маршрутов."""
+    return [r for r in tsv_routes if not _is_api_path(r.path)]
+
+
 # ------------------------------------------------------------------ общие AST-хелперы
 
 def _parse_module(path: Path) -> ast.Module | None:
@@ -638,13 +648,33 @@ def _stand_results(conn: sqlite3.Connection, project: str, stand: str) -> tuple[
     return run, {entry["name"]: _classify_allure_status(entry) for entry in entries}
 
 
-def _route_stand_status(
-    route_tests: list[TestInfo], stand: str, run: sqlite3.Row | None, by_full_name: dict[str, str]
+def nodeid_status_map(
+    conn: sqlite3.Connection, project: str, stand: str, nodeids: list[str]
+) -> tuple[int | None, dict[str, str]]:
+    """run_id последнего завершённого прогона на стенде и статус (passed/failed/xfail/
+    skipped) каждого из `nodeids`, у которого нашлась запись в allure-results этого
+    прогона — используется деревом проекта на странице «Покрытие», источник
+    `nodeids` произвольный (там дерево из `runner.discover`, а не статический анализ)."""
+    run, by_full_name = _stand_results(conn, project, stand)
+    run_id = run["id"] if run else None
+    statuses = {
+        nodeid: by_full_name[full_name]
+        for nodeid in nodeids
+        for full_name in [_nodeid_to_full_name(nodeid)]
+        if full_name in by_full_name
+    }
+    return run_id, statuses
+
+
+def _coverage_stand_status(
+    item_tests: list[TestInfo], stand: str, run: sqlite3.Row | None, by_full_name: dict[str, str]
 ) -> dict:
-    if not route_tests:
+    """Статус покрытия одного элемента инвентаря (маршрута или страницы) на одном
+    стенде — общая логика, используется и для routes_out, и для pages_out."""
+    if not item_tests:
         return {"state": "not_covered", "run_id": None, "tests": []}
 
-    applicable = [t for t in route_tests if t.env is None or t.env == stand]
+    applicable = [t for t in item_tests if t.env is None or t.env == stand]
     if not applicable:
         return {"state": "no_tests_for_stand", "run_id": run["id"] if run else None, "tests": []}
     if run is None:
@@ -667,14 +697,50 @@ def _route_stand_status(
     }
 
 
-def _pages_summary(tests: list[TestInfo]) -> list[dict]:
-    by_path: dict[str, dict] = {}
+@dataclass(frozen=True)
+class PageEntry:
+    path: str
+    normalized: str
+
+
+def _page_inventory(tests: list[TestInfo], frontend_routes: list[TsvRoute]) -> list[PageEntry]:
+    """Инвентарь UI-страниц: то, что реально открывают UI-тесты (page.goto/self.open),
+    плюс маршруты фронтенда из routes.tsv без /api/ префикса, даже если их пока не
+    открывает ни один тест (тогда страница просто окажется непокрытой)."""
+    by_normalized: dict[str, str] = {}
     for test in tests:
         for call in test.page_routes:
-            entry = by_path.setdefault(call.normalized, {"path": call.path, "normalized": call.normalized, "tests": []})
-            if not any(t["nodeid"] == test.nodeid for t in entry["tests"]):
-                entry["tests"].append({"nodeid": test.nodeid, "env": test.env})
-    return sorted(by_path.values(), key=lambda entry: entry["normalized"])
+            by_normalized.setdefault(call.normalized, call.path)
+    for route in frontend_routes:
+        by_normalized.setdefault(route.normalized, route.path)
+    return [PageEntry(path=path, normalized=normalized) for normalized, path in sorted(by_normalized.items())]
+
+
+def _match_page_tests(pages: list[PageEntry], tests: list[TestInfo]) -> dict[int, list[TestInfo]]:
+    by_normalized = {page.normalized: idx for idx, page in enumerate(pages)}
+    result: dict[int, list[TestInfo]] = {idx: [] for idx in range(len(pages))}
+    for test in tests:
+        matched_idx = {by_normalized[call.normalized] for call in test.page_routes if call.normalized in by_normalized}
+        for idx in matched_idx:
+            result[idx].append(test)
+    return result
+
+
+def _test_status_counts(items: list[dict], stands: list[str]) -> dict[str, dict[str, int]]:
+    """Число покрывающих тестов по статусу на каждом стенде (для диаграммы статусов),
+    дедуплицированное по nodeid — один и тот же тест может покрывать несколько
+    маршрутов/страниц, но должен считаться в диаграмме один раз."""
+    result: dict[str, dict[str, int]] = {}
+    for stand in stands:
+        by_nodeid: dict[str, str] = {}
+        for item in items:
+            for t in item["status"][stand]["tests"]:
+                by_nodeid[t["nodeid"]] = t["status"]
+        counts: dict[str, int] = {}
+        for status_value in by_nodeid.values():
+            counts[status_value] = counts.get(status_value, 0) + 1
+        result[stand] = counts
+    return result
 
 
 # ------------------------------------------------------------------ публичный API: recalc/load_cached
@@ -693,12 +759,15 @@ def recalc(project_name: str) -> dict:
         ]
 
         tsv_routes = load_routes(project_name)
+        api_tsv_routes = [r for r in tsv_routes if _is_api_path(r.path)]
+        frontend_tsv_routes = _frontend_routes(tsv_routes)
+
         tests = analyze_project(project["path"])
-        route_tests_by_idx = _match_route_tests(tsv_routes, tests)
+        route_tests_by_idx = _match_route_tests(api_tsv_routes, tests)
         stand_data = {stand: _stand_results(conn, project_name, stand) for stand in stands}
 
         routes_out = []
-        for idx, route in enumerate(tsv_routes):
+        for idx, route in enumerate(api_tsv_routes):
             route_tests = route_tests_by_idx.get(idx, [])
             routes_out.append({
                 "name": route.name,
@@ -708,7 +777,23 @@ def recalc(project_name: str) -> dict:
                 "covered": bool(route_tests),
                 "tests": [{"nodeid": t.nodeid, "env": t.env} for t in route_tests],
                 "status": {
-                    stand: _route_stand_status(route_tests, stand, *stand_data[stand])
+                    stand: _coverage_stand_status(route_tests, stand, *stand_data[stand])
+                    for stand in stands
+                },
+            })
+
+        pages_inventory = _page_inventory(tests, frontend_tsv_routes)
+        page_tests_by_idx = _match_page_tests(pages_inventory, tests)
+        pages_out = []
+        for idx, page in enumerate(pages_inventory):
+            page_tests = page_tests_by_idx.get(idx, [])
+            pages_out.append({
+                "path": page.path,
+                "normalized": page.normalized,
+                "covered": bool(page_tests),
+                "tests": [{"nodeid": t.nodeid, "env": t.env} for t in page_tests],
+                "status": {
+                    stand: _coverage_stand_status(page_tests, stand, *stand_data[stand])
                     for stand in stands
                 },
             })
@@ -720,7 +805,10 @@ def recalc(project_name: str) -> dict:
             "routes_total": len(routes_out),
             "routes_covered": sum(1 for r in routes_out if r["covered"]),
             "routes": routes_out,
-            "pages": _pages_summary(tests),
+            "pages_total": len(pages_out),
+            "pages_covered": sum(1 for p in pages_out if p["covered"]),
+            "pages": pages_out,
+            "test_status": _test_status_counts([*routes_out, *pages_out], stands),
         }
     finally:
         conn.close()

@@ -18,8 +18,55 @@
     <div class="card" id="summary-card">
       <h2>Сводка</h2>
       <div id="summary-stands" class="summary-badges"></div>
+      <div id="summary-pages" class="summary-badges"></div>
       <div id="summary-zero" class="zero-coverage-box" hidden>
         <strong>Области без покрытия:</strong> <span id="summary-zero-list"></span>
+      </div>
+    </div>
+
+    <div class="card" id="charts-card">
+      <div class="charts-header" id="charts-toggle">
+        <h2>Диаграммы</h2>
+        <button type="button" class="charts-toggle-btn" id="charts-toggle-btn" aria-expanded="true">▾</button>
+      </div>
+      <div id="charts-body">
+        <div class="charts-grid">
+          <div class="chart-box chart-box-wide" id="chart-tree-box">
+            <div class="chart-tree-head">
+              <h3>Дерево проекта</h3>
+              <div class="chart-tree-controls">
+                <div class="chart-tree-layout-toggle" role="group" aria-label="Раскладка дерева">
+                  <button type="button" id="tree-layout-topdown" class="active">Сверху вниз</button>
+                  <button type="button" id="tree-layout-radial">Радиальная</button>
+                </div>
+                <button type="button" id="tree-reset-view">Сбросить вид</button>
+              </div>
+            </div>
+            <div id="chart-tree-body" class="chart-tree-body"><p class="muted">Загрузка…</p></div>
+            <p class="muted chart-tree-hint">Колесо — зум, перетаскивание — панорама, клик по узлу — раскрыть/свернуть
+              или открыть связи теста.</p>
+          </div>
+          <div class="chart-box" id="chart-rings-box">
+            <h3>Покрытие маршрутов по стендам</h3>
+            <div id="chart-rings-body" class="chart-rings-row"></div>
+          </div>
+          <div class="chart-box" id="chart-status-box">
+            <h3>Статусы тестов на стенде</h3>
+            <div id="chart-status-body"></div>
+          </div>
+          <div class="chart-box chart-box-wide" id="chart-areas-box">
+            <h3>Маршруты по областям</h3>
+            <div id="chart-areas-body" class="area-bars"></div>
+          </div>
+          <div class="chart-box chart-box-wide" id="chart-graph-box">
+            <div class="chart-graph-head">
+              <h3>Связи тестов и маршрутов</h3>
+              <select id="chart-graph-area"></select>
+              <span id="chart-graph-test-chip" class="badge" hidden></span>
+            </div>
+            <div id="chart-graph-body"></div>
+          </div>
+        </div>
       </div>
     </div>
 
