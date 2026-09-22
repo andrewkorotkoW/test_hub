@@ -25,6 +25,10 @@
   const chartGraphBody = document.getElementById("chart-graph-body");
   const chartGraphAreaSelect = document.getElementById("chart-graph-area");
   const chartGraphTestChip = document.getElementById("chart-graph-test-chip");
+  const chartTreeBody = document.getElementById("chart-tree-body");
+  const treeLayoutTopdownBtn = document.getElementById("tree-layout-topdown");
+  const treeLayoutRadialBtn = document.getElementById("tree-layout-radial");
+  const treeResetViewBtn = document.getElementById("tree-reset-view");
   const standSelect = document.getElementById("cov-stand-select");
   const filterUncovered = document.getElementById("cov-filter-uncovered");
   const filterFailed = document.getElementById("cov-filter-failed");
@@ -579,12 +583,530 @@
     loadGraph();
   });
 
+  // ---------------- диаграммы: дерево проекта (интерактивное, анимированное) ----------------
+  const TREE_SVG_NS = "http://www.w3.org/2000/svg";
+  const TREE_VISIBLE_BUDGET = 200;
+  const TREE_X_STEP = 42;
+  const TREE_LEVEL_HEIGHT = 84;
+  const TREE_STATUS_COLORS = { passed: "#16a34a", failed: "#dc2626" };
+
+  let treeApiData = null;   // сырой ответ GET /coverage/tree
+  let treeRoot = null;      // построенная модель дерева (узлы стабильны между рендерами)
+  let treeLayoutMode = "topdown";
+  let treeView = { scale: 1, panX: 0, panY: 0 };
+  let treeNodeEls = new Map();   // node.id -> {group, circle}
+  let treeEdgeEls = new Map();   // "parentId>childId" -> path
+  let treeFirstRender = true;
+  let treeRouteCache = new Map(); // nodeid -> Set(route name), кэш для подсветки при наведении
+  let treeHoveredNode = null;
+  let treeHoverTimer = null;
+  let treeHoverPrevHighlight; // сохранённый highlightedRoutes на время наведения (undefined = не сохранён)
+
+  function shortLabel(label, max) {
+    return label.length > max ? label.slice(0, max - 1) + "…" : label;
+  }
+
+  function buildTreeRoot(tree) {
+    const root = { id: "root", label: projectName, kind: "root", children: [], collapsed: false, parent: null };
+    const dirIndex = new Map([["root", root]]);
+    for (const file of Object.keys(tree).sort()) {
+      const classes = tree[file];
+      const parts = file.split("/");
+      let parent = root;
+      let acc = "";
+      for (let i = 0; i < parts.length - 1; i++) {
+        acc = acc ? `${acc}/${parts[i]}` : parts[i];
+        let dirNode = dirIndex.get(acc);
+        if (!dirNode) {
+          dirNode = { id: acc, label: parts[i], kind: "dir", children: [], collapsed: false, parent };
+          dirIndex.set(acc, dirNode);
+          parent.children.push(dirNode);
+        }
+        parent = dirNode;
+      }
+      const fileName = parts[parts.length - 1];
+      const fileNode = { id: file, label: fileName, kind: "file", children: [], collapsed: false, parent };
+      parent.children.push(fileNode);
+      for (const cls of Object.keys(classes).sort()) {
+        let holder = fileNode;
+        if (cls) {
+          const clsNode = { id: `${file}::${cls}`, label: cls, kind: "class", children: [], collapsed: false, parent: fileNode };
+          fileNode.children.push(clsNode);
+          holder = clsNode;
+        }
+        for (const test of classes[cls]) {
+          const nodeid = cls ? `${file}::${cls}::${test}` : `${file}::${test}`;
+          holder.children.push({ id: nodeid, label: test, kind: "test", nodeid, children: [], collapsed: false, parent: holder });
+        }
+      }
+    }
+    return root;
+  }
+
+  function forEachTreeNode(node, fn) {
+    fn(node);
+    node.children.forEach((c) => forEachTreeNode(c, fn));
+  }
+
+  function countVisibleTreeNodes(node) {
+    let count = 1;
+    if (!node.collapsed) {
+      for (const c of node.children) count += countVisibleTreeNodes(c);
+    }
+    return count;
+  }
+
+  function countDescendantTests(node) {
+    if (node.kind === "test") return 1;
+    return node.children.reduce((s, c) => s + countDescendantTests(c), 0);
+  }
+
+  function applyDefaultTreeCollapse(root) {
+    let total = 0;
+    forEachTreeNode(root, () => { total += 1; });
+    if (total <= TREE_VISIBLE_BUDGET) return;
+    // бюджет превышен: сворачиваем тесты внутри файлов/классов, показываем только структуру каталогов
+    forEachTreeNode(root, (n) => { if (n.kind === "file" || n.kind === "class") n.collapsed = true; });
+    if (countVisibleTreeNodes(root) <= TREE_VISIBLE_BUDGET) return;
+    // всё ещё много (гигантский проект) — сворачиваем и глубокие каталоги
+    forEachTreeNode(root, (n) => { if (n.kind === "dir" && n.parent && n.parent.kind === "dir" && n.parent.parent && n.parent.parent.kind === "dir") n.collapsed = true; });
+  }
+
+  // ---- статусы (перевычисляются при смене стенда, структура дерева не меняется) ----
+  function computeTreeStatuses(stand) {
+    const statusMap = (treeApiData && treeApiData.statuses && treeApiData.statuses[stand]) || {};
+    function visit(node) {
+      if (node.kind === "test") {
+        const status = statusMap[node.nodeid] || null;
+        node.status = status;
+        const counts = { passed: 0, xfail: 0, skipped: 0, failed: 0, none: 0 };
+        if (status === "passed") counts.passed = 1;
+        else if (status === "xfail") counts.xfail = 1;
+        else if (status === "skipped") counts.skipped = 1;
+        else if (status === "failed" || status === "broken") counts.failed = 1;
+        else counts.none = 1;
+        node.counts = counts;
+        return counts;
+      }
+      const totals = { passed: 0, xfail: 0, skipped: 0, failed: 0, none: 0 };
+      for (const child of node.children) {
+        const c = visit(child);
+        totals.passed += c.passed;
+        totals.xfail += c.xfail;
+        totals.skipped += c.skipped;
+        totals.failed += c.failed;
+        totals.none += c.none;
+      }
+      node.counts = totals;
+      return totals;
+    }
+    visit(treeRoot);
+  }
+
+  function hexToRgb(hex) {
+    const n = parseInt(hex.slice(1), 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+
+  function lerpColor(fromHex, toHex, t) {
+    const a = hexToRgb(fromHex);
+    const b = hexToRgb(toHex);
+    const clamped = Math.max(0, Math.min(1, t));
+    const mix = a.map((v, i) => Math.round(v + (b[i] - v) * clamped));
+    return `rgb(${mix.join(",")})`;
+  }
+
+  function treeContainerColor(node) {
+    const c = node.counts || {};
+    const denom = (c.passed || 0) + (c.xfail || 0) + (c.skipped || 0) + (c.failed || 0);
+    if (!denom) return "var(--border)";
+    const ratio = ((c.passed || 0) + (c.xfail || 0)) / denom;
+    return lerpColor(TREE_STATUS_COLORS.failed, TREE_STATUS_COLORS.passed, ratio);
+  }
+
+  function treeTestStatusClass(status) {
+    if (status === "passed") return "tree-node-passed";
+    if (status === "failed" || status === "broken") return "tree-node-failed";
+    if (status === "xfail") return "tree-node-xfail";
+    return "tree-node-skipped"; // skipped или тест ещё не запускался на этом стенде
+  }
+
+  function treeNodeTooltip(node) {
+    if (node.kind === "test") {
+      return `${node.nodeid}\nстатус: ${node.status || "не запускался"}`;
+    }
+    const c = node.counts || {};
+    const total = (c.passed || 0) + (c.xfail || 0) + (c.skipped || 0) + (c.failed || 0) + (c.none || 0);
+    const label = node.kind === "root" ? node.label : node.id;
+    return `${label}\nтестов: ${total} · passed ${c.passed || 0} · failed ${c.failed || 0} · xfail ${c.xfail || 0} · skipped/не запускался ${(c.skipped || 0) + (c.none || 0)}`;
+  }
+
+  // ---- раскладка (top-down / radial) ----
+  function layoutTree(root, mode) {
+    const nodes = [];
+    const edges = [];
+    let leafCounter = 0;
+    let maxDepth = 0;
+
+    function visit(node, depth) {
+      node.depth = depth;
+      maxDepth = Math.max(maxDepth, depth);
+      const expanded = node.children.length > 0 && !node.collapsed;
+      if (expanded) {
+        for (const child of node.children) {
+          visit(child, depth + 1);
+          edges.push({ id: `${node.id}>${child.id}`, parent: node, child });
+        }
+        const xs = node.children.map((c) => c.x);
+        node.x = (Math.min(...xs) + Math.max(...xs)) / 2;
+      } else {
+        node.x = leafCounter;
+        leafCounter += 1;
+      }
+      nodes.push(node);
+    }
+    visit(root, 0);
+
+    const totalLeaves = Math.max(1, leafCounter);
+    if (mode === "radial") {
+      const radiusStep = TREE_LEVEL_HEIGHT * 0.72;
+      const size = Math.max(360, maxDepth * radiusStep * 2 + 90);
+      const cx = size / 2;
+      const cy = size / 2;
+      for (const n of nodes) {
+        if (n.depth === 0) {
+          n.px = cx;
+          n.py = cy;
+          continue;
+        }
+        const angle = (n.x / totalLeaves) * Math.PI * 2;
+        const radius = n.depth * radiusStep;
+        n.px = cx + radius * Math.sin(angle);
+        n.py = cy - radius * Math.cos(angle);
+      }
+      return { nodes, edges, width: size, height: size };
+    }
+    const width = Math.max(380, totalLeaves * TREE_X_STEP + 80);
+    const height = Math.max(220, maxDepth * TREE_LEVEL_HEIGHT + 70);
+    for (const n of nodes) {
+      n.px = 40 + n.x * TREE_X_STEP;
+      n.py = 40 + n.depth * TREE_LEVEL_HEIGHT;
+    }
+    return { nodes, edges, width, height };
+  }
+
+  function treeEdgePath(edge) {
+    const a = edge.parent;
+    const b = edge.child;
+    if (treeLayoutMode === "radial") {
+      return `M ${a.px.toFixed(1)} ${a.py.toFixed(1)} L ${b.px.toFixed(1)} ${b.py.toFixed(1)}`;
+    }
+    const midY = (a.py + b.py) / 2;
+    return `M ${a.px.toFixed(1)} ${a.py.toFixed(1)} C ${a.px.toFixed(1)} ${midY.toFixed(1)}, ${b.px.toFixed(1)} ${midY.toFixed(1)}, ${b.px.toFixed(1)} ${b.py.toFixed(1)}`;
+  }
+
+  // ---- DOM-узлы дерева ----
+  function makeSvgEl(tag, attrs) {
+    const el = document.createElementNS(TREE_SVG_NS, tag);
+    for (const key of Object.keys(attrs || {})) el.setAttribute(key, attrs[key]);
+    return el;
+  }
+
+  function updateNodeClasses(group, node) {
+    group.classList.remove("tree-node-passed", "tree-node-failed", "tree-node-xfail", "tree-node-skipped", "tree-node-collapsed");
+    if (node.kind === "test") group.classList.add(treeTestStatusClass(node.status));
+    if (node.children.length > 0 && node.collapsed) group.classList.add("tree-node-collapsed");
+  }
+
+  function syncBadge(node, group) {
+    const existing = group.querySelector(".tree-node-count");
+    if (node.collapsed && node.children.length > 0) {
+      const text = String(countDescendantTests(node));
+      if (existing) {
+        existing.textContent = text;
+      } else {
+        const badge = makeSvgEl("text", { class: "tree-node-count", x: "0", y: "3", "text-anchor": "middle" });
+        badge.textContent = text;
+        group.appendChild(badge);
+      }
+    } else if (existing) {
+      existing.remove();
+    }
+  }
+
+  function onTreeNodeClick(node) {
+    if (node.kind === "test") {
+      openTestDetail(node.nodeid);
+      return;
+    }
+    if (node.children.length === 0) return;
+    node.collapsed = !node.collapsed;
+    syncTreeView();
+  }
+
+  function applyTreeHighlight(node) {
+    const nodeIds = new Set();
+    const edgeIds = new Set();
+    let cur = node;
+    while (cur) {
+      nodeIds.add(cur.id);
+      if (cur.parent) edgeIds.add(`${cur.parent.id}>${cur.id}`);
+      cur = cur.parent;
+    }
+    treeNodeEls.forEach((refs, id) => {
+      refs.group.classList.toggle("tree-node-highlighted", nodeIds.has(id));
+    });
+    treeEdgeEls.forEach((path, id) => {
+      path.classList.toggle("tree-edge-highlighted", edgeIds.has(id));
+    });
+  }
+
+  async function fetchTreeTestRoutes(nodeid) {
+    if (treeRouteCache.has(nodeid)) return treeRouteCache.get(nodeid);
+    try {
+      const detail = await api(`/api/projects/${encodeURIComponent(projectName)}/coverage/test?id=${encodeURIComponent(nodeid)}`);
+      const routes = new Set(detail.routes.map((r) => r.name));
+      treeRouteCache.set(nodeid, routes);
+      return routes;
+    } catch (err) {
+      return new Set();
+    }
+  }
+
+  function onTreeNodeHover(node) {
+    treeHoveredNode = node;
+    applyTreeHighlight(node);
+    if (node.kind !== "test") return;
+    clearTimeout(treeHoverTimer);
+    treeHoverTimer = setTimeout(async () => {
+      const routes = await fetchTreeTestRoutes(node.nodeid);
+      if (treeHoveredNode !== node) return; // навели на другой узел, пока грузилось
+      if (treeHoverPrevHighlight === undefined) treeHoverPrevHighlight = highlightedRoutes;
+      highlightedRoutes = routes;
+      renderMap();
+    }, 150);
+  }
+
+  function onTreeNodeUnhover() {
+    treeHoveredNode = null;
+    applyTreeHighlight(null);
+    clearTimeout(treeHoverTimer);
+    if (treeHoverPrevHighlight !== undefined) {
+      highlightedRoutes = treeHoverPrevHighlight;
+      treeHoverPrevHighlight = undefined;
+      renderMap();
+    }
+  }
+
+  function createNodeEl(node) {
+    const r = node.kind === "root" ? 11 : node.kind === "test" ? 5 : 8;
+    const group = makeSvgEl("g", { "data-id": node.id, "data-kind": node.kind });
+    group.setAttribute("class", "tree-node" + (node.kind === "root" ? " tree-node-root" : ""));
+    const circle = makeSvgEl("circle", { r: String(r) });
+    group.appendChild(circle);
+    const title = makeSvgEl("title", {});
+    group.appendChild(title);
+    const text = makeSvgEl("text", { x: "0", y: String(r + 12), "text-anchor": "middle" });
+    text.textContent = shortLabel(node.label, node.kind === "test" ? 16 : 14);
+    group.appendChild(text);
+    const refs = { group, circle };
+    updateNodeClasses(group, node);
+    if (node.kind !== "root" && node.kind !== "test") circle.style.fill = treeContainerColor(node);
+    title.textContent = treeNodeTooltip(node);
+    syncBadge(node, group);
+    group.addEventListener("click", () => onTreeNodeClick(node));
+    group.addEventListener("mouseenter", () => onTreeNodeHover(node));
+    group.addEventListener("mouseleave", onTreeNodeUnhover);
+    return refs;
+  }
+
+  function updateNodeEl(node, refs) {
+    refs.group.setAttribute("transform", `translate(${node.px.toFixed(1)},${node.py.toFixed(1)})`);
+    updateNodeClasses(refs.group, node);
+    if (node.kind !== "root" && node.kind !== "test") refs.circle.style.fill = treeContainerColor(node);
+    const title = refs.group.querySelector("title");
+    if (title) title.textContent = treeNodeTooltip(node);
+    syncBadge(node, refs.group);
+  }
+
+  function animateTreeGrowth(nodes) {
+    const maxDepth = Math.max(0, ...nodes.map((n) => n.depth));
+    const totalDuration = 1400;
+    const perLevel = maxDepth > 0 ? totalDuration / (maxDepth + 1) : 0;
+    for (const node of nodes) {
+      setTimeout(() => {
+        const refs = treeNodeEls.get(node.id);
+        if (refs) refs.group.classList.add("tree-visible");
+        if (node.parent) {
+          const path = treeEdgeEls.get(`${node.parent.id}>${node.id}`);
+          if (path) path.classList.add("tree-visible");
+        }
+      }, node.depth * perLevel);
+    }
+  }
+
+  function attachTreePanZoom(svg, viewport) {
+    function applyTransform() {
+      viewport.style.transform = `translate(${treeView.panX}px, ${treeView.panY}px) scale(${treeView.scale})`;
+    }
+    applyTransform();
+
+    svg.addEventListener("wheel", (ev) => {
+      ev.preventDefault();
+      const factor = ev.deltaY < 0 ? 1.12 : 1 / 1.12;
+      treeView.scale = Math.max(0.25, Math.min(3, treeView.scale * factor));
+      applyTransform();
+    }, { passive: false });
+
+    let dragging = false;
+    let lastX = 0;
+    let lastY = 0;
+    svg.addEventListener("mousedown", (ev) => {
+      dragging = true;
+      lastX = ev.clientX;
+      lastY = ev.clientY;
+      chartTreeBody.classList.add("dragging");
+    });
+    window.addEventListener("mousemove", (ev) => {
+      if (!dragging) return;
+      treeView.panX += ev.clientX - lastX;
+      treeView.panY += ev.clientY - lastY;
+      lastX = ev.clientX;
+      lastY = ev.clientY;
+      applyTransform();
+    });
+    window.addEventListener("mouseup", () => {
+      dragging = false;
+      chartTreeBody.classList.remove("dragging");
+    });
+
+    treeResetViewBtn.addEventListener("click", () => {
+      treeView = { scale: 1, panX: 0, panY: 0 };
+      applyTransform();
+    });
+  }
+
+  function syncTreeView() {
+    if (!treeRoot) return;
+    computeTreeStatuses(currentStand());
+    const { nodes, edges, width, height } = layoutTree(treeRoot, treeLayoutMode);
+
+    let svg = chartTreeBody.querySelector("svg");
+    let viewport;
+    if (!svg) {
+      chartTreeBody.innerHTML = "";
+      svg = makeSvgEl("svg", { viewBox: `0 0 ${width} ${height}`, preserveAspectRatio: "xMidYMid meet" });
+      viewport = makeSvgEl("g", { class: "tree-viewport" });
+      svg.appendChild(viewport);
+      chartTreeBody.appendChild(svg);
+      attachTreePanZoom(svg, viewport);
+    } else {
+      svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+      viewport = svg.querySelector(".tree-viewport");
+    }
+
+    // рёбра
+    const seenEdgeIds = new Set();
+    for (const edge of edges) {
+      seenEdgeIds.add(edge.id);
+      const d = treeEdgePath(edge);
+      let path = treeEdgeEls.get(edge.id);
+      if (!path) {
+        path = makeSvgEl("path", { class: "tree-edge", d });
+        viewport.insertBefore(path, viewport.firstChild);
+        treeEdgeEls.set(edge.id, path);
+        if (!treeFirstRender) requestAnimationFrame(() => path.classList.add("tree-visible"));
+      } else {
+        path.setAttribute("d", d);
+      }
+    }
+    treeEdgeEls.forEach((path, id) => {
+      if (seenEdgeIds.has(id)) return;
+      path.classList.remove("tree-visible");
+      treeEdgeEls.delete(id);
+      setTimeout(() => path.remove(), 320);
+    });
+
+    // узлы
+    const seenNodeIds = new Set();
+    for (const node of nodes) {
+      seenNodeIds.add(node.id);
+      let refs = treeNodeEls.get(node.id);
+      if (!refs) {
+        refs = createNodeEl(node);
+        viewport.appendChild(refs.group);
+        treeNodeEls.set(node.id, refs);
+        if (treeFirstRender) {
+          refs.group.setAttribute("transform", `translate(${node.px.toFixed(1)},${node.py.toFixed(1)})`);
+        } else {
+          const start = node.parent || node;
+          refs.group.setAttribute("transform", `translate(${start.px.toFixed(1)},${start.py.toFixed(1)})`);
+          requestAnimationFrame(() => {
+            refs.group.setAttribute("transform", `translate(${node.px.toFixed(1)},${node.py.toFixed(1)})`);
+            refs.group.classList.add("tree-visible");
+          });
+        }
+      } else {
+        updateNodeEl(node, refs);
+      }
+    }
+    treeNodeEls.forEach((refs, id) => {
+      if (seenNodeIds.has(id)) return;
+      refs.group.classList.remove("tree-visible");
+      treeNodeEls.delete(id);
+      setTimeout(() => refs.group.remove(), 320);
+    });
+
+    if (treeFirstRender) {
+      treeFirstRender = false;
+      animateTreeGrowth(nodes);
+    }
+    applyTreeHighlight(treeHoveredNode);
+  }
+
+  function setTreeLayoutMode(mode) {
+    if (treeLayoutMode === mode) return;
+    treeLayoutMode = mode;
+    treeLayoutTopdownBtn.classList.toggle("active", mode === "topdown");
+    treeLayoutRadialBtn.classList.toggle("active", mode === "radial");
+    treeView = { scale: 1, panX: 0, panY: 0 };
+    const svg = chartTreeBody.querySelector("svg");
+    if (svg) {
+      const viewport = svg.querySelector(".tree-viewport");
+      if (viewport) viewport.style.transform = "translate(0px, 0px) scale(1)";
+    }
+    syncTreeView();
+  }
+
+  treeLayoutTopdownBtn.addEventListener("click", () => setTreeLayoutMode("topdown"));
+  treeLayoutRadialBtn.addEventListener("click", () => setTreeLayoutMode("radial"));
+
+  async function loadTree() {
+    chartTreeBody.innerHTML = `<p class="muted">Загрузка…</p>`;
+    try {
+      treeApiData = await api(`/api/projects/${encodeURIComponent(projectName)}/coverage/tree`);
+      if (treeApiData.error) {
+        chartTreeBody.innerHTML = `<p class="error-box">${escapeHtml(treeApiData.error)}</p>`;
+        return;
+      }
+      treeRoot = buildTreeRoot(treeApiData.tree || {});
+      applyDefaultTreeCollapse(treeRoot);
+      treeFirstRender = true;
+      treeNodeEls.clear();
+      treeEdgeEls.clear();
+      syncTreeView();
+    } catch (err) {
+      chartTreeBody.innerHTML = `<p class="error-box">Не удалось построить дерево: ${escapeHtml(err.message)}</p>`;
+    }
+  }
+
   function renderCharts() {
     renderRings();
     renderAreaBars();
     renderStatusChart();
     renderGraphAreaOptions();
     loadGraph();
+    syncTreeView();
   }
 
   // ---------------- toolbar actions ----------------
@@ -596,6 +1118,7 @@
       highlightedRoutes = null;
       renderMap();
       renderCharts();
+      if (!treeApiData) await loadTree();
     } catch (err) {
       showPageError(`Не удалось загрузить покрытие: ${err.message}`);
     }
@@ -604,6 +1127,7 @@
   standSelect.addEventListener("change", () => {
     renderMap();
     renderStatusChart();
+    syncTreeView();
   });
   filterUncovered.addEventListener("change", renderMap);
   filterFailed.addEventListener("change", renderMap);
