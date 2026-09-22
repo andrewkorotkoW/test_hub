@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Test Hub — покрытие</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header id="app-header" class="site-header"></header>
+  <main class="page page-wide">
+    <div class="page-head">
+      <h1 id="project-title">Покрытие</h1>
+      <a id="project-link" href="#">← к проекту</a>
+    </div>
+    <div id="page-error" class="error-box" hidden></div>
+
+    <div class="card" id="summary-card">
+      <h2>Сводка</h2>
+      <div id="summary-stands" class="summary-badges"></div>
+      <div id="summary-zero" class="zero-coverage-box" hidden>
+        <strong>Области без покрытия:</strong> <span id="summary-zero-list"></span>
+      </div>
+    </div>
+
+    <div class="card" id="coverage-toolbar-card">
+      <div class="coverage-toolbar">
+        <div class="field">
+          <label for="cov-stand-select">Стенд</label>
+          <select id="cov-stand-select"></select>
+        </div>
+        <label><input type="checkbox" id="cov-filter-uncovered"> только непокрытые</label>
+        <label><input type="checkbox" id="cov-filter-failed"> только упавшие</label>
+        <input id="cov-search" placeholder="Поиск по пути маршрута">
+        <div class="toolbar-spacer"></div>
+        <button id="cov-export-btn">Выгрузить CSV</button>
+        <button id="cov-recalc-btn" hidden>Пересчитать</button>
+        <label id="cov-upload-label" class="upload-label" hidden>
+          Загрузить инвентарь
+          <input type="file" id="cov-upload-input" accept=".tsv,text/tab-separated-values" hidden>
+        </label>
+      </div>
+      <div id="cov-toolbar-msg" class="hint-box" hidden></div>
+    </div>
+
+    <div class="coverage-layout">
+      <div class="card" id="coverage-map-card">
+        <h2>Карта маршрутов</h2>
+        <div id="coverage-map"><p class="muted">Загрузка…</p></div>
+      </div>
+
+      <div class="card" id="coverage-detail-card">
+        <h2>Связи</h2>
+        <div id="coverage-detail"><p class="muted">Выберите маршрут или тест на карте.</p></div>
+      </div>
+    </div>
+  </main>
+
+  <script src="common.js"></script>
+  <script src="coverage.js"></script>
+</body>
+</html>
