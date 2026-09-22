@@ -7,9 +7,13 @@ coverage.py работает чисто статически (ast.parse по т�
 testhub-runner-tests): достаточно разложить .py-файлы по tmp_path в ожидаемой
 структуре (api/endpoints, ui/pages, tests/conftest.py + tests/test_*.py)."""
 
+import json
+
 import pytest
 
+from app.config import settings
 from app.core import coverage
+from app.db import get_connection
 
 
 # ------------------------------------------------------------------ _normalize_path
@@ -485,3 +489,53 @@ def test_test_status_counts_dedupes_by_nodeid_across_items():
     ]
     counts = coverage._test_status_counts(items, stands)
     assert counts == {"develop": {"passed": 1, "failed": 1, "xfail": 1}}
+
+
+# ------------------------------------------------------------------ nodeid_status_map (дерево проекта)
+
+def _write_allure_result(results_dir, full_name, status, message=None):
+    results_dir.mkdir(parents=True, exist_ok=True)
+    payload = {"fullName": full_name, "status": status}
+    if message:
+        payload["statusDetails"] = {"message": message}
+    (results_dir / f"{full_name.replace('#', '_')}-result.json").write_text(json.dumps(payload), encoding="utf-8")
+
+
+def test_nodeid_status_map_matches_by_full_name_and_skips_other_stands(db_path, isolated_allure_dir):
+    conn = get_connection()
+    try:
+        conn.execute(
+            "INSERT INTO projects (name, path, venv, stands) VALUES ('p', '/x', '.venv', '[]')"
+        )
+        conn.execute("INSERT INTO stands (project, name, url) VALUES ('p', 'develop', '')")
+        cur = conn.execute(
+            "INSERT INTO runs (project, stand, target, status, counts) VALUES ('p', 'develop', 'all', 'passed', '{}')"
+        )
+        run_id = cur.lastrowid
+        conn.commit()
+
+        results_dir = settings.ALLURE_RESULTS_DIR / str(run_id)
+        _write_allure_result(results_dir, "tests.test_foo#test_passing", "passed")
+        _write_allure_result(results_dir, "tests.test_foo.TestBar#test_broken", "failed")
+        _write_allure_result(results_dir, "tests.test_foo#test_expected_fail", "skipped", message="xfail: reason")
+
+        nodeids = [
+            "tests/test_foo.py::test_passing",
+            "tests/test_foo.py::TestBar::test_broken",
+            "tests/test_foo.py::test_expected_fail",
+            "tests/test_foo.py::test_never_run",
+        ]
+        found_run_id, statuses = coverage.nodeid_status_map(conn, "p", "develop", nodeids)
+        assert found_run_id == run_id
+        assert statuses == {
+            "tests/test_foo.py::test_passing": "passed",
+            "tests/test_foo.py::TestBar::test_broken": "failed",
+            "tests/test_foo.py::test_expected_fail": "xfail",
+        }
+
+        # незавершённых прогонов на другом стенде нет -> run_id None, статусов нет
+        no_run_id, no_statuses = coverage.nodeid_status_map(conn, "p", "stage", nodeids)
+        assert no_run_id is None
+        assert no_statuses == {}
+    finally:
+        conn.close()

@@ -9,7 +9,7 @@ import sqlite3
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
-from ..core import coverage
+from ..core import coverage, runner
 from ..deps import get_db, require_roles
 from ..schemas import (
     CoverageGraph,
@@ -27,6 +27,7 @@ from ..schemas import (
     CoverageTestDetail,
     CoverageTestPage,
     CoverageTestRoute,
+    CoverageTree,
 )
 
 router = APIRouter(prefix="/api/projects", tags=["coverage"])
@@ -173,6 +174,36 @@ def get_coverage(
 ) -> CoverageSummary:
     _get_project_or_404(conn, name)
     return _build_summary(_ensure_cached(name))
+
+
+@router.get("/{name}/coverage/tree")
+async def get_coverage_tree(
+    name: str,
+    conn: sqlite3.Connection = Depends(get_db),
+    _user: sqlite3.Row = Depends(require_roles("qa", "manager", "customer")),
+) -> CoverageTree:
+    """Дерево тестов проекта (файл -> класс -> [тест], `runner.discover`, то же, что
+    видит `project.html`) вместе со статусом каждого теста на каждом стенде из
+    последнего завершённого прогона — источник дерева-диаграммы на странице «Покрытие»."""
+    project = _get_project_or_404(conn, name)
+    discovered = await runner.discover(project["path"], project["venv"])
+    tree: dict[str, dict[str, list[str]]] = discovered.get("tree", {})
+    nodeids = [
+        f"{file}::{cls}::{test}" if cls else f"{file}::{test}"
+        for file, classes in tree.items()
+        for cls, tests in classes.items()
+        for test in tests
+    ]
+    stands = [
+        row["name"] for row in conn.execute("SELECT name FROM stands WHERE project = ? ORDER BY name", (name,))
+    ]
+    run_ids: dict[str, int | None] = {}
+    statuses: dict[str, dict[str, str]] = {}
+    for stand in stands:
+        run_id, status_map = coverage.nodeid_status_map(conn, name, stand, nodeids)
+        run_ids[stand] = run_id
+        statuses[stand] = status_map
+    return CoverageTree(tree=tree, error=discovered.get("error"), stands=stands, run_ids=run_ids, statuses=statuses)
 
 
 @router.post("/{name}/coverage/recalc")

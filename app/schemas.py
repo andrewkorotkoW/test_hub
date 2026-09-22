@@ -160,3 +160,11 @@ class CoverageTestDetail(BaseModel):
 class CoverageRoutesUploadResult(BaseModel):
     routes_parsed: int
     coverage: CoverageSummary
+
+
+class CoverageTree(BaseModel):
+    tree: dict[str, dict[str, list[str]]]
+    error: Optional[str] = None
+    stands: list[str]
+    run_ids: dict[str, Optional[int]]
+    statuses: dict[str, dict[str, str]]  # stand -> nodeid -> status

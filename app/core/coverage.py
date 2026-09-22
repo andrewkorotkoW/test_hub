@@ -648,6 +648,24 @@ def _stand_results(conn: sqlite3.Connection, project: str, stand: str) -> tuple[
     return run, {entry["name"]: _classify_allure_status(entry) for entry in entries}
 
 
+def nodeid_status_map(
+    conn: sqlite3.Connection, project: str, stand: str, nodeids: list[str]
+) -> tuple[int | None, dict[str, str]]:
+    """run_id последнего завершённого прогона на стенде и статус (passed/failed/xfail/
+    skipped) каждого из `nodeids`, у которого нашлась запись в allure-results этого
+    прогона — используется деревом проекта на странице «Покрытие», источник
+    `nodeids` произвольный (там дерево из `runner.discover`, а не статический анализ)."""
+    run, by_full_name = _stand_results(conn, project, stand)
+    run_id = run["id"] if run else None
+    statuses = {
+        nodeid: by_full_name[full_name]
+        for nodeid in nodeids
+        for full_name in [_nodeid_to_full_name(nodeid)]
+        if full_name in by_full_name
+    }
+    return run_id, statuses
+
+
 def _coverage_stand_status(
     item_tests: list[TestInfo], stand: str, run: sqlite3.Row | None, by_full_name: dict[str, str]
 ) -> dict:

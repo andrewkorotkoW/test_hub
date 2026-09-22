@@ -18,6 +18,8 @@ AsyncClient через role_client(role), как это делает conftest.py
 superadmin_client.
 """
 
+import json
+
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
@@ -25,7 +27,9 @@ from httpx import ASGITransport, AsyncClient
 from app.main import app as fastapi_app
 
 from .conftest import login, register_project
+from app.config import settings
 from app.core import coverage
+from app.db import get_connection
 
 API_ENDPOINT_SRC = '''\
 class FooEndpoint:
@@ -327,6 +331,7 @@ async def test_get_route_coverage_404_for_nonsense_method(qa_client, isolated_co
 async def test_coverage_endpoints_404_for_unknown_project(qa_client, isolated_coverage_dir):
     for method, url, kwargs in (
         ("get", "/api/projects/no_such_proj/coverage", {}),
+        ("get", "/api/projects/no_such_proj/coverage/tree", {}),
         ("get", "/api/projects/no_such_proj/coverage/route", {"params": {"method": "GET", "path": "/x"}}),
         ("get", "/api/projects/no_such_proj/coverage/test", {"params": {"id": "tests/test_x.py::test_x"}}),
         ("post", "/api/projects/no_such_proj/coverage/recalc", {}),
@@ -488,3 +493,71 @@ async def test_get_coverage_graph_unknown_area_404(qa_client, isolated_coverage_
 
     resp = await qa_client.get("/api/projects/cov_proj/coverage/graph", params={"area": "does-not-exist"})
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------- дерево проекта (coverage/tree)
+#
+# coverage_project_dir не содержит .venv, поэтому runner.discover сам по себе
+# вернёт {"error": ..., "tree": {}} (см. app/core/runner.py) — валидный ответ для
+# проверки формы ответа и ролей, но без реальных данных. Чтобы проверить дерево
+# и статусы тестов, discover монкипатчится напрямую в app.routers.coverage.
+
+async def test_get_coverage_tree_without_venv_returns_error_and_empty_tree(
+    role_client, isolated_coverage_dir, coverage_project_dir
+):
+    qa = await role_client("qa")
+    await _register_with_stands(qa, "cov_proj", coverage_project_dir)
+
+    for role in ("qa", "manager", "customer"):
+        client = await role_client(role)
+        resp = await client.get("/api/projects/cov_proj/coverage/tree")
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["tree"] == {}
+        assert body["error"]
+        assert set(body["stands"]) == {"develop", "stage"}
+        assert body["statuses"] == {"develop": {}, "stage": {}}
+
+
+async def test_get_coverage_tree_matches_discover_nodeids_with_run_status(
+    qa_client, isolated_coverage_dir, isolated_allure_dir, coverage_project_dir, monkeypatch
+):
+    from app.routers import coverage as coverage_router
+
+    await _register_with_stands(qa_client, "cov_proj", coverage_project_dir)
+
+    async def fake_discover(path, venv):
+        return {"tree": {"tests/test_foo.py": {"": ["test_list_foo"], "TestBar": ["test_x"]}}}
+
+    monkeypatch.setattr(coverage_router.runner, "discover", fake_discover)
+
+    conn = get_connection()
+    try:
+        cur = conn.execute(
+            "INSERT INTO runs (project, stand, target, status, counts) VALUES ('cov_proj', 'develop', 'all', 'passed', '{}')"
+        )
+        run_id = cur.lastrowid
+        conn.commit()
+    finally:
+        conn.close()
+
+    results_dir = settings.ALLURE_RESULTS_DIR / str(run_id)
+    results_dir.mkdir(parents=True, exist_ok=True)
+    (results_dir / "a-result.json").write_text(
+        json.dumps({"fullName": "tests.test_foo#test_list_foo", "status": "passed"}), encoding="utf-8"
+    )
+    (results_dir / "b-result.json").write_text(
+        json.dumps({"fullName": "tests.test_foo.TestBar#test_x", "status": "failed"}), encoding="utf-8"
+    )
+
+    resp = await qa_client.get("/api/projects/cov_proj/coverage/tree")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["tree"] == {"tests/test_foo.py": {"": ["test_list_foo"], "TestBar": ["test_x"]}}
+    assert body["run_ids"]["develop"] == run_id
+    assert body["run_ids"]["stage"] is None
+    assert body["statuses"]["develop"] == {
+        "tests/test_foo.py::test_list_foo": "passed",
+        "tests/test_foo.py::TestBar::test_x": "failed",
+    }
+    assert body["statuses"]["stage"] == {}
