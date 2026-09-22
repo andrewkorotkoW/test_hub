@@ -298,3 +298,12 @@ async def test_public_share_expired_token_is_404(qa_client, isolated_allure_dir,
     async with _anon_client() as anon:
         assert (await anon.get(f"/share/{token}")).status_code == 404
         assert (await anon.get(f"/share/{token}/data.json")).status_code == 404
+
+
+def test_public_page_assets_are_root_relative(client_qa_and_run=None):
+    """Страница /share/<token> лежит на вложенном пути — ссылки на css/js должны быть абсолютными,
+    иначе браузер ищет /share/style.css и страница остаётся пустой."""
+    from pathlib import Path
+    html = Path(__file__).resolve().parents[1].joinpath("ui", "share.html").read_text(encoding="utf-8")
+    assert 'href="/style.css"' in html and 'src="/share.js"' in html and 'src="/common.js"' in html
+    assert 'href="style.css"' not in html and 'src="share.js"' not in html
