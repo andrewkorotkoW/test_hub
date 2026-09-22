@@ -27,6 +27,7 @@
   const runCard = document.getElementById("run-card");
   const runIdLabel = document.getElementById("run-id-label");
   const pill = document.getElementById("run-status-pill");
+  const shareBtn = document.getElementById("share-run-btn");
   const cancelBtn = document.getElementById("cancel-run-btn");
   const logBox = document.getElementById("run-log");
   const reportChart = document.getElementById("report-chart");
@@ -36,6 +37,13 @@
   const statusFilter = document.getElementById("report-status-filter");
   const nameFilter = document.getElementById("report-name-filter");
   const historyRows = document.getElementById("history-rows");
+  const shareOverlay = document.getElementById("share-modal-overlay");
+  const shareExpiresSelect = document.getElementById("share-expires-select");
+  const shareCreateBtn = document.getElementById("share-create-btn");
+  const shareLinksList = document.getElementById("share-links-list");
+  const shareCloseBtn = document.getElementById("share-close-btn");
+
+  const canShare = ["qa", "manager", "superadmin"].includes(user.role);
 
   let currentTests = [];
   let currentWs = null;
@@ -251,6 +259,7 @@
     sawLine = false;
     runCard.hidden = false;
     runIdLabel.textContent = runId;
+    shareBtn.hidden = !canShare;
     logBox.textContent = "";
     reportSection.hidden = true;
     reportChart.hidden = true;
@@ -314,6 +323,86 @@
       return;
     }
     submitRun(ids.join("\n"));
+  });
+
+  // ---------------- шаринг отчёта ----------------
+  async function loadShareLinks(runId) {
+    shareLinksList.innerHTML = `<p class="muted">Загрузка…</p>`;
+    try {
+      const links = await api(`/api/runs/${runId}/share`);
+      renderShareLinks(runId, links);
+    } catch (err) {
+      shareLinksList.innerHTML = `<p class="error-box">Не удалось загрузить ссылки: ${escapeHtml(err.message)}</p>`;
+    }
+  }
+
+  function renderShareLinks(runId, links) {
+    if (!links.length) {
+      shareLinksList.innerHTML = `<p class="muted">Ссылок ещё нет.</p>`;
+      return;
+    }
+    shareLinksList.innerHTML = links.map((l) => `
+      <div class="share-link-row ${l.revoked ? "revoked" : ""}" data-token="${escapeHtml(l.token)}">
+        <span class="share-link-url">${escapeHtml(l.url)}</span>
+        <button class="share-copy-btn" ${l.revoked ? "disabled" : ""}>Копировать</button>
+        <button class="share-revoke-btn danger" ${l.revoked ? "disabled" : ""}>Отозвать</button>
+        <span class="share-link-meta">${l.revoked ? "отозвана" : (l.expires_at ? `до ${fmtDate(l.expires_at)}` : "бессрочно")} · создал ${escapeHtml(l.created_by)}</span>
+      </div>
+    `).join("");
+
+    shareLinksList.querySelectorAll(".share-copy-btn").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const row = btn.closest(".share-link-row");
+        const link = links.find((l) => l.token === row.dataset.token);
+        try {
+          await navigator.clipboard.writeText(link.url);
+          btn.textContent = "Скопировано";
+          setTimeout(() => { btn.textContent = "Копировать"; }, 1500);
+        } catch {
+          alert(link.url);
+        }
+      });
+    });
+
+    shareLinksList.querySelectorAll(".share-revoke-btn").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const row = btn.closest(".share-link-row");
+        btn.disabled = true;
+        try {
+          await api(`/api/runs/${runId}/share/${row.dataset.token}`, { method: "DELETE" });
+          await loadShareLinks(runId);
+        } catch (err) {
+          alert(`Не удалось отозвать ссылку: ${err.message}`);
+          btn.disabled = false;
+        }
+      });
+    });
+  }
+
+  function openShareModal(runId) {
+    shareOverlay.hidden = false;
+    shareOverlay.dataset.runId = runId;
+    loadShareLinks(runId);
+  }
+
+  shareBtn.addEventListener("click", () => openShareModal(Number(runIdLabel.textContent)));
+
+  shareCreateBtn.addEventListener("click", async () => {
+    const runId = Number(shareOverlay.dataset.runId);
+    shareCreateBtn.disabled = true;
+    try {
+      await api(`/api/runs/${runId}/share`, { method: "POST", json: { expires: shareExpiresSelect.value } });
+      await loadShareLinks(runId);
+    } catch (err) {
+      alert(`Не удалось создать ссылку: ${err.message}`);
+    } finally {
+      shareCreateBtn.disabled = false;
+    }
+  });
+
+  shareCloseBtn.addEventListener("click", () => { shareOverlay.hidden = true; });
+  shareOverlay.addEventListener("click", (ev) => {
+    if (ev.target === shareOverlay) shareOverlay.hidden = true;
   });
 
   // ---------------- history ----------------

@@ -358,6 +358,14 @@ tbody tr.clickable:hover { background: #f7f8fa; }
 .modal-dots span.active { background: var(--accent); }
 .modal-actions { display: flex; justify-content: space-between; margin-top: 18px; gap: 10px; }
 
+/* ---------- шаринг отчёта ---------- */
+.share-links-list { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; }
+.share-link-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; font-size: 12px; }
+.share-link-row.revoked { opacity: .55; }
+.share-link-url { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.share-link-meta { flex: 0 0 100%; color: var(--text-muted); }
+.share-link-row button { padding: 4px 10px; font-size: 12px; }
+
 @media (max-width: 768px) {
   .page { padding: 16px; }
   .site-header { padding: 10px 16px; }
