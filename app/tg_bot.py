@@ -157,6 +157,10 @@ class HubClient:
         resp = await self._request("POST", f"/api/runs/{run_id}/cancel")
         return resp.json()
 
+    async def create_share_link(self, run_id: int, expires: str = "30d") -> dict:
+        resp = await self._request("POST", f"/api/runs/{run_id}/share", json={"expires": expires})
+        return resp.json()
+
 
 # ------------------------------------------------------------------ разбор текстовых команд
 def parse_run_args(text: str) -> tuple[str, str, str | None]:
@@ -246,7 +250,7 @@ def parse_callback(data: str) -> dict:
             "stand": _decode_token(rest[1]),
             "marker": _decode_token(rest[2]),
         }
-    if action in ("run_status", "run_report", "run_cancel", "run_trend") and len(rest) == 1:
+    if action in ("run_status", "run_report", "run_cancel", "run_trend", "run_share") and len(rest) == 1:
         try:
             run_id = int(rest[0])
         except ValueError:
@@ -543,7 +547,8 @@ def build_run_keyboard(run_id: int) -> InlineKeyboardMarkup:
     builder.button(text="Отчёт", callback_data=build_callback("run_report", run_id=str(run_id)))
     builder.button(text="Отменить", callback_data=build_callback("run_cancel", run_id=str(run_id)))
     builder.button(text="Тренд", callback_data=build_callback("run_trend", run_id=str(run_id)))
-    builder.adjust(2, 2)
+    builder.button(text="Поделиться", callback_data=build_callback("run_share", run_id=str(run_id)))
+    builder.adjust(2, 2, 1)
     return builder.as_markup()
 
 
@@ -1218,6 +1223,23 @@ async def cb_run_cancel(query: CallbackQuery, client: HubClient) -> None:
         return
     status_ru = STATUS_RU.get(run["status"], run["status"])
     await _safe_edit(query.message, f"Прогон #{run_id}: {status_ru}.", build_run_keyboard(run_id))
+
+
+@router.callback_query(F.data.startswith("run_share:"))
+async def cb_run_share(query: CallbackQuery, client: HubClient) -> None:
+    """Ссылка на 30 дней по умолчанию (см. задачу шаринга отчёта) — публичная
+    страница без логина, доступна по client.create_share_link (POST /api/runs/{id}/share)."""
+    await query.answer()
+    if query.message is None:
+        return
+    run_id = parse_callback(query.data)["run_id"]
+    try:
+        share = await client.create_share_link(run_id, expires="30d")
+    except httpx.HTTPError as exc:
+        logger.warning("tg_bot: не удалось создать публичную ссылку для прогона #%s: %s", run_id, exc)
+        await _reply_http_error(query.message, exc, "создать ссылку", not_found=f"Прогон #{run_id} не найден.")
+        return
+    await query.message.answer(f"Ссылка на отчёт прогона #{run_id} (30 дней): {share['url']}")
 
 
 # ------------------------------------------------------------------ упавшие тесты: текст ошибки и перезапуск

@@ -41,6 +41,7 @@
         <h2>Прогон #<span id="run-id-label"></span></h2>
         <div class="run-status-bar">
           <span id="run-status-pill" class="status-pill queued" data-status="queued">queued</span>
+          <button id="share-run-btn" hidden>Поделиться</button>
           <button id="cancel-run-btn" class="danger" hidden>Отменить</button>
         </div>
         <div id="run-log" class="run-log"></div>
@@ -82,6 +83,27 @@
       </div>
     </div>
   </main>
+
+  <div id="share-modal-overlay" class="modal-overlay" hidden>
+    <div class="modal-box">
+      <h2>Поделиться отчётом</h2>
+      <p class="muted">Ссылка открывается без входа в систему и доступна только на чтение.</p>
+      <div class="field">
+        <label for="share-expires-select">Срок действия</label>
+        <select id="share-expires-select">
+          <option value="7d">7 дней</option>
+          <option value="30d" selected>30 дней</option>
+          <option value="never">Бессрочно</option>
+        </select>
+      </div>
+      <button id="share-create-btn" class="primary">Создать ссылку</button>
+      <div id="share-links-list" class="share-links-list"></div>
+      <div class="modal-actions">
+        <span></span>
+        <button id="share-close-btn">Закрыть</button>
+      </div>
+    </div>
+  </div>
 
   <script src="common.js"></script>
   <script src="project.js"></script>

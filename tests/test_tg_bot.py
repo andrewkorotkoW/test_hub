@@ -267,6 +267,32 @@ async def test_hub_client_full_run_cycle_matches_report_format(
         await client.aclose()
 
 
+async def test_hub_client_create_share_link_matches_api_format(qa_client, isolated_allure_dir, runnable_project_dir):
+    # POST /api/runs/{id}/share требует роль qa/manager (app/routers/share.py) — сервисная
+    # учётка бота сидится с ролью customer (app/db.py::_seed_tg_bot_user), поэтому для этого
+    # теста роль поднимается вручную, как это сделал бы администратор для реального бота.
+    await register_project(qa_client, "tg_bot_share_proj", runnable_project_dir)
+    conn = get_connection()
+    try:
+        conn.execute("UPDATE users SET role = 'qa' WHERE login = ?", (settings.TH_TG_SERVICE_LOGIN,))
+        conn.commit()
+    finally:
+        conn.close()
+
+    run = await qa_client.post("/api/projects/tg_bot_share_proj/runs", json={"target": "tests/test_sample.py"})
+    run_id = run.json()["id"]
+
+    client = _hub_client()
+    try:
+        share = await client.create_share_link(run_id, expires="30d")
+    finally:
+        await client.aclose()
+
+    assert share["token"]
+    assert share["url"].endswith(f"/share/{share['token']}")
+    assert share["revoked"] is False
+
+
 # ------------------------------------------------------------------ парсинг /run без исключений
 def test_parse_run_command_happy_path():
     assert parse_run_command("bike_fit stage smoke") == ("bike_fit", "stage", "smoke")
@@ -331,7 +357,7 @@ def test_parse_callback_confirm_with_none_marker():
     }
 
 
-@pytest.mark.parametrize("action", ["run_status", "run_report", "run_cancel"])
+@pytest.mark.parametrize("action", ["run_status", "run_report", "run_cancel", "run_trend", "run_share"])
 def test_parse_callback_run_actions(action):
     assert parse_callback(f"{action}:42") == {"action": action, "run_id": 42}
 
@@ -374,10 +400,10 @@ def test_build_confirm_keyboard_has_yes_and_cancel():
     assert "menu" in data
 
 
-def test_build_run_keyboard_has_status_report_cancel_trend():
+def test_build_run_keyboard_has_status_report_cancel_trend_share():
     markup = build_run_keyboard(7)
     data = [btn.callback_data for row in markup.inline_keyboard for btn in row]
-    assert data == ["run_status:7", "run_report:7", "run_cancel:7", "run_trend:7"]
+    assert data == ["run_status:7", "run_report:7", "run_cancel:7", "run_trend:7", "run_share:7"]
 
 
 # ------------------------------------------------------------------ lifespan: без токена бот не создаётся
@@ -578,7 +604,7 @@ async def test_button_flow_edits_single_message_and_submits_expected_run(monkeyp
     final_message = edited[-1]
     assert "Прогон #42 поставлен в очередь." in final_message.text
     callback_datas = [btn.callback_data for row in final_message.reply_markup.inline_keyboard for btn in row]
-    assert callback_datas == ["run_status:42", "run_report:42", "run_cancel:42", "run_trend:42"]
+    assert callback_datas == ["run_status:42", "run_report:42", "run_cancel:42", "run_trend:42", "run_share:42"]
 
 
 async def test_button_flow_without_env_flag_omits_env_in_confirm_hint(monkeypatch):
@@ -736,6 +762,50 @@ async def test_cb_run_trend_sends_photo(monkeypatch):
     sent = session.calls[1]
     assert sent.photo.data == b"\x89PNGfaketrendbytes"
     assert sent.caption == "Тренд последних прогонов"
+
+
+async def test_cb_run_share_sends_link_message(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    client.create_share_link.return_value = {
+        "token": "tok123", "url": "http://127.0.0.1:8700/share/tok123",
+        "created_by": "tg_bot", "created_at": "2026-01-01T00:00:00", "expires_at": None, "revoked": False,
+    }
+    dispatcher = _make_dispatcher(client)
+
+    flow_message = _message(bot, text="Прогон #42 поставлен в очередь.")
+    await dispatcher.feed_update(
+        bot,
+        Update(update_id=1, callback_query=_callback(bot, flow_message, "run_share:42", cb_id="c1")),
+    )
+
+    client.create_share_link.assert_awaited_once_with(42, expires="30d")
+    assert [type(c).__name__ for c in session.calls] == ["AnswerCallbackQuery", "SendMessage"]
+    sent = session.calls[1]
+    assert "http://127.0.0.1:8700/share/tok123" in sent.text
+
+
+async def test_cb_run_share_reports_error_on_forbidden(monkeypatch):
+    """Сервисная учётка бота сидится с ролью customer (app/db.py::_seed_tg_bot_user),
+    у которой по умолчанию нет прав на POST /api/runs/{id}/share (qa/manager, см.
+    app/routers/share.py) — бот не должен падать, а должен сообщить об ошибке."""
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    request = httpx.Request("POST", "http://testserver/api/runs/42/share")
+    response = httpx.Response(403, request=request, json={"detail": "Forbidden"})
+    client.create_share_link.side_effect = httpx.HTTPStatusError("403", request=request, response=response)
+    dispatcher = _make_dispatcher(client)
+
+    flow_message = _message(bot, text="Прогон #42 поставлен в очередь.")
+    await dispatcher.feed_update(
+        bot,
+        Update(update_id=1, callback_query=_callback(bot, flow_message, "run_share:42", cb_id="c1")),
+    )
+
+    assert [type(c).__name__ for c in session.calls] == ["AnswerCallbackQuery", "SendMessage"]
+    assert "Не удалось создать ссылку" in session.calls[1].text
 
 
 async def test_access_middleware_denies_run_report_callback_without_hitting_client_or_photo(monkeypatch):
