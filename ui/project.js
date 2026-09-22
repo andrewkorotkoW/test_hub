@@ -17,6 +17,7 @@
   logo.onerror = () => logo.remove();          // логотипа нет — просто заголовок
   titleEl.prepend(logo);
   document.getElementById("coverage-link").href = `coverage.html?name=${encodeURIComponent(projectName)}`;
+  document.getElementById("xfail-link").href = `xfail.html?name=${encodeURIComponent(projectName)}`;
   const pageError = document.getElementById("page-error");
   const standSelect = document.getElementById("stand-select");
   const markerSelect = document.getElementById("marker-select");

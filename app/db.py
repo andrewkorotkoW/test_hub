@@ -71,6 +71,20 @@ CREATE TABLE IF NOT EXISTS flaky_stats (
     updated_at TEXT,
     PRIMARY KEY (project, stand, test)
 );
+
+CREATE TABLE IF NOT EXISTS xfail_registry (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project TEXT NOT NULL,
+    stand TEXT NOT NULL,
+    test TEXT NOT NULL,
+    reason TEXT,
+    first_seen TEXT NOT NULL,
+    last_run_id INTEGER,
+    state TEXT NOT NULL CHECK (state IN ('xfail', 'xpass')),
+    issue_url TEXT,
+    note TEXT,
+    UNIQUE (project, stand, test)
+);
 """
 
 SEED_USERS = [
@@ -231,9 +245,9 @@ def init_db() -> None:
         _migrate_add_column(conn, "projects", "use_env_flag", "use_env_flag INTEGER NOT NULL DEFAULT 0")
         _migrate_add_column(conn, "runs", "marker", "marker TEXT")
         _migrate_add_column(conn, "runs", "repeat", "repeat INTEGER NOT NULL DEFAULT 1")
-        # flaky_stats сама по себе — новая таблица (не существующая с другой схемой
-        # в старых БД), поэтому её создание уже покрыто CREATE TABLE IF NOT EXISTS в
-        # SCHEMA выше и отдельной ALTER-миграции, как для колонок, не требует.
+        # flaky_stats и xfail_registry сами по себе — новые таблицы (не существующие
+        # с другой схемой в старых БД), поэтому их создание уже покрыто CREATE TABLE
+        # IF NOT EXISTS в SCHEMA выше и отдельной ALTER-миграции, как для колонок, не требует.
         _seed_if_empty(conn)
         _seed_superadmin(conn)
         _seed_vshgu_project(conn)

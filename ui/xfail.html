@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Test Hub — известные дефекты</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header id="app-header" class="site-header"></header>
+  <main class="page page-wide">
+    <div class="page-head">
+      <h1 id="project-title">Известные дефекты</h1>
+      <a id="project-link" href="#">← к проекту</a>
+    </div>
+    <div id="page-error" class="error-box" hidden></div>
+
+    <div class="card" id="xfail-toolbar-card">
+      <div class="coverage-toolbar">
+        <div class="field">
+          <label for="xfail-stand-select">Стенд</label>
+          <select id="xfail-stand-select"><option value="">— все стенды —</option></select>
+        </div>
+        <div class="toolbar-spacer"></div>
+        <button id="xfail-check-all-btn">Проверить все</button>
+      </div>
+      <div id="xfail-toolbar-msg" class="hint-box" hidden></div>
+    </div>
+
+    <div class="card">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Тест</th><th>Причина</th><th>Стенд</th><th>С какого числа</th>
+              <th>Последний прогон</th><th>Состояние</th><th>Ссылка на баг</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="xfail-rows"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script src="common.js"></script>
+  <script src="xfail.js"></script>
+</body>
+</html>
