@@ -189,6 +189,11 @@ def public_share_report_png(token: str, conn: sqlite3.Connection = Depends(get_d
     run = _get_run_or_404(conn, share["run_id"])
     run_payload = _public_run_payload(run)
     results = allure_report.parse_results(runner.allure_dir(run["id"]))
+    # counts нужны кольцевой диаграмме — без них build_report_png рисует «нет данных»
+    run_payload["counts"] = (
+        json.loads(run["counts"]) if run["counts"] and run["counts"] != "{}"
+        else allure_report.counts_from_tests(results)
+    )
     # history пустая: публичный отчёт — снимок одного прогона, без данных других
     # прогонов того же проекта/стенда (см. заголовок файла).
     png = charts.build_report_png(run_payload, [], results)
