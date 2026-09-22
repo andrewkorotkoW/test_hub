@@ -299,6 +299,16 @@ tbody tr.clickable:hover { background: #f7f8fa; }
   margin: 0;
 }
 
+/* ---------- флаки-детектор ---------- */
+.flaky-dots { display: flex; gap: 3px; flex-wrap: wrap; }
+.flaky-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--unknown); }
+.flaky-dot.passed { background: var(--passed); }
+.flaky-dot.failed { background: var(--failed); }
+.flaky-dot.broken { background: var(--broken); }
+.flaky-dot.skipped { background: var(--skipped); }
+.flaky-dot.unknown { background: var(--text-muted); }
+tr.flaky-high { background: rgba(220, 38, 38, 0.08); }
+
 /* ---------- superadmin tabs / inline confirm / json cell ---------- */
 .tabs { display: flex; gap: 6px; flex-wrap: wrap; }
 .tabs button { padding: 6px 12px; font-size: 13px; }

@@ -82,6 +82,26 @@
         </table>
       </div>
     </div>
+
+    <div class="card">
+      <h2>Нестабильные тесты</h2>
+      <div class="stand-row">
+        <label for="flaky-stand-select">Стенд</label>
+        <select id="flaky-stand-select"><option value="">— все стенды —</option></select>
+      </div>
+      <div id="flaky-error" class="error-box" hidden></div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Тест</th><th>Запусков</th><th>Падений</th><th>% нестабильности</th>
+              <th>Последние статусы</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="flaky-rows"></tbody>
+        </table>
+      </div>
+    </div>
   </main>
 
   <div id="share-modal-overlay" class="modal-overlay" hidden>

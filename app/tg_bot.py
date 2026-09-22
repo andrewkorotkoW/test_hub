@@ -70,6 +70,8 @@ RUN_USAGE = "Использование: /run <проект> <стенд> [ма�
 STATUS_USAGE = "id прогона должен быть числом: /status [id]"
 REPORT_USAGE = "Использование: /report <id>"
 LAST_USAGE = "Использование: /last <проект>"
+FLAKY_USAGE = "Использование: /flaky <проект> [стенд]"
+FLAKY_TOP_N = 10
 
 ACCESS_DENIED_MESSAGE = "Извините, у вас нет доступа к этому боту."
 MENU_TEXT = "Выберите проект:"
@@ -161,6 +163,11 @@ class HubClient:
         resp = await self._request("POST", f"/api/runs/{run_id}/share", json={"expires": expires})
         return resp.json()
 
+    async def list_flaky(self, project: str, stand: str | None = None) -> list[dict]:
+        params = {"stand": stand} if stand else {}
+        resp = await self._request("GET", f"/api/projects/{project}/flaky", params=params)
+        return resp.json()["items"]
+
 
 # ------------------------------------------------------------------ разбор текстовых команд
 def parse_run_args(text: str) -> tuple[str, str, str | None]:
@@ -208,6 +215,16 @@ def parse_project_name(text: str, usage: str) -> str:
     if not parts:
         raise ValueError(usage)
     return parts[0]
+
+
+def parse_flaky_args(text: str) -> tuple[str, str | None]:
+    """"<проект> [стенд]" — стенд необязателен (агрегирует по всем стендам проекта,
+    см. HubClient.list_flaky/app.core.flaky.list_stats с stand=None)."""
+    parts = text.split()
+    if not parts:
+        raise ValueError(FLAKY_USAGE)
+    project, *rest = parts
+    return project, rest[0] if rest else None
 
 
 # ------------------------------------------------------------------ callback_data кнопок
@@ -258,6 +275,8 @@ def parse_callback(data: str) -> dict:
         return {"action": action, "run_id": run_id}
     if action == "tests" and len(rest) == 2:
         return {"action": "tests", "project": rest[0], "stand": _decode_token(rest[1])}
+    if action == "flaky" and len(rest) == 1:
+        return {"action": "flaky", "project": rest[0]}
     if action in ("tree_open", "tree_page") and len(rest) == 1:
         try:
             value = int(rest[0])
@@ -493,6 +512,20 @@ def format_report(report: dict) -> str:
     return "\n".join(lines)
 
 
+def format_flaky(project: str, stand: str | None, items: list[dict]) -> str:
+    header = f"Нестабильные тесты «{project}»" + (f" / {stand}" if stand else "") + ":"
+    top = items[:FLAKY_TOP_N]
+    if not top:
+        return f"{header}\nПока нет данных (мало прогонов) или все тесты стабильны."
+    lines = [header]
+    for item in top:
+        percent = round(item["score"] * 100)
+        short = (item.get("test") or "").rsplit("#", 1)[-1]
+        stand_suffix = "" if stand else f", стенд {item.get('stand')}"
+        lines.append(f"• {short}: {percent}% ({item.get('fails', 0)}/{item.get('runs', 0)} упал{stand_suffix})")
+    return "\n".join(lines)
+
+
 def _confirm_text(project: str, stand: str | None, marker: str | None, args: list[str]) -> str:
     lines = [f"Запустить {project} / {_stand_label(stand)} / {_marker_label(marker)}?"]
     if args:
@@ -518,8 +551,15 @@ def build_stands_keyboard(project: str, stands: list[dict]) -> InlineKeyboardMar
             )
     else:
         builder.button(text="Без стенда", callback_data=build_callback("stand", project=project, stand=None))
+    builder.button(text="Флаки", callback_data=build_callback("flaky", project=project))
     builder.button(text="« К проектам", callback_data="menu")
     builder.adjust(1)
+    return builder.as_markup()
+
+
+def build_back_keyboard(callback_data: str, label: str = "« Назад") -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text=label, callback_data=callback_data)
     return builder.as_markup()
 
 
@@ -836,6 +876,22 @@ async def cb_project(query: CallbackQuery, client: HubClient) -> None:
         return
     text = f"Проект: {project}\nВыберите стенд:"
     await _safe_edit(query.message, text, build_stands_keyboard(project, stands))
+
+
+@router.callback_query(F.data.startswith("flaky:"))
+async def cb_flaky(query: CallbackQuery, client: HubClient) -> None:
+    await query.answer()
+    if query.message is None:
+        return
+    project = parse_callback(query.data)["project"]
+    try:
+        items = await client.list_flaky(project)
+    except httpx.HTTPError as exc:
+        logger.warning("tg_bot: не удалось получить флаки-статистику проекта %s: %s", project, exc)
+        await _safe_edit(query.message, f"Не удалось получить флаки-статистику проекта «{project}».")
+        return
+    text = format_flaky(project, None, items)
+    await _safe_edit(query.message, text, build_back_keyboard(build_callback("project", project=project)))
 
 
 @router.callback_query(F.data.startswith("stand:"))
@@ -1476,6 +1532,22 @@ async def cmd_report(
         await message.answer(caption, reply_markup=keyboard)
         return
     await _send_report_png(message.answer_photo, message.answer, run_id, png, caption, keyboard)
+
+
+@router.message(Command("flaky"))
+async def cmd_flaky(message: Message, command: CommandObject, client: HubClient) -> None:
+    try:
+        project, stand = parse_flaky_args(command.args or "")
+    except ValueError as exc:
+        await message.answer(str(exc))
+        return
+
+    try:
+        items = await client.list_flaky(project, stand)
+    except httpx.HTTPError as exc:
+        await _reply_http_error(message, exc, "получить флаки-статистику", not_found=f"Проект «{project}» не найден.")
+        return
+    await message.answer(format_flaky(project, stand, items))
 
 
 @router.message(Command("last"))

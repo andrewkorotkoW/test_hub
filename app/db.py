@@ -39,7 +39,8 @@ CREATE TABLE IF NOT EXISTS runs (
     duration REAL,
     requested_by TEXT,
     counts TEXT NOT NULL DEFAULT '{}',
-    marker TEXT
+    marker TEXT,
+    repeat INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE TABLE IF NOT EXISTS run_events (
@@ -56,6 +57,19 @@ CREATE TABLE IF NOT EXISTS share_links (
     created_at TEXT NOT NULL,
     expires_at TEXT,
     revoked INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS flaky_stats (
+    project TEXT NOT NULL,
+    stand TEXT NOT NULL,
+    test TEXT NOT NULL,
+    runs INTEGER NOT NULL DEFAULT 0,
+    fails INTEGER NOT NULL DEFAULT 0,
+    flips INTEGER NOT NULL DEFAULT 0,
+    score REAL NOT NULL DEFAULT 0,
+    last_statuses TEXT NOT NULL DEFAULT '[]',
+    updated_at TEXT,
+    PRIMARY KEY (project, stand, test)
 );
 """
 
@@ -216,6 +230,10 @@ def init_db() -> None:
             _migrate_users_role_check(conn)
         _migrate_add_column(conn, "projects", "use_env_flag", "use_env_flag INTEGER NOT NULL DEFAULT 0")
         _migrate_add_column(conn, "runs", "marker", "marker TEXT")
+        _migrate_add_column(conn, "runs", "repeat", "repeat INTEGER NOT NULL DEFAULT 1")
+        # flaky_stats сама по себе — новая таблица (не существующая с другой схемой
+        # в старых БД), поэтому её создание уже покрыто CREATE TABLE IF NOT EXISTS в
+        # SCHEMA выше и отдельной ALTER-миграции, как для колонок, не требует.
         _seed_if_empty(conn)
         _seed_superadmin(conn)
         _seed_vshgu_project(conn)
