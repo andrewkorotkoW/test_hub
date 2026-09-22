@@ -23,13 +23,21 @@ const PROJECT_NAME_RE = /^[a-zA-Z0-9_-]+$/;
     grid.innerHTML = projects.map((p) => `
       <a class="project-card" href="project.html?name=${encodeURIComponent(p.name)}" title="Открыть проект ${escapeHtml(p.name)}">
         <div class="logo-box">
-          <img class="project-logo-big" src="img/logos/${encodeURIComponent(p.name)}_256.png" alt="${escapeHtml(p.name)}"
-               onerror="this.parentNode.innerHTML='<span class=\'logo-placeholder\'>${escapeHtml(p.name.slice(0, 2).toUpperCase())}</span>'">
+          <img class="project-logo-big" src="img/logos/${encodeURIComponent(p.name)}_256.png" alt="" data-initials="${escapeHtml(p.name.slice(0, 2).toUpperCase())}">
         </div>
         <div class="name">${escapeHtml(p.name)}</div>
         <div class="stands-count">Стендов: ${p.stands.length}</div>
       </a>
     `).join("");
+    // нет файла логотипа — вместо битой картинки круг с инициалами проекта
+    grid.querySelectorAll("img.project-logo-big").forEach((img) => {
+      img.addEventListener("error", () => {
+        const ph = document.createElement("span");
+        ph.className = "logo-placeholder";
+        ph.textContent = img.dataset.initials;
+        img.replaceWith(ph);
+      });
+    });
   }
 
   async function loadProjects() {
