@@ -21,9 +21,12 @@ const PROJECT_NAME_RE = /^[a-zA-Z0-9_-]+$/;
       return;
     }
     grid.innerHTML = projects.map((p) => `
-      <a class="project-card" href="project.html?name=${encodeURIComponent(p.name)}">
-        <div class="name"><img class="project-logo" src="img/logos/${encodeURIComponent(p.name)}_256.png" alt="" onerror="this.remove()">${escapeHtml(p.name)}</div>
-        <div class="path">${escapeHtml(p.path)}</div>
+      <a class="project-card" href="project.html?name=${encodeURIComponent(p.name)}" title="Открыть проект ${escapeHtml(p.name)}">
+        <div class="logo-box">
+          <img class="project-logo-big" src="img/logos/${encodeURIComponent(p.name)}_256.png" alt="${escapeHtml(p.name)}"
+               onerror="this.parentNode.innerHTML='<span class=\'logo-placeholder\'>${escapeHtml(p.name.slice(0, 2).toUpperCase())}</span>'">
+        </div>
+        <div class="name">${escapeHtml(p.name)}</div>
         <div class="stands-count">Стендов: ${p.stands.length}</div>
       </a>
     `).join("");

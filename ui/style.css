@@ -445,5 +445,11 @@ tbody tr.clickable:hover { background: #f7f8fa; }
 /* логотип проекта: ui/img/logos/<имя проекта>_256.png, если файла нет — не показывается */
 .project-logo { height: 28px; width: auto; vertical-align: middle; margin-right: 8px; }
 .project-logo-lg { height: 44px; margin-right: 12px; }
-.project-card .name { display: flex; align-items: center; gap: 8px; }
-.project-card .project-logo { height: 32px; margin-right: 0; }
+/* карточка проекта: крупный логотип, клик по карточке (и по логотипу) открывает проект */
+.project-card { text-align: center; }
+.project-card .logo-box { height: 120px; display: flex; align-items: center; justify-content: center; margin-bottom: 10px; }
+.project-card .project-logo-big { max-height: 120px; max-width: 100%; transition: transform .15s ease; }
+.project-card:hover .project-logo-big { transform: scale(1.05); }
+.project-card .logo-placeholder { width: 96px; height: 96px; border-radius: 50%; background: var(--accent, #2f6fed); color: #fff;
+  font-size: 34px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.project-card .name { justify-content: center; }
