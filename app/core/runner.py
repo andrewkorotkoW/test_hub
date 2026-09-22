@@ -58,8 +58,10 @@ async def discover(project_path: str, venv: str) -> dict:
     python = _venv_python(project_path, venv)
     if not python.exists():
         return {"error": f".venv/bin/python не найден: {python}", "tree": {}}
+    # -o addopts= : у проекта в pytest.ini может стоять -v (как у auto_tests_vshgu_cloude) —
+    # он гасит наш -q, и pytest печатает <Module …> вместо nodeid'ов, дерево выходит пустым
     proc = await asyncio.create_subprocess_exec(
-        str(python), "-m", "pytest", "--collect-only", "-q",
+        str(python), "-m", "pytest", "--collect-only", "-o", "addopts=", "-q", "-p", "no:cacheprovider",
         cwd=project_path,
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
     )
