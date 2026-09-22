@@ -34,6 +34,19 @@ from .ws import hub
 
 _COLLECT_RE = re.compile(r"^(?P<file>[\w./-]+\.py)::(?P<rest>.+)$")
 
+# Маскирование секретов в строках вывода pytest перед записью в run_events/трансляцией
+# по WebSocket (см. задачу шаринга отчёта — публичная ссылка на прогон не должна
+# раскрывать заголовки авторизации/куки, даже если их напечатал сам тест или
+# HTTP-клиент в verbose-режиме).
+_SECRET_HEADER_RE = re.compile(r"(?im)^(.*\b(?:authorization|cookie|set-cookie)\b[\"']?\s*:\s*).+$")
+_SECRET_TOKEN_PARAM_RE = re.compile(r"(?i)\btoken=[^\s&\"']+")
+
+
+def mask_secrets(line: str) -> str:
+    line = _SECRET_HEADER_RE.sub(r"\1***", line)
+    line = _SECRET_TOKEN_PARAM_RE.sub("token=***", line)
+    return line
+
 _project_locks: dict[str, asyncio.Lock] = {}
 _active_procs: dict[int, "asyncio.subprocess.Process"] = {}
 _cancelled: set[int] = set()
@@ -169,6 +182,7 @@ async def cancel_run(run_id: int) -> str:
 
 
 async def _log_line(run_id: int, line: str) -> None:
+    line = mask_secrets(line)
     conn = get_connection()
     try:
         conn.execute(

@@ -7,9 +7,36 @@
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
 from pathlib import Path
 
 STATUSES = ("passed", "failed", "broken", "skipped")
+
+GENERATE_TIMEOUT_SECONDS = 60
+
+
+def allure_cli_available() -> bool:
+    return shutil.which("allure") is not None
+
+
+def ensure_static_report(results_dir: Path, report_dir: Path) -> bool:
+    """Гарантирует наличие сгенерированного `allure generate`-отчёта в report_dir
+    (кэш на диске — генерация тяжелее простого разбора JSON). Возвращает True, если
+    отчёт есть или был успешно сгенерирован, False — если allure CLI недоступен или
+    генерация не удалась (тогда вызывающий код показывает встроенный отчёт test_hub)."""
+    if (report_dir / "index.html").exists():
+        return True
+    if not results_dir.is_dir() or not allure_cli_available():
+        return False
+    try:
+        subprocess.run(
+            ["allure", "generate", str(results_dir), "-o", str(report_dir), "--clean"],
+            capture_output=True, timeout=GENERATE_TIMEOUT_SECONDS, check=True,
+        )
+    except (subprocess.SubprocessError, OSError):
+        return False
+    return (report_dir / "index.html").exists()
 
 
 def _empty_counts() -> dict[str, int]:

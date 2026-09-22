@@ -41,6 +41,19 @@ class RunCreate(BaseModel):
     marker: Optional[str] = None
 
 
+class ShareLinkCreate(BaseModel):
+    expires: Literal["7d", "30d", "never"] = "30d"
+
+
+class ShareLink(BaseModel):
+    token: str
+    url: str
+    created_by: str
+    created_at: str
+    expires_at: Optional[str] = None
+    revoked: bool
+
+
 class UserCreate(BaseModel):
     login: str
     password: str

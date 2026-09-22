@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Test Hub — отчёт прогона</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-left">
+      <span class="brand">Test Hub</span>
+      <span class="muted">публичный отчёт — только чтение</span>
+    </div>
+  </header>
+  <main class="page">
+    <div id="page-error" class="error-box" hidden></div>
+
+    <div class="card" id="run-card" hidden>
+      <div class="page-head">
+        <h1 id="run-title">Прогон</h1>
+        <a id="allure-link" class="coverage-link" href="#" target="_blank" rel="noopener" hidden>Allure-отчёт</a>
+      </div>
+      <p class="muted" id="run-meta"></p>
+
+      <img id="report-chart" class="report-chart" alt="График отчёта прогона" hidden>
+
+      <div id="summary-badges" class="summary-badges"></div>
+      <div class="report-filters">
+        <select id="report-status-filter">
+          <option value="">Все статусы</option>
+          <option value="passed">passed</option>
+          <option value="failed">failed</option>
+          <option value="broken">broken</option>
+          <option value="skipped">skipped</option>
+          <option value="unknown">unknown</option>
+        </select>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Тест</th><th>Статус</th><th>Длительность</th></tr></thead>
+          <tbody id="report-rows"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script src="common.js"></script>
+  <script src="share.js"></script>
+</body>
+</html>

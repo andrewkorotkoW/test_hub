@@ -48,6 +48,15 @@ CREATE TABLE IF NOT EXISTS run_events (
     ts TEXT NOT NULL,
     line TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS share_links (
+    token TEXT PRIMARY KEY,
+    run_id INTEGER NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    expires_at TEXT,
+    revoked INTEGER NOT NULL DEFAULT 0
+);
 """
 
 SEED_USERS = [

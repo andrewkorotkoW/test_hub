@@ -23,8 +23,14 @@ class Settings:
     WORKSPACE_DIR: Path = BASE_DIR / "workspace"
     DB_PATH: Path = BASE_DIR / "workspace" / "test_hub.db"
     ALLURE_RESULTS_DIR: Path = BASE_DIR / "workspace" / "allure-results"
+    ALLURE_REPORTS_DIR: Path = BASE_DIR / "workspace" / "allure-reports"
     SESSION_COOKIE: str = "th_session"
     SESSION_MAX_AGE: int = 7 * 24 * 3600
+
+    # Базовый URL, по которому публичные ссылки на отчёты (см. app/routers/share.py)
+    # видны снаружи процесса test_hub — не обязательно совпадает с TH_PORT/127.0.0.1
+    # (за прокси/туннелем). Значение по умолчанию годится только для локальной разработки.
+    TH_PUBLIC_URL: str = os.getenv("TH_PUBLIC_URL", "http://127.0.0.1:8700").rstrip("/")
 
     # Telegram-бот: пустой TH_TG_BOT_TOKEN полностью выключает бота (см. lifespan в
     # app/main.py); пустой TH_TG_ALLOWED_IDS означает "никому нельзя" (fail-safe), а

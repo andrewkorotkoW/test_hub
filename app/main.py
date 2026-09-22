@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import settings
 from .db import init_db
-from .routers import admin, auth, coverage, projects, runs, users
+from .routers import admin, auth, coverage, projects, runs, share, users
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +50,8 @@ app.include_router(runs.router)
 app.include_router(runs.ws_router)
 app.include_router(users.router)
 app.include_router(admin.router)
+app.include_router(share.router)
+app.include_router(share.public_router)
 
 # Статика фронтенда (ui/) монтируется последней, чтобы её catch-all "/" не
 # перехватывал API-маршруты, зарегистрированные выше.
