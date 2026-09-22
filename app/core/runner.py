@@ -29,7 +29,7 @@ from pathlib import Path
 
 from ..config import settings
 from ..db import get_connection
-from . import allure_report, flaky
+from . import allure_report, flaky, xfail_registry
 from .ws import hub
 
 _COLLECT_RE = re.compile(r"^(?P<file>[\w./-]+\.py)::(?P<rest>.+)$")
@@ -218,10 +218,12 @@ async def _finalize(run_id: int, status: str, started_at: float, counts: dict[st
     await hub.broadcast(run_id, {"type": "status", "run_id": run_id, "status": status, "counts": counts})
 
     if row is not None and row["stand"]:
-        # Флаки-детектор: пересчёт не должен блокировать завершение прогона (recalc
-        # синхронный — читает allure-results с диска и пишет в SQLite), поэтому
-        # уходит в отдельный поток фоновой задачей, а не await'ится здесь.
+        # Флаки-детектор и реестр известных дефектов: оба пересчёта синхронные (читают
+        # allure-results с диска и пишут в SQLite) и не должны блокировать завершение
+        # прогона, поэтому уходят в отдельные потоки фоновыми задачами, а не await'ятся
+        # здесь. Независимы друг от друга — ни один не знает про другой.
         asyncio.create_task(asyncio.to_thread(flaky.recalc, row["project"], row["stand"]))
+        asyncio.create_task(asyncio.to_thread(xfail_registry.recalc, row["project"], row["stand"], run_id))
 
 
 async def _advance_queue(project_name: str) -> None:

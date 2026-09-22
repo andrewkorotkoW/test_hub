@@ -210,3 +210,35 @@ class FlakyTestHistory(BaseModel):
     test: str
     stand: str
     history: list[FlakyTestHistoryEntry]
+
+
+class XfailEntry(BaseModel):
+    id: int
+    project: str
+    stand: str
+    test: str
+    nodeid: Optional[str] = None
+    reason: Optional[str] = None
+    first_seen: str
+    last_run_id: Optional[int] = None
+    state: Literal["xfail", "xpass"]
+    issue_url: Optional[str] = None
+    note: Optional[str] = None
+
+
+class XfailList(BaseModel):
+    items: list[XfailEntry]
+
+
+class XfailUpdate(BaseModel):
+    issue_url: Optional[str] = None
+    note: Optional[str] = None
+
+
+class XfailCheckRequest(BaseModel):
+    ids: Optional[list[int]] = None
+
+
+class XfailCheckResult(BaseModel):
+    run_id: int
+    count: int

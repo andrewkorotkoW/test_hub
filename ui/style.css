@@ -309,6 +309,13 @@ tbody tr.clickable:hover { background: #f7f8fa; }
 .flaky-dot.unknown { background: var(--text-muted); }
 tr.flaky-high { background: rgba(220, 38, 38, 0.08); }
 
+/* ---------- реестр xfail ---------- */
+.badge.xfail-state { background: #a16207; }
+.badge.xpass-state { background: var(--passed); }
+.xfail-hint { font-size: 11px; color: var(--text-muted); display: block; margin-top: 2px; }
+.xfail-issue-input { width: 100%; min-width: 160px; }
+tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
+
 /* ---------- superadmin tabs / inline confirm / json cell ---------- */
 .tabs { display: flex; gap: 6px; flex-wrap: wrap; }
 .tabs button { padding: 6px 12px; font-size: 13px; }
