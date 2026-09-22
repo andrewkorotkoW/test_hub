@@ -453,3 +453,13 @@ tbody tr.clickable:hover { background: #f7f8fa; }
 .project-card .logo-placeholder { width: 96px; height: 96px; border-radius: 50%; background: var(--accent, #2f6fed); color: #fff;
   font-size: 34px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
 .project-card .name { justify-content: center; }
+
+/* список проектов: без карточек-плашек — только логотип и название; при наведении логотип подсвечивается */
+.project-card, .project-card:hover { background: transparent; border-color: transparent; box-shadow: none; }
+.project-card .project-logo-big, .project-card .logo-placeholder {
+  transition: transform .18s ease, filter .18s ease, box-shadow .18s ease;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,.08));
+}
+.project-card:hover .project-logo-big { transform: scale(1.08); filter: brightness(1.08) drop-shadow(0 0 14px rgba(47,111,237,.55)); }
+.project-card:hover .logo-placeholder { transform: scale(1.08); box-shadow: 0 0 18px rgba(47,111,237,.55); }
+.project-card:hover .name { color: var(--accent, #2f6fed); }
