@@ -10,3 +10,4 @@ workspace/runs/
 workspace/allure-results/
 workspace/allure-reports/
 workspace/*.log
+workspace/coverage/
