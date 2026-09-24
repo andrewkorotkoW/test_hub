@@ -72,6 +72,64 @@
       </div>
     </div>
 
+    <div class="card" id="schedules-card" hidden>
+      <h2>Расписание</h2>
+      <div id="schedules-error" class="error-box" hidden></div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th></th><th>Стенд</th><th>Маркер</th><th>Цель</th><th>Cron</th>
+              <th>Последний результат</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="schedules-rows"></tbody>
+        </table>
+      </div>
+
+      <h3>Новое расписание</h3>
+      <div class="schedule-form">
+        <div class="field">
+          <label for="sched-stand-select">Стенд</label>
+          <select id="sched-stand-select"><option value="">— без стенда —</option></select>
+        </div>
+        <div class="field">
+          <label for="sched-marker-select">Маркер</label>
+          <select id="sched-marker-select">
+            <option value="">— без маркера —</option>
+            <option value="smoke">smoke</option>
+            <option value="api">api</option>
+            <option value="ui">ui</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="sched-target-input">Тесты (nodeid по одному на строке; пусто — все тесты)</label>
+          <textarea id="sched-target-input" rows="2" placeholder="пусто = все тесты"></textarea>
+        </div>
+        <div class="field">
+          <label for="sched-time-input">Время</label>
+          <input type="time" id="sched-time-input" value="03:00">
+        </div>
+        <div class="field">
+          <label>Дни недели</label>
+          <div class="schedule-days" id="sched-days">
+            <label><input type="checkbox" value="1" checked> Пн</label>
+            <label><input type="checkbox" value="2" checked> Вт</label>
+            <label><input type="checkbox" value="3" checked> Ср</label>
+            <label><input type="checkbox" value="4" checked> Чт</label>
+            <label><input type="checkbox" value="5" checked> Пт</label>
+            <label><input type="checkbox" value="6"> Сб</label>
+            <label><input type="checkbox" value="0"> Вс</label>
+          </div>
+        </div>
+        <div class="field">
+          <label for="sched-chats-input">Telegram-чаты для уведомлений (id через запятую)</label>
+          <input id="sched-chats-input" placeholder="например: 123456789, 987654321">
+        </div>
+        <button id="sched-create-btn" class="primary">Создать расписание</button>
+      </div>
+    </div>
+
     <div class="card">
       <h2>История прогонов</h2>
       <div class="table-wrap">

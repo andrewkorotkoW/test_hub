@@ -74,6 +74,7 @@ FLAKY_USAGE = "Использование: /flaky <проект> [стенд]"
 FLAKY_TOP_N = 10
 XFAIL_USAGE = "Использование: /xfail <проект> [стенд]"
 XFAIL_TOP_N = 10
+SCHEDULE_USAGE = "Использование: /schedules <проект>"
 
 ACCESS_DENIED_MESSAGE = "Извините, у вас нет доступа к этому боту."
 MENU_TEXT = "Выберите проект:"
@@ -174,6 +175,16 @@ class HubClient:
         params = {"stand": stand} if stand else {}
         resp = await self._request("GET", f"/api/projects/{project}/xfail", params=params)
         return resp.json()["items"]
+
+    async def list_schedules(self, project: str) -> list[dict]:
+        resp = await self._request("GET", f"/api/projects/{project}/schedules")
+        return resp.json()
+
+    async def set_schedule_enabled(self, project: str, schedule_id: int, enabled: bool) -> dict:
+        resp = await self._request(
+            "PUT", f"/api/projects/{project}/schedules/{schedule_id}", json={"enabled": enabled}
+        )
+        return resp.json()
 
 
 # ------------------------------------------------------------------ разбор текстовых команд
@@ -295,6 +306,12 @@ def parse_callback(data: str) -> dict:
         return {"action": "flaky", "project": rest[0]}
     if action in ("xfail", "xfail_check") and len(rest) == 1:
         return {"action": action, "project": rest[0]}
+    if action == "sched_toggle" and len(rest) == 2:
+        try:
+            schedule_id = int(rest[1])
+        except ValueError:
+            return {"action": "invalid", "raw": data}
+        return {"action": "sched_toggle", "project": rest[0], "schedule_id": schedule_id}
     if action in ("tree_open", "tree_page") and len(rest) == 1:
         try:
             value = int(rest[0])
@@ -560,6 +577,22 @@ def format_xfail(project: str, items: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def format_schedules(project: str, items: list[dict]) -> str:
+    header = f"Расписания «{project}»:"
+    if not items:
+        return f"{header}\nРасписаний нет."
+    lines = [header]
+    for item in items:
+        state = "включено" if item.get("enabled") else "выключено"
+        stand = _stand_label(item.get("stand"))
+        target = "все тесты" if (item.get("target") or "all") == "all" else "выборочно"
+        marker = _marker_label(item.get("marker"))
+        last_run_id = item.get("last_run_id")
+        suffix = f", последний прогон #{last_run_id}" if last_run_id else ""
+        lines.append(f"• #{item['id']} {stand} / {marker} / {target} — {item['cron']} ({state}){suffix}")
+    return "\n".join(lines)
+
+
 def _confirm_text(project: str, stand: str | None, marker: str | None, args: list[str]) -> str:
     lines = [f"Запустить {project} / {_stand_label(stand)} / {_marker_label(marker)}?"]
     if args:
@@ -587,6 +620,19 @@ def build_stands_keyboard(project: str, stands: list[dict]) -> InlineKeyboardMar
         builder.button(text="Без стенда", callback_data=build_callback("stand", project=project, stand=None))
     builder.button(text="Флаки", callback_data=build_callback("flaky", project=project))
     builder.button(text="Дефекты", callback_data=build_callback("xfail", project=project))
+    builder.button(text="« К проектам", callback_data="menu")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def build_schedules_keyboard(project: str, items: list[dict]) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for item in items:
+        mark = "✅" if item.get("enabled") else "▫️"
+        builder.button(
+            text=f"{mark} #{item['id']}",
+            callback_data=build_callback("sched_toggle", project=project, id=str(item["id"])),
+        )
     builder.button(text="« К проектам", callback_data="menu")
     builder.adjust(1)
     return builder.as_markup()
@@ -1652,6 +1698,61 @@ async def cmd_xfail(message: Message, command: CommandObject, client: HubClient)
         await _reply_http_error(message, exc, "получить известные дефекты", not_found=f"Проект «{project}» не найден.")
         return
     await message.answer(format_xfail(project, items))
+
+
+@router.message(Command("schedules"))
+async def cmd_schedules(message: Message, command: CommandObject, client: HubClient) -> None:
+    try:
+        project = parse_project_name(command.args or "", SCHEDULE_USAGE)
+    except ValueError as exc:
+        await message.answer(str(exc))
+        return
+
+    try:
+        items = await client.list_schedules(project)
+    except httpx.HTTPError as exc:
+        await _reply_http_error(message, exc, "получить расписания", not_found=f"Проект «{project}» не найден.")
+        return
+    await message.answer(format_schedules(project, items), reply_markup=build_schedules_keyboard(project, items))
+
+
+# Переключение вкл/выкл требует роли qa на бэкенде (см. app/routers/schedules.py) —
+# у сервисной учётки бота роль 'customer' (см. app/db.py::_seed_tg_bot_user), поэтому
+# запрос может вернуть 403: тот же случай, что и с кнопкой «Отменить» у обычного
+# прогона (require_roles("qa", "manager")) — HubClient._request поднимет
+# httpx.HTTPStatusError, и пользователь просто увидит короткое сообщение об ошибке.
+@router.callback_query(F.data.startswith("sched_toggle:"))
+async def cb_sched_toggle(query: CallbackQuery, client: HubClient) -> None:
+    if query.message is None:
+        await query.answer()
+        return
+    parsed = parse_callback(query.data)
+    if parsed["action"] != "sched_toggle":
+        await query.answer()
+        return
+    project, schedule_id = parsed["project"], parsed["schedule_id"]
+
+    try:
+        items = await client.list_schedules(project)
+    except httpx.HTTPError as exc:
+        logger.warning("tg_bot: не удалось получить расписания проекта %s: %s", project, exc)
+        await query.answer("Не удалось получить расписания.", show_alert=True)
+        return
+    current = next((i for i in items if i["id"] == schedule_id), None)
+    if current is None:
+        await query.answer("Расписание не найдено.", show_alert=True)
+        return
+
+    try:
+        await client.set_schedule_enabled(project, schedule_id, not current["enabled"])
+        items = await client.list_schedules(project)
+    except httpx.HTTPError as exc:
+        logger.warning("tg_bot: не удалось переключить расписание #%s проекта %s: %s", schedule_id, project, exc)
+        await query.answer("Не удалось изменить расписание.", show_alert=True)
+        return
+
+    await query.answer()
+    await _safe_edit(query.message, format_schedules(project, items), build_schedules_keyboard(project, items))
 
 
 @router.message(Command("last"))

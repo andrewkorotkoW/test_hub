@@ -1,3 +1,4 @@
+import json
 import sqlite3
 
 from .config import settings
@@ -70,6 +71,19 @@ CREATE TABLE IF NOT EXISTS flaky_stats (
     last_statuses TEXT NOT NULL DEFAULT '[]',
     updated_at TEXT,
     PRIMARY KEY (project, stand, test)
+);
+
+CREATE TABLE IF NOT EXISTS schedules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project TEXT NOT NULL REFERENCES projects(name) ON DELETE CASCADE,
+    stand TEXT,
+    target TEXT NOT NULL DEFAULT 'all',
+    marker TEXT,
+    cron TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    notify_chat_ids TEXT NOT NULL DEFAULT '[]',
+    last_run_id INTEGER,
+    next_run_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS xfail_registry (
@@ -200,6 +214,36 @@ def _seed_vshgu_project(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def _seed_vshgu_schedules(conn: sqlite3.Connection) -> None:
+    """Выключенное расписание ночного прогона для auto_tests_vshgu_cloude: develop,
+    все тесты, 03:00 по будням (пн-пт). Идемпотентно и вызывается на каждом старте,
+    как и _seed_vshgu_project — вставляет запись, только если расписания с такими
+    project/stand/cron ещё нет, не трогая изменённые вручную через API.
+
+    Правило владельца (см. задачу): stage не сидируем вообще — второе расписание
+    для stage сознательно не создаётся. next_run_at оставляем NULL: расписание
+    выключено (enabled=0), scheduler_loop (app.core.schedule) не подхватит его,
+    пока next_run_at не появится — это происходит автоматически при включении
+    через PUT /api/projects/{name}/schedules/{id} (schedule.update_schedule
+    пересчитывает next_run_at при переходе enabled 0 -> 1), так что здесь не нужно
+    импортировать app.core.schedule и считать cron самим (db.py и так не тянет
+    зависимостей на app.core.*, см. остальной модуль)."""
+    cron = "0 3 * * 1-5"
+    exists = conn.execute(
+        "SELECT 1 FROM schedules WHERE project = ? AND stand = ? AND cron = ?",
+        (VSHGU_PROJECT_NAME, "develop", cron),
+    ).fetchone()
+    if exists:
+        return
+    chat_ids = sorted(settings.TH_TG_ALLOWED_IDS)[:1]
+    conn.execute(
+        "INSERT INTO schedules (project, stand, target, marker, cron, enabled, notify_chat_ids, next_run_at) "
+        "VALUES (?, 'develop', 'all', NULL, ?, 0, ?, NULL)",
+        (VSHGU_PROJECT_NAME, cron, json.dumps(chat_ids)),
+    )
+    conn.commit()
+
+
 def _seed_superadmin(conn: sqlite3.Connection) -> None:
     exists = conn.execute(
         "SELECT 1 FROM users WHERE login = ?", (SUPERADMIN_LOGIN,)
@@ -245,12 +289,14 @@ def init_db() -> None:
         _migrate_add_column(conn, "projects", "use_env_flag", "use_env_flag INTEGER NOT NULL DEFAULT 0")
         _migrate_add_column(conn, "runs", "marker", "marker TEXT")
         _migrate_add_column(conn, "runs", "repeat", "repeat INTEGER NOT NULL DEFAULT 1")
-        # flaky_stats и xfail_registry сами по себе — новые таблицы (не существующие
-        # с другой схемой в старых БД), поэтому их создание уже покрыто CREATE TABLE
-        # IF NOT EXISTS в SCHEMA выше и отдельной ALTER-миграции, как для колонок, не требует.
+        # flaky_stats, xfail_registry и schedules сами по себе — новые таблицы (не
+        # существующие с другой схемой в старых БД), поэтому их создание уже покрыто
+        # CREATE TABLE IF NOT EXISTS в SCHEMA выше и отдельной ALTER-миграции, как
+        # для колонок, не требует.
         _seed_if_empty(conn)
         _seed_superadmin(conn)
         _seed_vshgu_project(conn)
+        _seed_vshgu_schedules(conn)
         _seed_tg_bot_user(conn)
     finally:
         conn.close()
