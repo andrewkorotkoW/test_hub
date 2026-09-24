@@ -5,6 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from ..deps import get_current_user, get_db, require_roles
 from ..schemas import (
+    PROJECT_COLOR_PALETTE,
+    ProjectColorUpdate,
     ProjectCreate,
     ProjectUpdate,
     StandCreate,
@@ -37,6 +39,7 @@ def _project_payload(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
         "path": row["path"],
         "venv": row["venv"],
         "use_env_flag": bool(row["use_env_flag"]),
+        "color": row["color"] or PROJECT_COLOR_PALETTE[0],
         "stands": _stands_for(conn, row["name"]),
     }
 
@@ -93,6 +96,19 @@ def update_project(
         "UPDATE projects SET path = ?, venv = ?, use_env_flag = ? WHERE name = ?",
         (path, venv, int(use_env_flag), name),
     )
+    conn.commit()
+    return _project_payload(conn, _get_project_or_404(conn, name))
+
+
+@router.put("/{name}/color")
+def update_project_color(
+    name: str,
+    body: ProjectColorUpdate,
+    conn: sqlite3.Connection = Depends(get_db),
+    _user: sqlite3.Row = Depends(require_roles("qa")),
+) -> dict:
+    _get_project_or_404(conn, name)
+    conn.execute("UPDATE projects SET color = ? WHERE name = ?", (body.color, name))
     conn.commit()
     return _project_payload(conn, _get_project_or_404(conn, name))
 

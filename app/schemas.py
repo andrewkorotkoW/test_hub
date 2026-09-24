@@ -1,8 +1,14 @@
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 Role = Literal["qa", "manager", "customer", "superadmin"]
+
+# Палитра акцентных цветов проекта — ровно эти 9 hex, в этом порядке (см. миссию редизайна).
+PROJECT_COLOR_PALETTE = [
+    "#2563eb", "#7c5cff", "#ff4fa3", "#38d6ff", "#22c55e",
+    "#f59e0b", "#ff4d6d", "#14b8a6", "#8b93a7",
+]
 
 
 class LoginRequest(BaseModel):
@@ -21,6 +27,17 @@ class ProjectUpdate(BaseModel):
     path: Optional[str] = None
     venv: Optional[str] = None
     use_env_flag: Optional[bool] = None
+
+
+class ProjectColorUpdate(BaseModel):
+    color: str
+
+    @field_validator("color")
+    @classmethod
+    def _color_in_palette(cls, value: str) -> str:
+        if value not in PROJECT_COLOR_PALETTE:
+            raise ValueError(f"Цвет должен быть одним из палитры: {', '.join(PROJECT_COLOR_PALETTE)}")
+        return value
 
 
 class StandCreate(BaseModel):
