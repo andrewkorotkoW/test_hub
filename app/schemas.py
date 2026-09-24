@@ -35,11 +35,37 @@ class StandUpdate(BaseModel):
     login: Optional[str] = None
 
 
+class StandManualOnlyUpdate(BaseModel):
+    manual_only: bool
+
+
+class StandPresetCreate(BaseModel):
+    name: str
+    target: str = "all"
+    marker: Optional[str] = None
+
+
+class StandPresetUpdate(BaseModel):
+    name: Optional[str] = None
+    target: Optional[str] = None
+    marker: Optional[str] = None
+
+
+class StandPreset(BaseModel):
+    id: int
+    project: str
+    stand: str
+    name: str
+    target: str
+    marker: Optional[str] = None
+
+
 class RunCreate(BaseModel):
     stand: Optional[str] = None
     target: str = "all"
     marker: Optional[str] = None
     repeat: int = Field(default=1, ge=1, le=20)
+    confirm_manual: bool = False
 
 
 class ShareLinkCreate(BaseModel):

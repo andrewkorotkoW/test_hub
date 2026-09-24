@@ -4,16 +4,31 @@ import sqlite3
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from ..deps import get_current_user, get_db, require_roles
-from ..schemas import ProjectCreate, ProjectUpdate, StandCreate, StandUpdate
+from ..schemas import (
+    ProjectCreate,
+    ProjectUpdate,
+    StandCreate,
+    StandManualOnlyUpdate,
+    StandPresetCreate,
+    StandPresetUpdate,
+    StandUpdate,
+)
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
 
+def _stand_payload(row: sqlite3.Row) -> dict:
+    payload = dict(row)
+    payload["manual_only"] = bool(payload["manual_only"])
+    return payload
+
+
 def _stands_for(conn: sqlite3.Connection, project_name: str) -> list[dict]:
     rows = conn.execute(
-        "SELECT id, name, url, login FROM stands WHERE project = ? ORDER BY name", (project_name,)
+        "SELECT id, name, url, login, manual_only FROM stands WHERE project = ? ORDER BY name",
+        (project_name,),
     ).fetchall()
-    return [dict(r) for r in rows]
+    return [_stand_payload(r) for r in rows]
 
 
 def _project_payload(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
@@ -119,8 +134,10 @@ def create_stand(
         (name, body.name, body.url, body.login),
     )
     conn.commit()
-    row = conn.execute("SELECT id, name, url, login FROM stands WHERE id = ?", (cur.lastrowid,)).fetchone()
-    return dict(row)
+    row = conn.execute(
+        "SELECT id, name, url, login, manual_only FROM stands WHERE id = ?", (cur.lastrowid,)
+    ).fetchone()
+    return _stand_payload(row)
 
 
 def _get_stand_or_404(conn: sqlite3.Connection, project: str, stand_id: int) -> sqlite3.Row:
@@ -149,8 +166,30 @@ def update_stand(
         "UPDATE stands SET name = ?, url = ?, login = ? WHERE id = ?", (stand_name, url, login, stand_id)
     )
     conn.commit()
-    row = conn.execute("SELECT id, name, url, login FROM stands WHERE id = ?", (stand_id,)).fetchone()
-    return dict(row)
+    row = conn.execute(
+        "SELECT id, name, url, login, manual_only FROM stands WHERE id = ?", (stand_id,)
+    ).fetchone()
+    return _stand_payload(row)
+
+
+@router.patch("/{name}/stands/{stand_id}")
+def update_stand_manual_only(
+    name: str,
+    stand_id: int,
+    body: StandManualOnlyUpdate,
+    conn: sqlite3.Connection = Depends(get_db),
+    _user: sqlite3.Row = Depends(require_roles("qa")),
+) -> dict:
+    _get_project_or_404(conn, name)
+    _get_stand_or_404(conn, name, stand_id)
+    conn.execute(
+        "UPDATE stands SET manual_only = ? WHERE id = ?", (int(body.manual_only), stand_id)
+    )
+    conn.commit()
+    row = conn.execute(
+        "SELECT id, name, url, login, manual_only FROM stands WHERE id = ?", (stand_id,)
+    ).fetchone()
+    return _stand_payload(row)
 
 
 @router.delete("/{name}/stands/{stand_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -163,4 +202,102 @@ def delete_stand(
     _get_project_or_404(conn, name)
     _get_stand_or_404(conn, name, stand_id)
     conn.execute("DELETE FROM stands WHERE id = ?", (stand_id,))
+    conn.commit()
+
+
+def _get_stand_by_name_or_404(conn: sqlite3.Connection, project: str, stand_name: str) -> sqlite3.Row:
+    row = conn.execute(
+        "SELECT * FROM stands WHERE project = ? AND name = ?", (project, stand_name)
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stand not found")
+    return row
+
+
+def _preset_payload(row: sqlite3.Row) -> dict:
+    return dict(row)
+
+
+def _get_preset_or_404(
+    conn: sqlite3.Connection, project: str, stand: str, preset_id: int
+) -> sqlite3.Row:
+    row = conn.execute(
+        "SELECT * FROM stand_presets WHERE id = ? AND project = ? AND stand = ?",
+        (preset_id, project, stand),
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Preset not found")
+    return row
+
+
+@router.get("/{name}/stands/{stand}/presets")
+def list_stand_presets(
+    name: str,
+    stand: str,
+    conn: sqlite3.Connection = Depends(get_db),
+    _user: sqlite3.Row = Depends(get_current_user),
+) -> list[dict]:
+    _get_project_or_404(conn, name)
+    _get_stand_by_name_or_404(conn, name, stand)
+    rows = conn.execute(
+        "SELECT * FROM stand_presets WHERE project = ? AND stand = ? ORDER BY id", (name, stand)
+    ).fetchall()
+    return [_preset_payload(r) for r in rows]
+
+
+@router.post("/{name}/stands/{stand}/presets", status_code=status.HTTP_201_CREATED)
+def create_stand_preset(
+    name: str,
+    stand: str,
+    body: StandPresetCreate,
+    conn: sqlite3.Connection = Depends(get_db),
+    _user: sqlite3.Row = Depends(require_roles("qa")),
+) -> dict:
+    _get_project_or_404(conn, name)
+    _get_stand_by_name_or_404(conn, name, stand)
+    cur = conn.execute(
+        "INSERT INTO stand_presets (project, stand, name, target, marker) VALUES (?, ?, ?, ?, ?)",
+        (name, stand, body.name, body.target, body.marker),
+    )
+    conn.commit()
+    row = conn.execute("SELECT * FROM stand_presets WHERE id = ?", (cur.lastrowid,)).fetchone()
+    return _preset_payload(row)
+
+
+@router.put("/{name}/stands/{stand}/presets/{preset_id}")
+def update_stand_preset(
+    name: str,
+    stand: str,
+    preset_id: int,
+    body: StandPresetUpdate,
+    conn: sqlite3.Connection = Depends(get_db),
+    _user: sqlite3.Row = Depends(require_roles("qa")),
+) -> dict:
+    _get_project_or_404(conn, name)
+    _get_stand_by_name_or_404(conn, name, stand)
+    row = _get_preset_or_404(conn, name, stand, preset_id)
+    preset_name = body.name if body.name is not None else row["name"]
+    target = body.target if body.target is not None else row["target"]
+    marker = body.marker if body.marker is not None else row["marker"]
+    conn.execute(
+        "UPDATE stand_presets SET name = ?, target = ?, marker = ? WHERE id = ?",
+        (preset_name, target, marker, preset_id),
+    )
+    conn.commit()
+    row = conn.execute("SELECT * FROM stand_presets WHERE id = ?", (preset_id,)).fetchone()
+    return _preset_payload(row)
+
+
+@router.delete("/{name}/stands/{stand}/presets/{preset_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_stand_preset(
+    name: str,
+    stand: str,
+    preset_id: int,
+    conn: sqlite3.Connection = Depends(get_db),
+    _user: sqlite3.Row = Depends(require_roles("qa")),
+) -> None:
+    _get_project_or_404(conn, name)
+    _get_stand_by_name_or_404(conn, name, stand)
+    _get_preset_or_404(conn, name, stand, preset_id)
+    conn.execute("DELETE FROM stand_presets WHERE id = ?", (preset_id,))
     conn.commit()

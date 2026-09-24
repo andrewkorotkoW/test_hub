@@ -51,6 +51,16 @@ _project_locks: dict[str, asyncio.Lock] = {}
 _active_procs: dict[int, "asyncio.subprocess.Process"] = {}
 _cancelled: set[int] = set()
 
+
+class ManualRunNotConfirmed(Exception):
+    """Стенд помечен manual_only=1 (см. app.db.stands.manual_only, флаг стенда stage
+    у auto_tests_vshgu_cloude) — прогон на нём требует явного подтверждения человеком
+    (confirm_manual=True) и никогда не проходит от имени сервисной учётки
+    Telegram-бота (settings.TH_TG_SERVICE_LOGIN), даже если та передаст
+    confirm_manual=True. Проверка живёт внутри submit_run (не в роутере) — это
+    единая точка защиты: любой будущий планировщик расписаний, дёргающий тот же
+    submit_run, автоматически подпадёт под неё, если не передаст confirm_manual."""
+
 # Хуки, вызываемые после завершения каждого прогона (см. _finalize) — раннер не
 # знает про app.core.schedule (тот сам импортирует runner, обратный импорт создал
 # бы цикл), поэтому подписка делается снаружи, в app/main.py::lifespan, где обе
@@ -133,15 +143,28 @@ async def submit_run(
     requested_by: str,
     marker: str | None = None,
     repeat: int = 1,
+    confirm_manual: bool = False,
 ) -> int:
     """Создаёт запись прогона (running, если для проекта нет активного, иначе queued)
     и, если она стартует сразу, запускает фоновую задачу исполнения. `repeat` > 1
     прогоняет одну и ту же цель несколько раз подряд в одном прогоне (см. _execute) —
     используется флаки-детектором (app/core/flaky.py) для накопления истории на
-    одном и том же снимке кода/стенда."""
+    одном и том же снимке кода/стенда.
+
+    Если стенд найден и manual_only=1 (см. ManualRunNotConfirmed), запуск требует
+    confirm_manual=True от живого пользователя — сервисная учётка бота (settings
+    .TH_TG_SERVICE_LOGIN) заблокирована всегда. Если стенд не найден, проверку не
+    делаем — прогон создаётся и падает позже в _execute, как и раньше."""
     async with _lock_for(project_name):
         conn = get_connection()
         try:
+            if stand_name is not None:
+                stand = _get_stand(conn, project_name, stand_name)
+                if stand is not None and stand["manual_only"]:
+                    if not confirm_manual or requested_by == settings.TH_TG_SERVICE_LOGIN:
+                        raise ManualRunNotConfirmed(
+                            f"Стенд {stand_name} требует ручного подтверждения запуска"
+                        )
             active = conn.execute(
                 "SELECT 1 FROM runs WHERE project = ? AND status IN ('running', 'queued') LIMIT 1",
                 (project_name,),

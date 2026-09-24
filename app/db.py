@@ -26,7 +26,18 @@ CREATE TABLE IF NOT EXISTS stands (
     name TEXT NOT NULL,
     url TEXT NOT NULL,
     login TEXT,
+    manual_only INTEGER NOT NULL DEFAULT 0,
     UNIQUE (project, name)
+);
+
+CREATE TABLE IF NOT EXISTS stand_presets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project TEXT NOT NULL REFERENCES projects(name) ON DELETE CASCADE,
+    stand TEXT NOT NULL,
+    name TEXT NOT NULL,
+    target TEXT NOT NULL DEFAULT 'all',
+    marker TEXT,
+    FOREIGN KEY (project, stand) REFERENCES stands(project, name) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS runs (
@@ -119,6 +130,24 @@ VSHGU_PROJECT_NAME = "auto_tests_vshgu_cloude"
 VSHGU_PROJECT_PATH = "/Users/andreykorotkow/PycharmProjects/auto_tests_vshgu_cloude"
 VSHGU_PROJECT_VENV = ".venv"
 VSHGU_STANDS = ("develop", "stage")
+VSHGU_MANUAL_ONLY_STAND = "stage"
+
+# Пресеты запуска для стенда stage: сидируются один раз, сразу при первом создании
+# этого стенда (см. _seed_vshgu_project) — target='all' там, где в задаче указан
+# только marker, чтобы поле оставалось NOT NULL и совместимым с submit_run/RunCreate.
+VSHGU_STAGE_PRESETS = (
+    ("Smoke", "all", "smoke"),
+    ("БУК", "tests/api/buk\ntests/ui/buk", None),
+    (
+        "LPD",
+        "tests/api/create_activity/lpd\ntests/ui/test_user_lpd_flow.py\n"
+        "tests/ui/test_user_lpd_stream_flow.py\ntests/e2e",
+        None,
+    ),
+    ("API", "all", "api"),
+    ("UI", "all", "ui"),
+    ("Всё", "all", None),
+)
 
 
 def get_connection() -> sqlite3.Connection:
@@ -207,11 +236,28 @@ def _seed_vshgu_project(conn: sqlite3.Connection) -> None:
             "SELECT 1 FROM stands WHERE project = ? AND name = ?", (VSHGU_PROJECT_NAME, stand_name)
         ).fetchone()
         if not stand_exists:
+            manual_only = 1 if stand_name == VSHGU_MANUAL_ONLY_STAND else 0
             conn.execute(
-                "INSERT INTO stands (project, name, url, login) VALUES (?, ?, '', NULL)",
-                (VSHGU_PROJECT_NAME, stand_name),
+                "INSERT INTO stands (project, name, url, login, manual_only) VALUES (?, ?, '', NULL, ?)",
+                (VSHGU_PROJECT_NAME, stand_name, manual_only),
             )
+            if stand_name == VSHGU_MANUAL_ONLY_STAND:
+                _seed_vshgu_stage_presets(conn)
     conn.commit()
+
+
+def _seed_vshgu_stage_presets(conn: sqlite3.Connection) -> None:
+    """Вызывается ровно один раз — сразу после INSERT стенда stage внутри
+    _seed_vshgu_project (не идемпотентна сама по себе, не проверяет наличие
+    пресетов по имени): если вызывать её на каждом старте независимо, она бы
+    восстанавливала пресеты, которые qa сознательно удалил/переименовал вручную
+    на уже существующем стенде — 'только при первом создании', как и manual_only
+    у самого стенда."""
+    for preset_name, target, marker in VSHGU_STAGE_PRESETS:
+        conn.execute(
+            "INSERT INTO stand_presets (project, stand, name, target, marker) VALUES (?, ?, ?, ?, ?)",
+            (VSHGU_PROJECT_NAME, VSHGU_MANUAL_ONLY_STAND, preset_name, target, marker),
+        )
 
 
 def _seed_vshgu_schedules(conn: sqlite3.Connection) -> None:
@@ -289,10 +335,11 @@ def init_db() -> None:
         _migrate_add_column(conn, "projects", "use_env_flag", "use_env_flag INTEGER NOT NULL DEFAULT 0")
         _migrate_add_column(conn, "runs", "marker", "marker TEXT")
         _migrate_add_column(conn, "runs", "repeat", "repeat INTEGER NOT NULL DEFAULT 1")
-        # flaky_stats, xfail_registry и schedules сами по себе — новые таблицы (не
-        # существующие с другой схемой в старых БД), поэтому их создание уже покрыто
-        # CREATE TABLE IF NOT EXISTS в SCHEMA выше и отдельной ALTER-миграции, как
-        # для колонок, не требует.
+        _migrate_add_column(conn, "stands", "manual_only", "manual_only INTEGER NOT NULL DEFAULT 0")
+        # flaky_stats, xfail_registry, schedules и stand_presets сами по себе — новые
+        # таблицы (не существующие с другой схемой в старых БД), поэтому их создание
+        # уже покрыто CREATE TABLE IF NOT EXISTS в SCHEMA выше и отдельной ALTER-
+        # миграции, как для колонок, не требует.
         _seed_if_empty(conn)
         _seed_superadmin(conn)
         _seed_vshgu_project(conn)
