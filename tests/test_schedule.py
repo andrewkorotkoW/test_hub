@@ -213,6 +213,29 @@ async def test_schedules_api_requires_qa(qa_client, tmp_path):
             await other.aclose()
 
 
+async def test_schedules_api_write_endpoints_require_qa_for_manager(qa_client, tmp_path):
+    # Всё расписание (в отличие от флаки/xfail) закрыто ролью qa даже на чтение
+    # (require_roles("qa") на всех маршрутах app/routers/schedules.py) — здесь
+    # отдельно проверяем PUT/DELETE/run-now для manager, не покрытые
+    # test_schedules_api_requires_qa (тот проверяет только GET/POST).
+    await _setup_project_and_stand(qa_client, tmp_path)
+    create_resp = await qa_client.post(
+        f"/api/projects/{PROJECT}/schedules", json={"stand": STAND, "cron": "0 3 * * 1-5", "enabled": False}
+    )
+    schedule_id = create_resp.json()["id"]
+
+    manager = await _login_as("manager", "manager")
+    try:
+        resp = await manager.put(f"/api/projects/{PROJECT}/schedules/{schedule_id}", json={"enabled": True})
+        assert resp.status_code == 403
+        resp = await manager.post(f"/api/projects/{PROJECT}/schedules/{schedule_id}/run-now")
+        assert resp.status_code == 403
+        resp = await manager.delete(f"/api/projects/{PROJECT}/schedules/{schedule_id}")
+        assert resp.status_code == 403
+    finally:
+        await manager.aclose()
+
+
 async def test_schedules_api_rejects_invalid_cron(qa_client, tmp_path):
     await _setup_project_and_stand(qa_client, tmp_path)
     resp = await qa_client.post(f"/api/projects/{PROJECT}/schedules", json={"cron": "not a cron"})

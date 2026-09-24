@@ -133,3 +133,26 @@ async def test_flaky_api_min_runs_filters_out_short_history(qa_client, flaky_his
     resp = await qa_client.get(f"/api/projects/{PROJECT}/flaky", params={"stand": STAND, "min_runs": 5})
     assert resp.status_code == 200, resp.text
     assert resp.json()["items"] == []
+
+
+# ------------------------------------------------------------------ роли: флаки-статистика read-only для всех трёх ролей
+async def test_flaky_api_list_allows_manager(manager_client, flaky_history):
+    flaky.recalc(PROJECT, STAND)
+    resp = await manager_client.get(f"/api/projects/{PROJECT}/flaky", params={"stand": STAND})
+    assert resp.status_code == 200, resp.text
+    assert len(resp.json()["items"]) == 1
+
+
+async def test_flaky_api_list_allows_customer(customer_client, flaky_history):
+    flaky.recalc(PROJECT, STAND)
+    resp = await customer_client.get(f"/api/projects/{PROJECT}/flaky", params={"stand": STAND})
+    assert resp.status_code == 200, resp.text
+    assert len(resp.json()["items"]) == 1
+
+
+async def test_flaky_api_history_allows_customer(customer_client, flaky_history):
+    flaky.recalc(PROJECT, STAND)
+    resp = await customer_client.get(
+        f"/api/projects/{PROJECT}/flaky/{quote(flaky_history, safe='')}", params={"stand": STAND}
+    )
+    assert resp.status_code == 200, resp.text

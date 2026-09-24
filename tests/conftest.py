@@ -162,12 +162,17 @@ def slow_project_dir(tmp_path):
 
 @pytest.fixture()
 def isolated_allure_dir(tmp_path, monkeypatch):
-    """settings.ALLURE_RESULTS_DIR по умолчанию — фиксированный путь внутри репозитория
-    (BASE_DIR/workspace/allure-results, см. app/config.py), общий для всех прогонов и
-    всех тестовых сессий. Без изоляции результаты прогонов с одинаковым (переиспользуемым
-    между тестами, т.к. autoincrement сбрасывается вместе с db_path) run_id накапливались
-    бы и просачивались между тестами и в рабочий workspace/ репозитория."""
+    """settings.ALLURE_RESULTS_DIR/ALLURE_REPORTS_DIR по умолчанию — фиксированные пути
+    внутри репозитория (BASE_DIR/workspace/allure-results и .../allure-reports, см.
+    app/config.py), общие для всех прогонов и всех тестовых сессий. Без изоляции
+    результаты прогонов с одинаковым (переиспользуемым между тестами, т.к. autoincrement
+    сбрасывается вместе с db_path) run_id накапливались бы и просачивались между тестами
+    и в рабочий workspace/ репозитория — включая закэшированный на диске статический
+    allure-отчёт (app/core/allure_report.py::ensure_static_report короткоcircuit'ит на
+    уже существующий report_dir/index.html независимо от allure_cli_available(), см.
+    app/routers/share.py), поэтому изолируем оба пути, не только results."""
     monkeypatch.setattr(settings, "ALLURE_RESULTS_DIR", tmp_path / "allure-results")
+    monkeypatch.setattr(settings, "ALLURE_REPORTS_DIR", tmp_path / "allure-reports")
 
 
 async def register_project(client, name, path, venv=".venv"):
