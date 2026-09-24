@@ -111,7 +111,10 @@ input, select, textarea {
   padding: 7px 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: #fff;
+  /* было #fff — на тёмной теме белый фон с var(--text) поверх давал почти
+     нечитаемый текст; var(--surface) совпадает со светлой темой (#fff) и
+     подхватывает тёмную */
+  background: var(--surface);
   color: var(--text);
 }
 input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
@@ -126,9 +129,17 @@ label { display: inline-flex; align-items: center; gap: 6px; }
 .schedule-days label { font-weight: normal; text-transform: none; }
 
 .page {
+  /* .page — флекс-элемент .app-content (flex-direction: column) с margin:0 auto
+     для центрирования на широких экранах; auto-отступы по кросс-оси отключают
+     stretch у align-items, и без явного width:100% браузер считает ширину по
+     содержимому (shrink-to-fit) — на мобильном это раздвигало всю колонку
+     шире вьюпорта вместо переноса контента. width:100% + max-width работают
+     как обычный центрированный блок на широких экранах и как full-bleed на узких. */
+  width: 100%;
   max-width: 1100px;
   margin: 0 auto;
   padding: 20px 24px 60px;
+  min-width: 0;
 }
 
 /* ---------- app shell: сайдбар + узкая шапка ---------- */
@@ -152,6 +163,7 @@ label { display: inline-flex; align-items: center; gap: 6px; }
   height: 100vh;
   overflow-y: auto;
 }
+.app-sidebar-top { display: flex; align-items: center; justify-content: space-between; }
 .app-sidebar-brand {
   display: flex;
   align-items: center;
@@ -161,6 +173,11 @@ label { display: inline-flex; align-items: center; gap: 6px; }
   padding: 0 10px 18px;
 }
 .app-sidebar-brand:hover { text-decoration: none; color: var(--accent); }
+/* бургер виден только в мобильной раскладке (см. media max-width:900px ниже) */
+.app-burger-btn { display: none; }
+/* на десктопе — просто прозрачная обёртка над nav/footer, чтобы не ломать
+   существующий flex-column сайдбара; сворачивание применяется только на мобильном */
+.app-sidebar-collapsible { display: contents; }
 .app-nav { display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; }
 .app-nav-section { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 2px; }
 .app-nav-link {
@@ -252,18 +269,21 @@ h2 { font-size: 17px; margin: 0 0 12px; }
 h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .03em; }
 
 .muted { color: var(--text-muted); }
+/* rgba-тинты поверх var(--surface) вместо непрозрачных светлых цветов — те же
+   боксы иначе выглядели белыми плашками на тёмной теме (см. .area-bar-row-active
+   выше по тому же принципу) */
 .error-box {
-  background: #fef2f2;
-  border: 1px solid #fecaca;
+  background: rgba(220, 38, 38, .12);
+  border: 1px solid rgba(220, 38, 38, .35);
   color: var(--danger);
   border-radius: var(--radius);
   padding: 10px 14px;
   margin-bottom: 14px;
 }
 .hint-box {
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
-  color: #1e40af;
+  background: rgba(37, 99, 235, .12);
+  border: 1px solid rgba(37, 99, 235, .3);
+  color: var(--accent);
   border-radius: var(--radius);
   padding: 10px 14px;
   margin-bottom: 14px;
@@ -386,7 +406,7 @@ table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
 th { color: var(--text-muted); font-weight: 600; font-size: 12px; text-transform: uppercase; }
 tbody tr.clickable { cursor: pointer; }
-tbody tr.clickable:hover { background: #f7f8fa; }
+tbody tr.clickable:hover { background: var(--surface-hover); }
 .status-text.passed { color: var(--passed); font-weight: 600; }
 .status-text.failed { color: var(--failed); font-weight: 600; }
 .status-text.broken { color: var(--broken); font-weight: 600; }
@@ -419,7 +439,7 @@ tbody tr.clickable:hover { background: #f7f8fa; }
 tr.flaky-high { background: rgba(220, 38, 38, 0.08); }
 
 /* ---------- реестр xfail ---------- */
-.badge.xfail-state { background: #a16207; }
+.badge.xfail-state { background: var(--xfail); }
 .badge.xpass-state { background: var(--passed); }
 .xfail-hint { font-size: 11px; color: var(--text-muted); display: block; margin-top: 2px; }
 .xfail-issue-input { width: 100%; min-width: 160px; }
@@ -500,23 +520,51 @@ tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
   .run-status-bar { flex-direction: column; align-items: flex-start; }
 }
 
-/* ---------- app shell: сайдбар в узкую горизонтальную полосу ---------- */
+/* ---------- app shell: сайдбар — бургер-меню, сворачиваемое по кнопке ---------- */
 @media (max-width: 900px) {
   .app-shell { flex-direction: column; }
   .app-sidebar {
+    /* flex: 0 0 240px (десктопная база) в колоночном .app-shell превращает
+       240px из ширины в высоту по главной оси — обнулять, иначе сайдбар
+       растягивается на 240px даже свёрнутым */
+    flex: 0 0 auto;
     position: static;
     width: 100%;
     height: auto;
-    flex-direction: row;
-    align-items: center;
-    overflow-x: auto;
-    padding: 10px 12px;
+    flex-direction: column;
+    align-items: stretch;
+    overflow-x: visible;
+    padding: 10px 14px;
+    gap: 0;
   }
-  .app-sidebar-brand { padding: 0 14px 0 0; }
-  .app-nav { flex-direction: row; flex: 0 0 auto; }
-  .app-nav-section { margin-top: 0; padding-top: 0; border-top: none; padding-left: 12px; border-left: 1px solid var(--border); flex-direction: row; }
-  .app-sidebar-footer { margin-top: 0; padding-top: 0; border-top: none; padding-left: 12px; border-left: 1px solid var(--border); flex-direction: row; flex: 0 0 auto; }
-  .theme-toggle, #logout-btn { width: auto; white-space: nowrap; }
+  .app-sidebar-brand { padding: 0; }
+  .app-burger-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 18px;
+    line-height: 1;
+    padding: 0;
+  }
+  .app-burger-btn:hover { border-color: var(--accent); color: var(--accent); }
+  /* по умолчанию свёрнуто — раскрывается кнопкой-бургером (#app-burger-btn в common.js),
+     добавляющей класс .app-sidebar-open на #app-sidebar */
+  .app-sidebar-collapsible { display: none; }
+  .app-sidebar.app-sidebar-open .app-sidebar-collapsible {
+    display: flex;
+    flex-direction: column;
+    margin-top: 10px;
+  }
+  .app-nav { flex-direction: column; }
+  .app-nav-section { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); padding-left: 0; border-left: none; flex-direction: column; }
+  .app-sidebar-footer { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); padding-left: 0; border-left: none; flex-direction: column; }
+  .theme-toggle, #logout-btn { width: 100%; white-space: nowrap; }
   .topbar-search { display: none; }
 }
 
@@ -537,8 +585,8 @@ tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 .upload-label:hover { border-color: var(--accent); color: var(--accent); }
 .zero-coverage-box {
   margin-top: 10px;
-  background: #fef2f2;
-  border: 1px solid #fecaca;
+  background: rgba(220, 38, 38, .12);
+  border: 1px solid rgba(220, 38, 38, .35);
   color: var(--danger);
   border-radius: var(--radius);
   padding: 10px 14px;
@@ -576,9 +624,11 @@ tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
   text-align: left;
 }
 .route-cell:hover { border-color: var(--accent); color: var(--accent); }
-.route-cell.cov-1 { background: #dcfce7; border: 1px solid #86efac; color: #14532d; }
-.route-cell.cov-2 { background: #86efac; border: 1px solid #4ade80; color: #14532d; }
-.route-cell.cov-3 { background: #22c55e; border: 1px solid #16a34a; color: #fff; }
+/* rgba-тинты поверх --tm-passed вместо непрозрачных пастельных цветов — светлая
+   зелень «плашкой» смотрелась чужеродно на тёмной теме, тинт работает в обеих */
+.route-cell.cov-1 { background: rgba(46, 170, 74, .18); border: 1px solid rgba(46, 170, 74, .5); color: var(--text); }
+.route-cell.cov-2 { background: rgba(46, 170, 74, .42); border: 1px solid rgba(46, 170, 74, .7); color: var(--text); }
+.route-cell.cov-3 { background: var(--tm-passed); border: 1px solid var(--tm-passed); color: #fff; }
 .route-cell-failed { outline: 2px solid var(--failed); outline-offset: 1px; }
 .route-cell-highlighted { outline: 2px solid var(--accent); outline-offset: 1px; }
 .route-cell-selected { box-shadow: 0 0 0 2px var(--accent); }
@@ -626,7 +676,11 @@ tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 @media (max-width: 900px) {
   .charts-grid { grid-template-columns: 1fr; }
 }
-.chart-box { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
+/* min-width:0 — .chart-box-wide это грид-элемент .charts-grid; без него грид-ячейка
+   не сжимается уже min-content содержимого (та же автоматическая минимальная
+   ширина, что у флекс-элементов .page/.app-sidebar выше) и раздвигает карточку
+   шире вьюпорта на мобильном */
+.chart-box { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; min-width: 0; }
 .chart-box h3 { margin: 0 0 10px; font-size: 14px; }
 .chart-box-wide { grid-column: 1 / -1; }
 .chart-rings-row { display: flex; flex-wrap: wrap; gap: 24px; }
@@ -659,9 +713,9 @@ tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 .graph-node circle { stroke: var(--surface); stroke-width: 1.5; cursor: pointer; }
 .graph-node-test circle { fill: var(--accent); }
 .graph-node-route circle, .graph-node-page circle { fill: var(--border); }
-.graph-node-route.cov-1 circle, .graph-node-page.cov-1 circle { fill: #dcfce7; }
-.graph-node-route.cov-2 circle, .graph-node-page.cov-2 circle { fill: #86efac; }
-.graph-node-route.cov-3 circle, .graph-node-page.cov-3 circle { fill: #22c55e; }
+.graph-node-route.cov-1 circle, .graph-node-page.cov-1 circle { fill: rgba(46, 170, 74, .35); }
+.graph-node-route.cov-2 circle, .graph-node-page.cov-2 circle { fill: rgba(46, 170, 74, .65); }
+.graph-node-route.cov-3 circle, .graph-node-page.cov-3 circle { fill: var(--tm-passed); }
 .graph-node:hover circle { stroke: var(--accent); }
 
 /* ---------------- treemap «Тесты по областям» ---------------- */
@@ -875,11 +929,19 @@ tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
   .run-log { font-size: 11px; max-height: 40vh; }
   table { font-size: 12px; }
   th, td { padding: 6px 6px; white-space: nowrap; }
+  /* реестр xfail: «Тест»/«Причина» — длинный текст, nowrap выше растягивал всю
+     страницу шире вьюпорта вместо переноса внутри table-wrap */
+  #xfail-rows td { white-space: normal; word-break: break-word; }
+  /* таблица «Области» в покрытии: колонка «Область» с длинными путями — та же причина */
+  #areas-table td { white-space: normal; word-break: break-word; }
   .summary-badges { flex-wrap: wrap; gap: 6px; }
   .report-filters { flex-wrap: wrap; gap: 6px; }
   .coverage-layout { grid-template-columns: 1fr; }
   .coverage-toolbar { gap: 8px; }
-  .project-grid { grid-template-columns: repeat(2, 1fr); }
+  /* карта маршрутов: длинные пути API одним словом раздвигали .route-area-grid
+     за пределы вьюпорта — разрешаем перенос внутри ячейки */
+  .route-cell { max-width: 100%; white-space: normal; word-break: break-all; }
+  .project-grid { grid-template-columns: 1fr; }
   .kpi-row { grid-template-columns: repeat(2, 1fr); gap: 8px; }
   .kpi-tile { padding: 10px 12px; }
   .kpi-tile-value { font-size: 18px; }
