@@ -4,8 +4,9 @@
 (run-payload с counts/tests, список тестов name/status/duration/message) — без записи
 на диск, без сети и без обращений к БД: только bytes на выходе.
 
-Палитра — тёмная тема из скилла dataviz (references/palette.md): поверхность/чернила/
-статус-цвета для passed/failed/broken и последовательный синий для шкалы длительности.
+Палитра — глубокий тёмно-синий фон и неоновый градиент фиолетовый→розовый→голубой,
+в духе токенов темы из ui/style.css: поверхность/чернила/статус-цвета для
+passed/failed/broken и неоновая шкала для длительности.
 """
 from __future__ import annotations
 
@@ -17,24 +18,40 @@ import matplotlib
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt  # noqa: E402  (после matplotlib.use)
+from matplotlib.colors import LinearSegmentedColormap  # noqa: E402
 
 STATUSES = ("passed", "failed", "broken", "skipped")
 
-SURFACE = "#1a1a19"
-PAGE = "#0d0d0d"
-INK_PRIMARY = "#ffffff"
-INK_SECONDARY = "#c3c2b7"
-INK_MUTED = "#898781"
-GRIDLINE = "#2c2c2a"
-BASELINE = "#383835"
+PAGE = "#10142a"
+SURFACE = "#1c2142"
+INK_PRIMARY = "#f5f6fb"
+INK_SECONDARY = "#a7acc8"
+INK_MUTED = "#6f7495"
+GRIDLINE = "#2a3060"
+BASELINE = "#333a6e"
 
 STATUS_COLORS = {
-    "passed": "#0ca30c",
-    "failed": "#d03b3b",
-    "broken": "#ec835a",
+    "passed": "#22c55e",
+    "failed": "#ef4444",
+    "broken": "#e2794f",
     "skipped": INK_MUTED,
 }
-SEQUENTIAL_BLUE = "#3987e5"
+
+# Неоновый градиент фиолетовый → розовый → голубой — замена однотонному
+# SEQUENTIAL_BLUE там, где раньше была последовательная шкала (топ-10 долгих тестов).
+GRADIENT_START = "#8b5cf6"
+GRADIENT_MID = "#ec4899"
+GRADIENT_END = "#38bdf8"
+NEON_CMAP = LinearSegmentedColormap.from_list(
+    "neon", [GRADIENT_START, GRADIENT_MID, GRADIENT_END]
+)
+
+
+def _neon_gradient(n: int) -> list[str]:
+    if n <= 1:
+        return [GRADIENT_MID]
+    return [matplotlib.colors.to_hex(NEON_CMAP(i / (n - 1))) for i in range(n)]
+
 
 FONT_FAMILY = ["system-ui", "Segoe UI", "DejaVu Sans", "sans-serif"]
 
@@ -259,7 +276,7 @@ def _draw_longest_or_failed(ax, results: list[dict]) -> None:
         top = list(reversed(top))
         names = [_truncate(t.get("name") or "") for t in top]
         values = [float(t["duration"]) for t in top]
-        colors = [SEQUENTIAL_BLUE] * len(values)
+        colors = _neon_gradient(len(values))
         title = "Топ-10 самых долгих тестов, с"
 
         def _label(v: float) -> str:
