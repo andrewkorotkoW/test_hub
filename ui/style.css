@@ -14,6 +14,15 @@
   --broken: #d97706;
   --skipped: #6b7280;
   --xfail: #0891b2;
+  /* treemap «Тесты по областям» + полоса статусов в таблице «Области»: палитра
+     задана постановкой задачи отдельно от --passed/--failed/--xfail/--skipped
+     выше (те использует остальная страница), держать в синхроне с
+     STATUS_COLORS в ui/coverage-areas-logic.js */
+  --tm-passed: #2eaa4a;
+  --tm-failed: #e04848;
+  --tm-xfail: #e0a020;
+  --tm-skipped: #a0a4ad;
+  --tm-none: #d5d7dc;
   --unknown: #9333ea;
   --queued: #64748b;
   --running: #2563eb;
@@ -534,8 +543,56 @@ tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 .graph-node-route.cov-3 circle, .graph-node-page.cov-3 circle { fill: #22c55e; }
 .graph-node:hover circle { stroke: var(--accent); }
 
-/* ---------------- дерево проекта (интерактивная диаграмма) ---------------- */
-.chart-tree-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+/* ---------------- treemap «Тесты по областям» ---------------- */
+.chart-treemap-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.chart-treemap-head h3 { margin: 0; }
+.treemap-legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 11px; color: var(--text-muted); }
+.tm-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+.tm-swatch.tm-passed { background: var(--tm-passed); }
+.tm-swatch.tm-failed { background: var(--tm-failed); }
+.tm-swatch.tm-xfail { background: var(--tm-xfail); }
+.tm-swatch.tm-skipped { background: var(--tm-skipped); }
+.tm-swatch.tm-none { background: var(--tm-none); }
+.chart-treemap-body {
+  width: 100%;
+  height: 560px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.chart-treemap-body svg { display: block; }
+.chart-treemap-hint { margin: 6px 0 0; font-size: 11px; }
+.tm-border { fill: none; stroke: var(--border); stroke-width: 1; }
+.tm-kind > .tm-border { stroke-width: 1.5; }
+.tm-label { font-size: 10px; fill: var(--text-muted); dominant-baseline: hanging; pointer-events: none; }
+.tm-kind > .tm-label { font-weight: 600; fill: var(--text); }
+/* у файла нет своей полосы (см. TM_FILE_PAD в coverage.js) — подпись лежит поверх
+   ячеек тестов, плашка под ней нужна, чтобы текст не терялся на цветном фоне */
+.tm-file-label-bg { fill: var(--surface); opacity: .82; pointer-events: none; }
+.tm-file > .tm-label { fill: var(--text); }
+.tm-label-clickable { pointer-events: all; cursor: pointer; fill: var(--accent); font-weight: 600; }
+.tm-label-clickable:hover { text-decoration: underline; }
+.tm-area-selected > .tm-border { stroke: var(--accent); stroke-width: 2; }
+.tm-cell rect { stroke: var(--surface); stroke-width: 1; cursor: pointer; }
+.tm-cell:hover rect { stroke: var(--accent); stroke-width: 2; }
+
+/* ---------------- таблица «Области» ---------------- */
+.area-statusbar { display: block; }
+.area-percent.good { color: var(--passed); font-weight: 600; }
+.area-percent.warn { color: var(--broken); font-weight: 600; }
+.area-percent.bad { color: var(--failed); font-weight: 600; }
+.area-row-label { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+#areas-table tbody tr.clickable { cursor: pointer; }
+#areas-table tbody tr.clickable:hover { background: rgba(37, 99, 235, 0.06); }
+#areas-table tbody tr.area-row-selected { background: rgba(37, 99, 235, 0.1); }
+#areas-table thead th[data-sort] { cursor: pointer; user-select: none; white-space: nowrap; }
+#areas-table thead th[data-sort]:hover { color: var(--accent); }
+#areas-table thead th.sort-active::after { content: " \25B4"; }
+#areas-table thead th.sort-active.sort-desc::after { content: " \25BE"; }
+
+/* ---------------- дерево проекта (свёрнуто по умолчанию, интерактивная диаграмма) ---------------- */
+.chart-tree-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; cursor: pointer; user-select: none; }
 .chart-tree-head h3 { margin: 0; }
 .chart-tree-controls { display: flex; align-items: center; gap: 8px; }
 .chart-tree-layout-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
