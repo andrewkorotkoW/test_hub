@@ -78,6 +78,14 @@
           <button id="run-all-btn" class="primary">Запустить всё</button>
           <button id="run-selected-btn">Запустить выбранное</button>
         </div>
+        <div id="manual-run-block" class="manual-run-block" hidden>
+          <h3>Ручной прогон на stage</h3>
+          <p class="muted">Стенд <strong id="manual-run-stand-name"></strong> — боевой, запуск только вручную с подтверждением.</p>
+          <div id="manual-run-presets" class="run-buttons"></div>
+          <div class="run-buttons">
+            <button id="manual-run-selected-btn">Выбранные тесты из дерева</button>
+          </div>
+        </div>
       </div>
 
       <div class="card" id="run-card" hidden>
@@ -224,6 +232,18 @@
       <div class="modal-actions">
         <span></span>
         <button id="share-close-btn">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="manual-run-modal-overlay" class="modal-overlay" hidden>
+    <div class="modal-box">
+      <h2>Подтверждение ручного прогона</h2>
+      <p id="manual-run-modal-text"></p>
+      <label class="manual-run-confirm-label"><input type="checkbox" id="manual-run-confirm-checkbox"> Понимаю</label>
+      <div class="modal-actions">
+        <button id="manual-run-cancel-btn">Отмена</button>
+        <button id="manual-run-confirm-btn" class="primary" disabled>Запустить</button>
       </div>
     </div>
   </div>
