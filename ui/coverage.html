@@ -31,9 +31,45 @@
       </div>
       <div id="charts-body">
         <div class="charts-grid">
+          <div class="chart-box chart-box-wide" id="chart-treemap-box">
+            <div class="chart-treemap-head">
+              <h3>Тесты по областям</h3>
+              <div class="treemap-legend">
+                <span><span class="tm-swatch tm-passed"></span>passed</span>
+                <span><span class="tm-swatch tm-failed"></span>failed</span>
+                <span><span class="tm-swatch tm-xfail"></span>xfail</span>
+                <span><span class="tm-swatch tm-skipped"></span>skipped</span>
+                <span><span class="tm-swatch tm-none"></span>не запускался</span>
+              </div>
+            </div>
+            <div id="chart-treemap-body" class="chart-treemap-body"><p class="muted">Загрузка…</p></div>
+            <p class="muted chart-treemap-hint">Площадь ячейки — один тест, цвет — его статус на выбранном стенде.
+              Наведите курсор на ячейку — всплывёт тест и статус; клик по тесту открывает панель связей. Клик по
+              подписи области фильтрует карту маршрутов ниже и подсвечивает строку в таблице «Области».</p>
+          </div>
+          <div class="chart-box chart-box-wide" id="chart-areas-table-box">
+            <h3>Области</h3>
+            <div class="table-wrap">
+              <table id="areas-table">
+                <thead>
+                  <tr>
+                    <th data-sort="area">Область</th>
+                    <th data-sort="total">Тестов</th>
+                    <th>Статусы</th>
+                    <th data-sort="percent">% прошедших</th>
+                    <th data-sort="routes">Маршруты API</th>
+                  </tr>
+                </thead>
+                <tbody id="areas-table-rows"><tr><td colspan="5" class="muted">Загрузка…</td></tr></tbody>
+              </table>
+            </div>
+          </div>
           <div class="chart-box chart-box-wide" id="chart-tree-box">
-            <div class="chart-tree-head">
+            <div class="chart-tree-head" id="tree-toggle">
               <h3>Дерево проекта</h3>
+              <button type="button" class="charts-toggle-btn" id="tree-toggle-btn" aria-expanded="false">▸</button>
+            </div>
+            <div id="tree-inner-body" hidden>
               <div class="chart-tree-controls">
                 <div class="chart-tree-layout-toggle" role="group" aria-label="Раскладка дерева">
                   <button type="button" id="tree-layout-topdown" class="active">Сверху вниз</button>
@@ -44,13 +80,13 @@
                 <button type="button" id="tree-failed-only">Только упавшие</button>
                 <button type="button" id="tree-reset-view">Сбросить вид</button>
               </div>
+              <div id="chart-tree-body" class="chart-tree-body"><p class="muted">Загрузка…</p></div>
+              <p class="muted chart-tree-hint">Колесо — зум, перетаскивание — панорама, клик по узлу — раскрыть/свернуть
+                или открыть связи теста. По умолчанию видна только структура каталогов до папок областей —
+                на свёрнутых узлах число тестов и полоска статусов внутри. «Развернуть всё» / «Свернуть всё» и
+                «Только упавшие» — быстрая навигация по большому дереву; «Сбросить вид» возвращает автоподгон
+                масштаба, если до этого зумили вручную.</p>
             </div>
-            <div id="chart-tree-body" class="chart-tree-body"><p class="muted">Загрузка…</p></div>
-            <p class="muted chart-tree-hint">Колесо — зум, перетаскивание — панорама, клик по узлу — раскрыть/свернуть
-              или открыть связи теста. По умолчанию видна только структура каталогов до папок областей —
-              на свёрнутых узлах число тестов и полоска статусов внутри. «Развернуть всё» / «Свернуть всё» и
-              «Только упавшие» — быстрая навигация по большому дереву; «Сбросить вид» возвращает автоподгон
-              масштаба, если до этого зумили вручную.</p>
           </div>
           <div class="chart-box" id="chart-rings-box">
             <h3>Покрытие маршрутов по стендам</h3>
@@ -111,6 +147,7 @@
 
   <script src="common.js"></script>
   <script src="coverage-tree-logic.js"></script>
+  <script src="coverage-areas-logic.js"></script>
   <script src="coverage.js"></script>
 </body>
 </html>
