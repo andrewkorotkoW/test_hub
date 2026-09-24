@@ -217,6 +217,18 @@ async def test_xfail_api_update_requires_qa(customer_client, db_path, xfail_proj
     assert resp.status_code == 403
 
 
+async def test_xfail_api_update_forbidden_for_manager_too(manager_client, db_path, xfail_project_dir):
+    # update_xfail требует именно роль qa (require_roles("qa")) — manager, в отличие
+    # от списка (list_xfail разрешён qa/manager/customer), сюда тоже не допущен.
+    conn = get_connection()
+    try:
+        _insert_project_and_stand(conn, xfail_project_dir)
+    finally:
+        conn.close()
+    resp = await manager_client.put(f"/api/projects/{PROJECT}/xfail/1", json={"issue_url": "https://x"})
+    assert resp.status_code == 403
+
+
 async def test_xfail_api_check_requires_qa(customer_client, db_path, xfail_project_dir):
     conn = get_connection()
     try:
@@ -227,6 +239,42 @@ async def test_xfail_api_check_requires_qa(customer_client, db_path, xfail_proje
         f"/api/projects/{PROJECT}/xfail/check", params={"stand": STAND}, json={}
     )
     assert resp.status_code == 403
+
+
+async def test_xfail_api_check_forbidden_for_manager_too(manager_client, db_path, xfail_project_dir):
+    conn = get_connection()
+    try:
+        _insert_project_and_stand(conn, xfail_project_dir)
+    finally:
+        conn.close()
+    resp = await manager_client.post(
+        f"/api/projects/{PROJECT}/xfail/check", params={"stand": STAND}, json={}
+    )
+    assert resp.status_code == 403
+
+
+async def test_xfail_api_list_allows_manager_read(manager_client, db_path, xfail_project_dir):
+    conn = get_connection()
+    try:
+        _insert_project_and_stand(conn, xfail_project_dir)
+    finally:
+        conn.close()
+    resp = await manager_client.get(f"/api/projects/{PROJECT}/xfail", params={"stand": STAND})
+    assert resp.status_code == 200, resp.text
+
+
+async def test_xfail_api_list_allows_customer_read(customer_client, db_path, xfail_project_dir):
+    # manager_client и customer_client используются каждая в своём тесте, а не вместе:
+    # обе фикстуры логинятся на общей AsyncClient-фикстуре `client` (см. tests/conftest.py),
+    # второй login() в одном тесте затёр бы cookie первого (тот же приём, что и
+    # tests/test_schedule.py::_login_as для одновременных ролей в одном тесте).
+    conn = get_connection()
+    try:
+        _insert_project_and_stand(conn, xfail_project_dir)
+    finally:
+        conn.close()
+    resp = await customer_client.get(f"/api/projects/{PROJECT}/xfail", params={"stand": STAND})
+    assert resp.status_code == 200, resp.text
 
 
 # ------------------------------------------------------------------ сквозной прогон: реальный pytest + recalc

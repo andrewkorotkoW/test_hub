@@ -35,10 +35,14 @@ from app.tg_bot import (
     build_marker_keyboard,
     build_run_args,
     build_run_keyboard,
+    build_schedules_keyboard,
     build_stands_keyboard,
+    format_flaky,
     format_projects,
     format_report,
+    format_schedules,
     format_status,
+    format_xfail,
     parse_callback,
     parse_optional_run_id,
     parse_project_name,
@@ -828,3 +832,268 @@ async def test_access_middleware_denies_run_report_callback_without_hitting_clie
     client.get_report.assert_not_called()
     client.get_report_png.assert_not_called()
     client.get_trend_png.assert_not_called()
+
+
+# ------------------------------------------------------------------ форматирование: флаки/дефекты/расписания
+def test_format_flaky_lists_top_items_with_percent_and_counts():
+    items = [
+        {"test": "tests.test_a#test_one", "stand": "stage", "score": 0.75, "fails": 3, "runs": 4},
+        {"test": "tests.test_b#test_two", "stand": "stage", "score": 0.5, "fails": 2, "runs": 4},
+    ]
+    text = format_flaky("bike_fit", "stage", items)
+    assert text.splitlines()[0] == "Нестабильные тесты «bike_fit» / stage:"
+    assert "• test_one: 75% (3/4 упал)" in text
+    assert "• test_two: 50% (2/4 упал)" in text
+    # stand явно задан -> суффикс со стендом в строках не дублируется
+    assert "стенд stage" not in text
+
+
+def test_format_flaky_without_stand_shows_stand_per_item():
+    items = [{"test": "tests.test_a#test_one", "stand": "stage", "score": 0.5, "fails": 1, "runs": 2}]
+    text = format_flaky("bike_fit", None, items)
+    assert text.splitlines()[0] == "Нестабильные тесты «bike_fit»:"
+    assert "стенд stage" in text
+
+
+def test_format_flaky_empty_items_shows_placeholder():
+    text = format_flaky("bike_fit", "stage", [])
+    assert "Пока нет данных" in text
+
+
+def test_format_xfail_marks_xpass_and_lists_stand():
+    items = [
+        {"test": "tests.test_a#test_bug", "stand": "stage", "state": "xfail"},
+        {"test": "tests.test_b#test_fixed", "stand": "prod", "state": "xpass"},
+    ]
+    text = format_xfail("bike_fit", items)
+    assert text.splitlines()[0] == "Известные дефекты «bike_fit»:"
+    assert "• test_bug [stage]: xfail" in text
+    assert "• test_fixed [prod]: можно снять xfail (xpass)" in text
+
+
+def test_format_xfail_empty_items_shows_placeholder():
+    assert "Дефектов не найдено" in format_xfail("bike_fit", [])
+
+
+def test_format_schedules_lists_state_stand_and_cron():
+    items = [
+        {"id": 5, "stand": "stage", "target": "all", "marker": None, "cron": "0 3 * * 1-5", "enabled": True, "last_run_id": 42},
+        {"id": 6, "stand": None, "target": "custom", "marker": "smoke", "cron": "0 4 * * 1-5", "enabled": False, "last_run_id": None},
+    ]
+    text = format_schedules("bike_fit", items)
+    lines = text.splitlines()
+    assert lines[0] == "Расписания «bike_fit»:"
+    assert lines[1] == "• #5 stage / Все / все тесты — 0 3 * * 1-5 (включено), последний прогон #42"
+    assert lines[2] == "• #6 без стенда / smoke / выборочно — 0 4 * * 1-5 (выключено)"
+
+
+def test_format_schedules_empty_shows_placeholder():
+    assert "Расписаний нет" in format_schedules("bike_fit", [])
+
+
+def test_build_schedules_keyboard_toggle_buttons_encode_project_and_id():
+    items = [{"id": 5, "enabled": True}, {"id": 6, "enabled": False}]
+    markup = build_schedules_keyboard("bike_fit", items)
+    data = [btn.callback_data for row in markup.inline_keyboard for btn in row]
+    assert data == ["sched_toggle:bike_fit:5", "sched_toggle:bike_fit:6", "menu"]
+    labels = [btn.text for row in markup.inline_keyboard for btn in row]
+    assert labels[0].startswith("✅")
+    assert labels[1].startswith("▫️")
+
+
+# ------------------------------------------------------------------ команды /flaky, /xfail, /schedules и кнопка вкл/выкл
+async def test_cmd_flaky_sends_formatted_list_with_stand(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    client.list_flaky.return_value = [
+        {"test": "tests.test_a#test_one", "stand": "stage", "score": 1.0, "fails": 2, "runs": 2}
+    ]
+    dispatcher = _make_dispatcher(client)
+
+    message = _message(bot, text="/flaky bike_fit stage")
+    await dispatcher.feed_update(bot, Update(update_id=1, message=message))
+
+    client.list_flaky.assert_awaited_once_with("bike_fit", "stage")
+    assert [type(c).__name__ for c in session.calls] == ["SendMessage"]
+    assert session.calls[0].text == format_flaky(
+        "bike_fit", "stage", [{"test": "tests.test_a#test_one", "stand": "stage", "score": 1.0, "fails": 2, "runs": 2}]
+    )
+
+
+async def test_cmd_flaky_missing_project_shows_usage(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    dispatcher = _make_dispatcher(client)
+
+    message = _message(bot, text="/flaky")
+    await dispatcher.feed_update(bot, Update(update_id=1, message=message))
+
+    client.list_flaky.assert_not_called()
+    assert session.calls[0].text == "Использование: /flaky <проект> [стенд]"
+
+
+async def test_cmd_flaky_unknown_project_shows_not_found(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    request = httpx.Request("GET", "http://testserver/api/projects/nope/flaky")
+    response = httpx.Response(404, request=request, json={"detail": "Not found"})
+    client.list_flaky.side_effect = httpx.HTTPStatusError("404", request=request, response=response)
+    dispatcher = _make_dispatcher(client)
+
+    message = _message(bot, text="/flaky nope")
+    await dispatcher.feed_update(bot, Update(update_id=1, message=message))
+
+    assert session.calls[0].text == "Проект «nope» не найден."
+
+
+async def test_cmd_xfail_sends_formatted_list(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    client.list_xfail.return_value = [{"test": "tests.test_a#test_bug", "stand": "stage", "state": "xfail"}]
+    dispatcher = _make_dispatcher(client)
+
+    message = _message(bot, text="/xfail bike_fit")
+    await dispatcher.feed_update(bot, Update(update_id=1, message=message))
+
+    client.list_xfail.assert_awaited_once_with("bike_fit", None)
+    assert session.calls[0].text == format_xfail(
+        "bike_fit", [{"test": "tests.test_a#test_bug", "stand": "stage", "state": "xfail"}]
+    )
+
+
+async def test_cmd_schedules_sends_list_with_toggle_keyboard(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    client.list_schedules.return_value = [
+        {"id": 5, "stand": "stage", "target": "all", "marker": None, "cron": "0 3 * * 1-5", "enabled": True, "last_run_id": None}
+    ]
+    dispatcher = _make_dispatcher(client)
+
+    message = _message(bot, text="/schedules bike_fit")
+    await dispatcher.feed_update(bot, Update(update_id=1, message=message))
+
+    client.list_schedules.assert_awaited_once_with("bike_fit")
+    sent = session.calls[0]
+    assert "Расписания «bike_fit»" in sent.text
+    assert [btn.callback_data for row in sent.reply_markup.inline_keyboard for btn in row] == [
+        "sched_toggle:bike_fit:5",
+        "menu",
+    ]
+
+
+async def test_cb_sched_toggle_flips_enabled_state_and_edits_keyboard(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    before = {"id": 5, "stand": "stage", "target": "all", "marker": None, "cron": "0 3 * * 1-5", "enabled": True, "last_run_id": None}
+    after = {**before, "enabled": False}
+    client.list_schedules.side_effect = [[before], [after]]
+    dispatcher = _make_dispatcher(client)
+
+    flow_message = _message(bot, text="Расписания «bike_fit»:")
+    await dispatcher.feed_update(
+        bot, Update(update_id=1, callback_query=_callback(bot, flow_message, "sched_toggle:bike_fit:5", cb_id="c1"))
+    )
+
+    client.set_schedule_enabled.assert_awaited_once_with("bike_fit", 5, False)
+    assert [type(c).__name__ for c in session.calls] == ["AnswerCallbackQuery", "EditMessageText"]
+    edited = session.calls[1]
+    assert "выключено" in edited.text
+    assert [btn.callback_data for row in edited.reply_markup.inline_keyboard for btn in row] == [
+        "sched_toggle:bike_fit:5",
+        "menu",
+    ]
+
+
+async def test_cb_sched_toggle_unknown_id_shows_alert_and_does_not_call_set(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    client.list_schedules.return_value = []
+    dispatcher = _make_dispatcher(client)
+
+    flow_message = _message(bot, text="Расписания «bike_fit»:")
+    await dispatcher.feed_update(
+        bot, Update(update_id=1, callback_query=_callback(bot, flow_message, "sched_toggle:bike_fit:999", cb_id="c1"))
+    )
+
+    client.set_schedule_enabled.assert_not_called()
+    assert [type(c).__name__ for c in session.calls] == ["AnswerCallbackQuery"]
+    answer = session.calls[0]
+    assert answer.text == "Расписание не найдено."
+    assert answer.show_alert is True
+
+
+async def test_cb_flaky_button_from_stands_keyboard_edits_message(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    client.list_flaky.return_value = [{"test": "tests.test_a#test_one", "stand": "stage", "score": 1.0, "fails": 1, "runs": 1}]
+    dispatcher = _make_dispatcher(client)
+
+    flow_message = _message(bot, text="Проект: bike_fit\nВыберите стенд:")
+    await dispatcher.feed_update(
+        bot, Update(update_id=1, callback_query=_callback(bot, flow_message, "flaky:bike_fit", cb_id="c1"))
+    )
+
+    client.list_flaky.assert_awaited_once_with("bike_fit")
+    assert [type(c).__name__ for c in session.calls] == ["AnswerCallbackQuery", "EditMessageText"]
+    assert "Нестабильные тесты «bike_fit»" in session.calls[1].text
+
+
+async def test_cb_xfail_button_shows_check_button_only_when_items_present(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    client.list_xfail.return_value = [{"test": "tests.test_a#test_bug", "stand": "stage", "state": "xfail"}]
+    dispatcher = _make_dispatcher(client)
+
+    flow_message = _message(bot, text="Проект: bike_fit\nВыберите стенд:")
+    await dispatcher.feed_update(
+        bot, Update(update_id=1, callback_query=_callback(bot, flow_message, "xfail:bike_fit", cb_id="c1"))
+    )
+
+    client.list_xfail.assert_awaited_once_with("bike_fit")
+    edited = session.calls[1]
+    callback_datas = [btn.callback_data for row in edited.reply_markup.inline_keyboard for btn in row]
+    assert callback_datas == ["xfail_check:bike_fit", "project:bike_fit"]
+
+
+async def test_cb_xfail_button_no_items_hides_check_button(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    client.list_xfail.return_value = []
+    dispatcher = _make_dispatcher(client)
+
+    flow_message = _message(bot, text="Проект: bike_fit\nВыберите стенд:")
+    await dispatcher.feed_update(
+        bot, Update(update_id=1, callback_query=_callback(bot, flow_message, "xfail:bike_fit", cb_id="c1"))
+    )
+
+    edited = session.calls[1]
+    callback_datas = [btn.callback_data for row in edited.reply_markup.inline_keyboard for btn in row]
+    assert callback_datas == ["project:bike_fit"]
+
+
+async def test_access_middleware_denies_flaky_and_schedules_commands(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    dispatcher = _make_dispatcher(client)
+
+    for text in ("/flaky bike_fit", "/xfail bike_fit", "/schedules bike_fit"):
+        session.calls.clear()
+        message = _message(bot, user_id=999, text=text)
+        await dispatcher.feed_update(bot, Update(update_id=1, message=message))
+        assert [type(c).__name__ for c in session.calls] == ["SendMessage"]
+        assert session.calls[0].text == ACCESS_DENIED_MESSAGE
+
+    client.list_flaky.assert_not_called()
+    client.list_xfail.assert_not_called()
+    client.list_schedules.assert_not_called()
