@@ -70,9 +70,13 @@ async def create_run(
         ).fetchone()
         if not stand:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stand not found")
-    run_id = await runner.submit_run(
-        project["name"], body.stand, body.target, user["login"], body.marker, body.repeat
-    )
+    try:
+        run_id = await runner.submit_run(
+            project["name"], body.stand, body.target, user["login"], body.marker, body.repeat,
+            confirm_manual=body.confirm_manual,
+        )
+    except runner.ManualRunNotConfirmed as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     row = _get_run_or_404(conn, run_id)
     return _run_payload(row)
 
