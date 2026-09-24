@@ -130,16 +130,25 @@ function renderSidebar(user, page) {
   const theme = document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
 
   mount.innerHTML = `
-    <a class="app-sidebar-brand" href="projects.html">Test Hub</a>
-    <nav class="app-nav">${nav}${roleNav}</nav>
-    <div class="app-sidebar-footer">
-      <button type="button" id="theme-toggle-btn" class="theme-toggle" aria-pressed="${theme === "light" ? "true" : "false"}">
-        <span id="theme-toggle-label">${theme === "dark" ? "Тёмная тема" : "Светлая тема"}</span>
-      </button>
-      <button id="logout-btn">Выйти</button>
+    <div class="app-sidebar-top">
+      <a class="app-sidebar-brand" href="projects.html">Test Hub</a>
+      <button type="button" id="app-burger-btn" class="app-burger-btn" aria-label="Открыть меню" aria-expanded="false">&#9776;</button>
+    </div>
+    <div class="app-sidebar-collapsible">
+      <nav class="app-nav">${nav}${roleNav}</nav>
+      <div class="app-sidebar-footer">
+        <button type="button" id="theme-toggle-btn" class="theme-toggle" aria-pressed="${theme === "light" ? "true" : "false"}">
+          <span id="theme-toggle-label">${theme === "dark" ? "Тёмная тема" : "Светлая тема"}</span>
+        </button>
+        <button id="logout-btn">Выйти</button>
+      </div>
     </div>
   `;
 
+  document.getElementById("app-burger-btn").addEventListener("click", () => {
+    const open = mount.classList.toggle("app-sidebar-open");
+    document.getElementById("app-burger-btn").setAttribute("aria-expanded", open ? "true" : "false");
+  });
   document.getElementById("theme-toggle-btn").addEventListener("click", () => {
     const next = document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light";
     applyTheme(next);
@@ -149,6 +158,11 @@ function renderSidebar(user, page) {
   document.getElementById("logout-btn").addEventListener("click", async () => {
     try { await api("/api/logout", { method: "POST" }); } catch { /* всё равно уходим на логин */ }
     window.location.href = "index.html";
+  });
+  // на мобильном бургер-меню после перехода по ссылке должно закрываться —
+  // иначе оно перекрывает страницу при следующем открытии
+  mount.querySelectorAll(".app-nav-link[href]").forEach((link) => {
+    link.addEventListener("click", () => mount.classList.remove("app-sidebar-open"));
   });
 }
 
