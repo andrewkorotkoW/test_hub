@@ -51,6 +51,28 @@ _project_locks: dict[str, asyncio.Lock] = {}
 _active_procs: dict[int, "asyncio.subprocess.Process"] = {}
 _cancelled: set[int] = set()
 
+# Хуки, вызываемые после завершения каждого прогона (см. _finalize) — раннер не
+# знает про app.core.schedule (тот сам импортирует runner, обратный импорт создал
+# бы цикл), поэтому подписка делается снаружи, в app/main.py::lifespan, где обе
+# стороны уже видны.
+_finalize_hooks: list = []
+
+
+def register_finalize_hook(hook) -> None:
+    # idempotent: app/main.py::lifespan может быть запущен повторно в одном процессе
+    # (см. tests/test_tg_bot.py::test_lifespan_without_token_skips_bot, вызывающий
+    # lifespan(app) напрямую) — без этой проверки каждый повторный запуск добавлял
+    # бы в общий список ещё одну копию того же хука.
+    if hook not in _finalize_hooks:
+        _finalize_hooks.append(hook)
+
+
+def unregister_finalize_hook(hook) -> None:
+    """Для тестов: убрать хук, добавленный вручную (без lifespan), чтобы не влиять
+    на остальные тесты в той же pytest-сессии (_finalize_hooks — модульное состояние)."""
+    if hook in _finalize_hooks:
+        _finalize_hooks.remove(hook)
+
 
 def _lock_for(project: str) -> asyncio.Lock:
     return _project_locks.setdefault(project, asyncio.Lock())
@@ -224,6 +246,12 @@ async def _finalize(run_id: int, status: str, started_at: float, counts: dict[st
         # здесь. Независимы друг от друга — ни один не знает про другой.
         asyncio.create_task(asyncio.to_thread(flaky.recalc, row["project"], row["stand"]))
         asyncio.create_task(asyncio.to_thread(xfail_registry.recalc, row["project"], row["stand"], run_id))
+
+    # Уведомление о расписании (app.core.schedule.on_run_finished) само решает, был ли
+    # этот run_id вообще запущен планировщиком — не блокирует завершение прогона.
+    # Вне if выше: у расписания может не быть стенда (stand допускает NULL).
+    for hook in _finalize_hooks:
+        asyncio.create_task(hook(run_id))
 
 
 async def _advance_queue(project_name: str) -> None:

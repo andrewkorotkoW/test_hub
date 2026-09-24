@@ -242,3 +242,38 @@ class XfailCheckRequest(BaseModel):
 class XfailCheckResult(BaseModel):
     run_id: int
     count: int
+
+
+class ScheduleCreate(BaseModel):
+    stand: Optional[str] = None
+    target: str = "all"
+    marker: Optional[str] = None
+    cron: str
+    enabled: bool = True
+    notify_chat_ids: list[int] = Field(default_factory=list)
+
+
+class ScheduleUpdate(BaseModel):
+    stand: Optional[str] = None
+    target: Optional[str] = None
+    marker: Optional[str] = None
+    cron: Optional[str] = None
+    enabled: Optional[bool] = None
+    notify_chat_ids: Optional[list[int]] = None
+
+
+class Schedule(BaseModel):
+    id: int
+    project: str
+    stand: Optional[str] = None
+    target: str
+    marker: Optional[str] = None
+    cron: str
+    enabled: bool
+    notify_chat_ids: list[int]
+    last_run_id: Optional[int] = None
+    next_run_at: Optional[str] = None
+
+
+class ScheduleRunNowResult(BaseModel):
+    run_id: int

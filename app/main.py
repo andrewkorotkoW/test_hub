@@ -1,3 +1,5 @@
+import asyncio
+import contextlib
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -6,8 +8,9 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from .config import settings
+from .core import runner, schedule
 from .db import init_db
-from .routers import admin, auth, coverage, flaky, projects, runs, share, users, xfail
+from .routers import admin, auth, coverage, flaky, projects, runs, schedules, share, users, xfail
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +34,20 @@ async def lifespan(app: FastAPI):
             logger.exception("tg_bot: не удалось запустить Telegram-бота")
             tg_application = None
     app.state.tg_bot = tg_application
+    # Уведомления о прогонах по расписанию шлются через того же бота (см.
+    # app.core.schedule.on_run_finished) — без токена schedule.set_bot(None)
+    # просто отключает отправку, сами прогоны по расписанию всё равно выполняются.
+    schedule.set_bot(tg_application.bot if tg_application is not None else None)
+
+    runner.register_finalize_hook(schedule.on_run_finished)
+    scheduler_task = asyncio.create_task(schedule.scheduler_loop())
+    app.state.schedule_task = scheduler_task
 
     yield
+
+    scheduler_task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await scheduler_task
 
     if tg_application is not None:
         try:
@@ -54,6 +69,7 @@ app.include_router(users.router)
 app.include_router(admin.router)
 app.include_router(share.router)
 app.include_router(share.public_router)
+app.include_router(schedules.router)
 
 # Статика фронтенда (ui/) монтируется последней, чтобы её catch-all "/" не
 # перехватывал API-маршруты, зарегистрированные выше.

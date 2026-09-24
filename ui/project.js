@@ -51,6 +51,180 @@
   const flakyError = document.getElementById("flaky-error");
   const FLAKY_THRESHOLD = 0.3;
 
+  // ---------------- расписание ----------------
+  // Роутер app/routers/schedules.py требует роль qa на все методы (см. задачу),
+  // поэтому остальным ролям карточку просто не показываем, а не даём кликать
+  // кнопки, которые всё равно ответят 403.
+  const canManageSchedules = ["qa", "superadmin"].includes(user.role);
+  const schedulesCard = document.getElementById("schedules-card");
+  const schedulesError = document.getElementById("schedules-error");
+  const schedulesRows = document.getElementById("schedules-rows");
+  const schedStandSelect = document.getElementById("sched-stand-select");
+  const schedMarkerSelect = document.getElementById("sched-marker-select");
+  const schedTargetInput = document.getElementById("sched-target-input");
+  const schedTimeInput = document.getElementById("sched-time-input");
+  const schedChatsInput = document.getElementById("sched-chats-input");
+  const schedCreateBtn = document.getElementById("sched-create-btn");
+  const DAY_LABELS = { "0": "Вс", "1": "Пн", "2": "Вт", "3": "Ср", "4": "Чт", "5": "Пт", "6": "Сб" };
+
+  function formatCron(cron) {
+    const parts = (cron || "").split(" ");
+    if (parts.length !== 5) return cron || "—";
+    const [min, hour, , , dow] = parts;
+    const time = `${hour.padStart(2, "0")}:${min.padStart(2, "0")}`;
+    if (dow === "*") return `${time}, каждый день`;
+    const days = dow.split(",").flatMap((token) => {
+      if (token.includes("-")) {
+        const [a, b] = token.split("-").map(Number);
+        const seq = [];
+        for (let d = a; d <= b; d++) seq.push(d);
+        return seq;
+      }
+      return [Number(token)];
+    });
+    const labels = days.map((d) => DAY_LABELS[String(((d % 7) + 7) % 7)] ?? d).join(", ");
+    return `${time}, ${labels}`;
+  }
+
+  function buildCronFromForm() {
+    const time = schedTimeInput.value || "03:00";
+    const [hh, mm] = time.split(":");
+    const days = Array.from(document.querySelectorAll("#sched-days input:checked")).map((cb) => cb.value);
+    if (!days.length) throw new Error("Отметьте хотя бы один день недели.");
+    return `${parseInt(mm, 10)} ${parseInt(hh, 10)} * * ${days.join(",")}`;
+  }
+
+  function renderSchedules(items) {
+    if (!items.length) {
+      schedulesRows.innerHTML = `<tr><td colspan="7" class="muted">Расписаний пока нет.</td></tr>`;
+      return;
+    }
+    schedulesRows.innerHTML = items.map((s) => `
+      <tr data-id="${s.id}">
+        <td><button class="sched-toggle-btn" data-id="${s.id}" data-enabled="${s.enabled}">${s.enabled ? "✅ вкл" : "▫️ выкл"}</button></td>
+        <td>${escapeHtml(s.stand || "без стенда")}</td>
+        <td>${escapeHtml(s.marker || "—")}</td>
+        <td>${s.target === "all" ? "все тесты" : "выборочно"}</td>
+        <td title="${escapeHtml(s.cron)}">${escapeHtml(formatCron(s.cron))}</td>
+        <td>${s.last_run_id ? `<a href="#" class="sched-last-run" data-run-id="${s.last_run_id}">#${s.last_run_id}</a>` : "—"}</td>
+        <td>
+          <button class="sched-run-btn" data-id="${s.id}">Запустить сейчас</button>
+          <button class="sched-delete-btn danger" data-id="${s.id}">Удалить</button>
+        </td>
+      </tr>
+    `).join("");
+  }
+
+  async function loadSchedules() {
+    if (!canManageSchedules) return;
+    schedulesError.hidden = true;
+    try {
+      const items = await api(`/api/projects/${encodeURIComponent(projectName)}/schedules`);
+      renderSchedules(items);
+    } catch (err) {
+      schedulesRows.innerHTML = "";
+      schedulesError.textContent = `Не удалось загрузить расписания: ${err.message}`;
+      schedulesError.hidden = false;
+    }
+  }
+
+  schedulesRows.addEventListener("click", async (ev) => {
+    const lastRunLink = ev.target.closest(".sched-last-run");
+    if (lastRunLink) {
+      ev.preventDefault();
+      openRun(Number(lastRunLink.dataset.runId));
+      return;
+    }
+    const toggleBtn = ev.target.closest(".sched-toggle-btn");
+    if (toggleBtn) {
+      toggleBtn.disabled = true;
+      try {
+        await api(`/api/projects/${encodeURIComponent(projectName)}/schedules/${toggleBtn.dataset.id}`, {
+          method: "PUT",
+          json: { enabled: toggleBtn.dataset.enabled !== "true" },
+        });
+        await loadSchedules();
+      } catch (err) {
+        alert(`Не удалось изменить расписание: ${err.message}`);
+        toggleBtn.disabled = false;
+      }
+      return;
+    }
+    const runBtn = ev.target.closest(".sched-run-btn");
+    if (runBtn) {
+      runBtn.disabled = true;
+      try {
+        const res = await api(`/api/projects/${encodeURIComponent(projectName)}/schedules/${runBtn.dataset.id}/run-now`, {
+          method: "POST",
+        });
+        await openRun(res.run_id);
+        await loadHistory();
+        await loadSchedules();
+      } catch (err) {
+        alert(`Не удалось запустить прогон: ${err.message}`);
+      } finally {
+        runBtn.disabled = false;
+      }
+      return;
+    }
+    const delBtn = ev.target.closest(".sched-delete-btn");
+    if (delBtn) {
+      if (!confirm("Удалить это расписание?")) return;
+      delBtn.disabled = true;
+      try {
+        await api(`/api/projects/${encodeURIComponent(projectName)}/schedules/${delBtn.dataset.id}`, { method: "DELETE" });
+        await loadSchedules();
+      } catch (err) {
+        alert(`Не удалось удалить расписание: ${err.message}`);
+        delBtn.disabled = false;
+      }
+    }
+  });
+
+  schedCreateBtn.addEventListener("click", async () => {
+    schedulesError.hidden = true;
+    let cron;
+    try {
+      cron = buildCronFromForm();
+    } catch (err) {
+      schedulesError.textContent = err.message;
+      schedulesError.hidden = false;
+      return;
+    }
+    const chatsRaw = schedChatsInput.value.trim();
+    let notifyChatIds = [];
+    if (chatsRaw) {
+      notifyChatIds = chatsRaw.split(",").map((s) => s.trim()).filter(Boolean).map(Number);
+      if (notifyChatIds.some((n) => Number.isNaN(n))) {
+        schedulesError.textContent = "Chat id должны быть числами через запятую.";
+        schedulesError.hidden = false;
+        return;
+      }
+    }
+    schedCreateBtn.disabled = true;
+    try {
+      await api(`/api/projects/${encodeURIComponent(projectName)}/schedules`, {
+        method: "POST",
+        json: {
+          stand: schedStandSelect.value || null,
+          marker: schedMarkerSelect.value || null,
+          target: schedTargetInput.value.trim() || "all",
+          cron,
+          enabled: true,
+          notify_chat_ids: notifyChatIds,
+        },
+      });
+      schedTargetInput.value = "";
+      schedChatsInput.value = "";
+      await loadSchedules();
+    } catch (err) {
+      schedulesError.textContent = `Не удалось создать расписание: ${err.message}`;
+      schedulesError.hidden = false;
+    } finally {
+      schedCreateBtn.disabled = false;
+    }
+  });
+
   let currentTests = [];
   let currentWs = null;
   let sawLine = false;
@@ -67,6 +241,8 @@
       standSelect.innerHTML = `<option value="">— без стенда —</option>` +
         stands.map((s) => `<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)} (${escapeHtml(s.url)})</option>`).join("");
       flakyStandSelect.innerHTML = `<option value="">— все стенды —</option>` +
+        stands.map((s) => `<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)}</option>`).join("");
+      schedStandSelect.innerHTML = `<option value="">— без стенда —</option>` +
         stands.map((s) => `<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)}</option>`).join("");
     } catch (err) {
       showPageError(`Не удалось загрузить стенды: ${err.message}`);
@@ -507,8 +683,10 @@
     openRun(Number(tr.dataset.runId));
   });
 
+  schedulesCard.hidden = !canManageSchedules;
+
   setupTreeEvents();
-  await Promise.all([loadStands(), loadTests(), loadHistory(), loadFlaky()]);
+  await Promise.all([loadStands(), loadTests(), loadHistory(), loadFlaky(), loadSchedules()]);
 
   // Глубокая ссылка из суперадминки (admin_all.html): project.html?name=...&run=<id>
   // сразу открывает отчёт конкретного прогона.
