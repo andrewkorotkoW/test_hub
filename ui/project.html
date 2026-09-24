@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Test Hub — проект</title>
   <link rel="stylesheet" href="style.css">
+  <script src="common.js"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -14,6 +15,7 @@
   <main class="page">
     <div class="page-head">
       <h1 id="project-title">Проект</h1>
+      <div id="project-color-picker" class="color-picker"></div>
       <a id="coverage-link" class="coverage-link" href="#">Покрытие</a>
       <a id="xfail-link" class="coverage-link" href="#">Известные дефекты</a>
     </div>
@@ -251,7 +253,6 @@
   <!-- Chart.js UMD, закреплённая версия с cdnjs (только столбцы/донат/площадь; спарклайны
        и кольца по областям — чистый inline SVG без библиотек, см. project.js). -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-  <script src="common.js"></script>
   <script src="project.js"></script>
 </body>
 </html>
