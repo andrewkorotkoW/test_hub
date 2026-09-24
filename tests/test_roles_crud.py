@@ -22,6 +22,17 @@ WRITE_REQUESTS = [
     ("post", "/api/users", {"login": "tmp_user", "password": "x", "role": "customer"}),
     ("put", "/api/users/customer", {"onboarded": True}),
     ("delete", "/api/users/customer", None),
+    # Пресеты запуска на manual_only-стенде stage у auto_tests_vshgu_cloude (сидируется
+    # в init_db() на любой пустой БД, см. app/db.py::_seed_vshgu_project) — put/delete
+    # используют несуществующий id пресета по той же причине, что и put/delete stand
+    # выше: 403 из require_roles("qa") должен срабатывать раньше 404 "Preset not found".
+    (
+        "post",
+        "/api/projects/auto_tests_vshgu_cloude/stands/stage/presets",
+        {"name": "tmp_preset", "target": "all", "marker": None},
+    ),
+    ("put", "/api/projects/auto_tests_vshgu_cloude/stands/stage/presets/99999", {"name": "x"}),
+    ("delete", "/api/projects/auto_tests_vshgu_cloude/stands/stage/presets/99999", None),
 ]
 
 
