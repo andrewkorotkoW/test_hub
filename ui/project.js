@@ -19,6 +19,32 @@
   document.getElementById("coverage-link").href = `coverage.html?name=${encodeURIComponent(projectName)}`;
   document.getElementById("xfail-link").href = `xfail.html?name=${encodeURIComponent(projectName)}`;
   const pageError = document.getElementById("page-error");
+
+  // Цвет проекта: акцент кнопок/сайдбара/графиков (--accent, --gradient-*, см.
+  // applyProjectColor в common.js). Меняют только qa/superadmin, остальным — индикатор.
+  const colorPickerEl = document.getElementById("project-color-picker");
+  const canEditColor = user.role === "qa" || user.role === "superadmin";
+  try {
+    const projects = await api("/api/projects");
+    const current = projects.find((p) => p.name === projectName);
+    const projectColor = current ? current.color : PROJECT_COLOR_PALETTE[0];
+    applyProjectColor(projectColor);
+    const onPickColor = async (color) => {
+      try {
+        const updated = await api(`/api/projects/${encodeURIComponent(projectName)}/color`, {
+          method: "PUT",
+          json: { color },
+        });
+        applyProjectColor(updated.color);
+        renderColorPicker(colorPickerEl, { color: updated.color, editable: canEditColor, onPick: onPickColor });
+      } catch (err) {
+        pageError.textContent = `Не удалось изменить цвет: ${err.message}`;
+        pageError.hidden = false;
+      }
+    };
+    renderColorPicker(colorPickerEl, { color: projectColor, editable: canEditColor, onPick: onPickColor });
+  } catch { /* без цвета проекта остаётся дефолтный акцент из style.css */ }
+
   const standSelect = document.getElementById("stand-select");
   const markerSelect = document.getElementById("marker-select");
   const testsError = document.getElementById("tests-error");
