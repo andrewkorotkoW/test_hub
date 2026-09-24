@@ -1,10 +1,5 @@
 :root {
-  color-scheme: light;
-  --bg: #f5f6f8;
-  --surface: #ffffff;
-  --border: #e1e4e9;
-  --text: #1f2430;
-  --text-muted: #6b7280;
+  /* токены, не зависящие от темы */
   --accent: #2563eb;
   --accent-hover: #1d4ed8;
   --danger: #dc2626;
@@ -13,7 +8,11 @@
   --failed: #dc2626;
   --broken: #d97706;
   --skipped: #6b7280;
-  --xfail: #0891b2;
+  /* было #0891b2 (голубой); дизайн аналитического дашборда просит жёлтый/оранжевый
+     для xfail — согласовано с --tm-xfail ниже, значение то же самое (#e0a020),
+     чтобы статус-текст/узлы дерева и ячейки treemap визуально совпадали */
+  --xfail: #e0a020;
+  --flaky: #a855f7;
   /* treemap «Тесты по областям» + полоса статусов в таблице «Области»: палитра
      задана постановкой задачи отдельно от --passed/--failed/--xfail/--skipped
      выше (те использует остальная страница), держать в синхроне с
@@ -28,7 +27,43 @@
   --running: #2563eb;
   --cancelled: #6b7280;
   --radius: 8px;
+  /* отдельный радиус карточек аналитического дашборда — не трогает --radius,
+     на который завязаны мелкие элементы (кнопки, инпуты, пилюли) */
+  --card-radius: 16px;
+  /* неоновый градиент фиолетовый → розовый → голубой для будущих графиков
+     (дашборд проекта/покрытие, задачи t2/t3) */
+  --gradient-start: #7c3aed;
+  --gradient-mid: #ec4899;
+  --gradient-end: #38bdf8;
+  --gradient-neon: linear-gradient(135deg, var(--gradient-start), var(--gradient-mid), var(--gradient-end));
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* тёмная тема — значение по умолчанию, когда data-theme ещё не проставлен (см.
+   initTheme в common.js) и при явном [data-theme="dark"] */
+:root, [data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0f1223;
+  --bg-sidebar: #151a2e;
+  --surface: #1b2036;
+  --surface-hover: #232945;
+  --border: #262c47;
+  --text: #e7e9f5;
+  --text-muted: #9298b8;
+  --shadow-card: 0 8px 24px rgba(0, 0, 0, .35);
+}
+
+/* светлая тема — прежняя палитра (белые карточки на светло-сером фоне) */
+[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f5f6f8;
+  --bg-sidebar: #ffffff;
+  --surface: #ffffff;
+  --surface-hover: #f3f4f6;
+  --border: #e1e4e9;
+  --text: #1f2430;
+  --text-muted: #6b7280;
+  --shadow-card: 0 1px 3px rgba(15, 23, 42, .08);
 }
 
 * { box-sizing: border-box; }
@@ -96,7 +131,72 @@ label { display: inline-flex; align-items: center; gap: 6px; }
   padding: 20px 24px 60px;
 }
 
-/* ---------- header ---------- */
+/* ---------- app shell: сайдбар + узкая шапка ---------- */
+.app-shell {
+  display: flex;
+  align-items: stretch;
+  min-height: 100vh;
+  background: var(--bg);
+}
+.app-sidebar {
+  flex: 0 0 240px;
+  width: 240px;
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 20px 14px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+.app-sidebar-brand {
+  display: flex;
+  align-items: center;
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--text);
+  padding: 0 10px 18px;
+}
+.app-sidebar-brand:hover { text-decoration: none; color: var(--accent); }
+.app-nav { display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; }
+.app-nav-section { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 2px; }
+.app-nav-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  color: var(--text-muted);
+  font-weight: 500;
+  font-size: 13px;
+}
+.app-nav-link:hover { background: var(--surface-hover); color: var(--text); text-decoration: none; }
+.app-nav-link.active { background: var(--accent); color: #fff; }
+.app-nav-link.app-nav-disabled { opacity: .5; cursor: default; }
+.app-nav-link.app-nav-disabled:hover { background: none; color: var(--text-muted); }
+.app-nav-soon { font-size: 10px; text-transform: uppercase; letter-spacing: .03em; color: var(--text-muted); }
+.app-sidebar-footer { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.theme-toggle:hover { border-color: var(--accent); color: var(--accent); }
+#logout-btn { width: 100%; }
+
+.app-content { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+
 .site-header {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
@@ -105,7 +205,7 @@ label { display: inline-flex; align-items: center; gap: 6px; }
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 10px;
-  padding: 12px 24px;
+  padding: 14px 24px;
 }
 .site-header .brand {
   font-weight: 700;
@@ -113,16 +213,11 @@ label { display: inline-flex; align-items: center; gap: 6px; }
   color: var(--text);
 }
 .site-header .brand:hover { text-decoration: none; color: var(--accent); }
-.site-header nav {
-  display: flex;
-  gap: 16px;
-  flex-wrap: wrap;
+.topbar-title { font-size: 16px; margin: 0; font-weight: 600; color: var(--text); }
+.topbar-search input {
+  width: 220px;
+  max-width: 40vw;
 }
-.site-header nav a {
-  color: var(--text-muted);
-  font-weight: 500;
-}
-.site-header nav a.active { color: var(--accent); }
 .header-left { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
 .header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .user-chip {
@@ -133,7 +228,7 @@ label { display: inline-flex; align-items: center; gap: 6px; }
   color: var(--text-muted);
 }
 .role-badge {
-  background: #eef2ff;
+  background: var(--surface-hover);
   color: var(--accent);
   border-radius: 999px;
   padding: 2px 10px;
@@ -146,7 +241,8 @@ label { display: inline-flex; align-items: center; gap: 6px; }
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--card-radius);
+  box-shadow: var(--shadow-card);
   padding: 18px 20px;
 }
 .card + .card { margin-top: 16px; }
@@ -373,7 +469,8 @@ tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 .modal-overlay[hidden] { display: none; }
 .modal-box {
   background: var(--surface);
-  border-radius: 12px;
+  border-radius: var(--card-radius);
+  box-shadow: var(--shadow-card);
   padding: 24px;
   max-width: 420px;
   width: 100%;
@@ -401,6 +498,26 @@ tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
   .site-header { padding: 10px 16px; }
   .project-grid { grid-template-columns: 1fr; }
   .run-status-bar { flex-direction: column; align-items: flex-start; }
+}
+
+/* ---------- app shell: сайдбар в узкую горизонтальную полосу ---------- */
+@media (max-width: 900px) {
+  .app-shell { flex-direction: column; }
+  .app-sidebar {
+    position: static;
+    width: 100%;
+    height: auto;
+    flex-direction: row;
+    align-items: center;
+    overflow-x: auto;
+    padding: 10px 12px;
+  }
+  .app-sidebar-brand { padding: 0 14px 0 0; }
+  .app-nav { flex-direction: row; flex: 0 0 auto; }
+  .app-nav-section { margin-top: 0; padding-top: 0; border-top: none; padding-left: 12px; border-left: 1px solid var(--border); flex-direction: row; }
+  .app-sidebar-footer { margin-top: 0; padding-top: 0; border-top: none; padding-left: 12px; border-left: 1px solid var(--border); flex-direction: row; flex: 0 0 auto; }
+  .theme-toggle, #logout-btn { width: auto; white-space: nowrap; }
+  .topbar-search { display: none; }
 }
 
 /* ---------- coverage page ---------- */
