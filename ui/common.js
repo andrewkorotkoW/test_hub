@@ -55,36 +55,117 @@ function currentPage() {
   return path;
 }
 
-function renderHeader(user) {
-  const mount = document.getElementById("app-header");
+// ---------- тема: localStorage + prefers-color-scheme, дефолт — тёмная ----------
+const THEME_STORAGE_KEY = "testhub-theme";
+
+function detectPreferredTheme() {
+  try {
+    const saved = localStorage.getItem(THEME_STORAGE_KEY);
+    if (saved === "dark" || saved === "light") return saved;
+  } catch { /* localStorage недоступен (приватный режим) — игнорируем */ }
+  if (window.matchMedia) {
+    if (window.matchMedia("(prefers-color-scheme: light)").matches) return "light";
+    if (window.matchMedia("(prefers-color-scheme: dark)").matches) return "dark";
+  }
+  // системная тема явно не задана — по ТЗ дефолт тёмная
+  return "dark";
+}
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute("data-theme", theme);
+  try { localStorage.setItem(THEME_STORAGE_KEY, theme); } catch { /* игнорируем */ }
+}
+
+// Применяется сразу при загрузке common.js (до renderHeader), чтобы страницы без
+// сайдбара (index.html, share.html) тоже получили тему без лишнего мигания.
+document.documentElement.setAttribute("data-theme", detectPreferredTheme());
+
+// ---------- пункты меню сайдбара ----------
+// href отсутствует — раздела ещё нет, пункт показывается как «скоро».
+// needsProject — раздел завязан на конкретный проект (?name=...), без выбранного
+// проекта в URL пункт недоступен для клика.
+const APP_NAV_ITEMS = [
+  { href: "projects.html", label: "Проекты" },
+  { label: "Прогоны" },
+  { href: "coverage.html", label: "Покрытие", needsProject: true },
+  { href: "xfail.html", label: "Xfail", needsProject: true },
+  { href: "project.html", hash: "#schedules-card", label: "Расписания", needsProject: true },
+  { label: "Настройки" },
+];
+
+function currentProjectNameFromUrl() {
+  return new URLSearchParams(window.location.search).get("name");
+}
+
+function renderNavItem(item, page, projectName) {
+  if (item.needsProject && !projectName) {
+    return `<span class="app-nav-link app-nav-disabled" title="Откройте проект, чтобы перейти в раздел «${escapeHtml(item.label)}»">${escapeHtml(item.label)}</span>`;
+  }
+  if (!item.href) {
+    return `<span class="app-nav-link app-nav-disabled" title="Раздел появится позже">${escapeHtml(item.label)} <span class="app-nav-soon">скоро</span></span>`;
+  }
+  const query = item.needsProject ? `?name=${encodeURIComponent(projectName)}` : "";
+  const href = `${item.href}${query}${item.hash || ""}`;
+  const active = item.href === page ? " active" : "";
+  return `<a class="app-nav-link${active}" href="${href}">${escapeHtml(item.label)}</a>`;
+}
+
+function renderSidebar(user, page) {
+  const mount = document.getElementById("app-sidebar");
   if (!mount) return;
-  const page = currentPage();
-  const navLinks = [
-    { href: "projects.html", label: "Проекты" },
-  ];
+  const projectName = currentProjectNameFromUrl();
+  const nav = APP_NAV_ITEMS.map((item) => renderNavItem(item, page, projectName)).join("");
+
+  const roleLinks = [];
   if (user.role === "qa" || user.role === "superadmin") {
-    navLinks.push({ href: "admin.html", label: "Стенды и пользователи" });
+    roleLinks.push({ href: "admin.html", label: "Стенды и пользователи" });
   }
   if (user.role === "superadmin") {
-    navLinks.push({ href: "admin_all.html", label: "Суперадминка" });
+    roleLinks.push({ href: "admin_all.html", label: "Суперадминка" });
   }
-  const nav = navLinks
-    .map((l) => `<a href="${l.href}" class="${l.href === page ? "active" : ""}">${l.label}</a>`)
-    .join("");
+  const roleNav = roleLinks.length
+    ? `<div class="app-nav-section">${roleLinks.map((item) => renderNavItem(item, page, projectName)).join("")}</div>`
+    : "";
+
+  const theme = document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+
   mount.innerHTML = `
-    <div class="header-left">
-      <a class="brand" href="projects.html">Test Hub</a>
-      <nav>${nav}</nav>
-    </div>
-    <div class="header-right">
-      <span class="user-chip">${escapeHtml(user.login)} <span class="role-badge">${escapeHtml(user.role)}</span></span>
+    <a class="app-sidebar-brand" href="projects.html">Test Hub</a>
+    <nav class="app-nav">${nav}${roleNav}</nav>
+    <div class="app-sidebar-footer">
+      <button type="button" id="theme-toggle-btn" class="theme-toggle" aria-pressed="${theme === "light" ? "true" : "false"}">
+        <span id="theme-toggle-label">${theme === "dark" ? "Тёмная тема" : "Светлая тема"}</span>
+      </button>
       <button id="logout-btn">Выйти</button>
     </div>
   `;
+
+  document.getElementById("theme-toggle-btn").addEventListener("click", () => {
+    const next = document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light";
+    applyTheme(next);
+    document.getElementById("theme-toggle-label").textContent = next === "dark" ? "Тёмная тема" : "Светлая тема";
+    document.getElementById("theme-toggle-btn").setAttribute("aria-pressed", next === "light" ? "true" : "false");
+  });
   document.getElementById("logout-btn").addEventListener("click", async () => {
     try { await api("/api/logout", { method: "POST" }); } catch { /* всё равно уходим на логин */ }
     window.location.href = "index.html";
   });
+}
+
+function renderHeader(user) {
+  const mount = document.getElementById("app-header");
+  if (!mount) return;
+  const page = currentPage();
+  renderSidebar(user, page);
+  mount.innerHTML = `
+    <div class="header-left">
+      <h1 class="topbar-title">Здравствуйте, ${escapeHtml(user.login)}</h1>
+      <div class="topbar-search"><input type="search" placeholder="Поиск (скоро)" disabled aria-label="Поиск"></div>
+    </div>
+    <div class="header-right">
+      <span class="user-chip">${escapeHtml(user.login)} <span class="role-badge">${escapeHtml(user.role)}</span></span>
+    </div>
+  `;
 }
 
 const ONBOARDING_STEPS = [
