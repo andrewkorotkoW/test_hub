@@ -25,6 +25,15 @@
   const treeBox = document.getElementById("tests-tree");
   const runAllBtn = document.getElementById("run-all-btn");
   const runSelectedBtn = document.getElementById("run-selected-btn");
+  const manualRunBlock = document.getElementById("manual-run-block");
+  const manualRunStandName = document.getElementById("manual-run-stand-name");
+  const manualRunPresets = document.getElementById("manual-run-presets");
+  const manualRunSelectedBtn = document.getElementById("manual-run-selected-btn");
+  const manualRunModalOverlay = document.getElementById("manual-run-modal-overlay");
+  const manualRunModalText = document.getElementById("manual-run-modal-text");
+  const manualRunConfirmCheckbox = document.getElementById("manual-run-confirm-checkbox");
+  const manualRunConfirmBtn = document.getElementById("manual-run-confirm-btn");
+  const manualRunCancelBtn = document.getElementById("manual-run-cancel-btn");
   const runCard = document.getElementById("run-card");
   const runIdLabel = document.getElementById("run-id-label");
   const pill = document.getElementById("run-status-pill");
@@ -242,18 +251,126 @@
   }
 
   // ---------------- stands ----------------
+  let standsByName = {};
+  let manualRunPresetItems = [];
+
   async function loadStands() {
     try {
       const stands = await api(`/api/projects/${encodeURIComponent(projectName)}/stands`);
+      standsByName = {};
+      stands.forEach((s) => { standsByName[s.name] = s; });
       standSelect.innerHTML = `<option value="">— без стенда —</option>` +
         stands.map((s) => `<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)} (${escapeHtml(s.url)})</option>`).join("");
       flakyStandSelect.innerHTML = `<option value="">— все стенды —</option>` +
         stands.map((s) => `<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)}</option>`).join("");
       schedStandSelect.innerHTML = `<option value="">— без стенда —</option>` +
         stands.map((s) => `<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)}</option>`).join("");
+      await updateRunControlsForStand();
     } catch (err) {
       showPageError(`Не удалось загрузить стенды: ${err.message}`);
     }
+  }
+
+  // manual_only-стенд (боевой stage) — вместо мгновенного запуска показываем блок
+  // с пресетами/выбором из дерева, каждый запуск идёт только через модалку
+  // подтверждения (см. openManualRunModal ниже) и confirm_manual: true в теле POST.
+  async function updateRunControlsForStand() {
+    const stand = standsByName[standSelect.value];
+    const isManual = !!(stand && stand.manual_only);
+    runAllBtn.hidden = isManual;
+    runSelectedBtn.hidden = isManual;
+    manualRunBlock.hidden = !isManual;
+    if (!isManual) {
+      manualRunPresetItems = [];
+      return;
+    }
+    manualRunStandName.textContent = stand.name;
+    manualRunPresets.innerHTML = `<span class="muted">Загрузка пресетов…</span>`;
+    try {
+      manualRunPresetItems = await api(
+        `/api/projects/${encodeURIComponent(projectName)}/stands/${encodeURIComponent(stand.name)}/presets`
+      );
+      manualRunPresets.innerHTML = manualRunPresetItems.length
+        ? manualRunPresetItems.map((p) => `<button type="button" class="manual-run-preset-btn" data-preset-id="${p.id}">${escapeHtml(p.name)}</button>`).join("")
+        : `<span class="muted">Пресетов нет.</span>`;
+    } catch (err) {
+      manualRunPresetItems = [];
+      manualRunPresets.innerHTML = `<span class="error-box">Не удалось загрузить пресеты: ${escapeHtml(err.message)}</span>`;
+    }
+  }
+
+  standSelect.addEventListener("change", updateRunControlsForStand);
+
+  function openManualRunModal({ label, stand, target, marker }) {
+    manualRunModalOverlay.dataset.pending = JSON.stringify({ stand, target, marker: marker || null });
+    manualRunModalText.textContent = `Запустить на ${stand}: ${label}. Это боевой тестовый стенд, запуск только вручную.`;
+    manualRunConfirmCheckbox.checked = false;
+    manualRunConfirmBtn.disabled = true;
+    manualRunModalOverlay.hidden = false;
+  }
+
+  manualRunPresets.addEventListener("click", (ev) => {
+    const btn = ev.target.closest(".manual-run-preset-btn");
+    if (!btn) return;
+    const preset = manualRunPresetItems.find((p) => String(p.id) === btn.dataset.presetId);
+    if (!preset) return;
+    openManualRunModal({
+      label: `пресет «${preset.name}»`,
+      stand: standSelect.value,
+      target: preset.target,
+      marker: preset.marker,
+    });
+  });
+
+  manualRunSelectedBtn.addEventListener("click", () => {
+    const ids = selectedNodeIds();
+    if (!ids.length) {
+      alert("Отметьте хотя бы один тест.");
+      return;
+    }
+    openManualRunModal({
+      label: `выбранные тесты (${ids.length})`,
+      stand: standSelect.value,
+      target: ids.join("\n"),
+      marker: markerSelect.value || null,
+    });
+  });
+
+  manualRunConfirmCheckbox.addEventListener("change", () => {
+    manualRunConfirmBtn.disabled = !manualRunConfirmCheckbox.checked;
+  });
+
+  function closeManualRunModal() {
+    manualRunModalOverlay.hidden = true;
+    delete manualRunModalOverlay.dataset.pending;
+  }
+
+  manualRunCancelBtn.addEventListener("click", closeManualRunModal);
+  manualRunModalOverlay.addEventListener("click", (ev) => {
+    if (ev.target === manualRunModalOverlay) closeManualRunModal();
+  });
+
+  manualRunConfirmBtn.addEventListener("click", async () => {
+    if (!manualRunConfirmCheckbox.checked || !manualRunModalOverlay.dataset.pending) return;
+    const pending = JSON.parse(manualRunModalOverlay.dataset.pending);
+    manualRunConfirmBtn.disabled = true;
+    try {
+      const run = await api(`/api/projects/${encodeURIComponent(projectName)}/runs`, {
+        method: "POST",
+        json: { stand: pending.stand, target: pending.target, marker: pending.marker, confirm_manual: true },
+      });
+      closeManualRunModal();
+      await openRun(run.id);
+      await loadHistory();
+    } catch (err) {
+      alert(`Не удалось запустить тесты: ${err.message}`);
+      manualRunConfirmBtn.disabled = !manualRunConfirmCheckbox.checked;
+    }
+  });
+
+  function isManualStandRun(standName) {
+    const stand = standsByName[standName];
+    return !!(stand && stand.manual_only);
   }
 
   // ---------------- flaky tests ----------------
@@ -1027,9 +1144,10 @@
         <span class="status-pill ${escapeHtml(r.status)}" data-status="${escapeHtml(r.status)}">${escapeHtml(r.status)}</span>
         <div class="runs-feed-meta">
           <span class="runs-feed-id">#${r.id}</span>
-          <span>${escapeHtml(r.stand || "без стенда")}</span>
+          <span>${escapeHtml(r.stand || "без стенда")}${isManualStandRun(r.stand) ? `<span class="badge-manual">ручной</span>` : ""}</span>
           <span>${fmtDate(r.started)}</span>
           <span>${fmtDuration(r.duration)}</span>
+          <span>${escapeHtml(r.requested_by || "—")}</span>
         </div>
         <div class="runs-feed-actions">
           <button type="button" class="runs-feed-report-btn" data-run-id="${r.id}">Отчёт</button>
@@ -1087,7 +1205,7 @@
           <tr class="clickable" data-run-id="${r.id}">
             <td>${r.id}</td>
             <td class="status-text ${escapeHtml(r.status)}">${escapeHtml(r.status)}</td>
-            <td>${escapeHtml(r.stand || "—")}</td>
+            <td>${escapeHtml(r.stand || "—")}${isManualStandRun(r.stand) ? `<span class="badge-manual">ручной</span>` : ""}</td>
             <td>${r.target === "all" ? "всё" : "выборочно"}</td>
             <td>${fmtDate(r.started)}</td>
             <td>${fmtDuration(r.duration)}</td>
@@ -1111,7 +1229,8 @@
   schedulesCard.hidden = !canManageSchedules;
 
   setupTreeEvents();
-  await Promise.all([loadStands(), loadTests(), loadHistory(), loadFlaky(), loadSchedules()]);
+  await loadStands();
+  await Promise.all([loadTests(), loadHistory(), loadFlaky(), loadSchedules()]);
 
   // Глубокая ссылка из суперадминки (admin_all.html): project.html?name=...&run=<id>
   // сразу открывает отчёт конкретного прогона.
