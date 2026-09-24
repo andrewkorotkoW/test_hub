@@ -1,0 +1,360 @@
+<title>Макеты страницы проекта test_hub</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --bg:#f3f4f7; --bg-side:#ffffff; --card:#ffffff; --card-2:#f7f8fb; --line:#e3e6ee; --line-2:#eef0f5;
+  --text:#141826; --muted:#6b7286; --faint:#9aa1b4;
+  --accent:#2563eb; --accent-ink:#ffffff;
+  --passed:#22c55e; --failed:#ff4d6d; --skipped:#8b93a7; --xfail:#f5b642; --flaky:#a78bfa;
+  --grad-a:#7c5cff; --grad-b:#ff4fa3; --grad-c:#38d6ff;
+  --shadow:0 1px 2px rgba(20,24,38,.06),0 8px 24px rgba(20,24,38,.06);
+  --radius:14px;
+  --font:"Golos Text",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1223; --bg-side:#151a2e; --card:#171c31; --card-2:#1d2340; --line:#262c47; --line-2:#20263f;
+    --text:#eef0f8; --muted:#9aa3c0; --faint:#5f6885;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 12px 32px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f1223; --bg-side:#151a2e; --card:#171c31; --card-2:#1d2340; --line:#262c47; --line-2:#20263f;
+  --text:#eef0f8; --muted:#9aa3c0; --faint:#5f6885;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 12px 32px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+html{background:var(--bg)}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;line-height:1.45}
+h1,h2,h3{margin:0;text-wrap:balance}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.eyebrow{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+
+/* ---------- панель управления макетами ---------- */
+.ctl{position:sticky;top:0;z-index:20;background:var(--card);border-bottom:1px solid var(--line);padding:10px 20px;display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+.ctl .title{font-weight:700;font-size:15px;margin-right:auto}
+.ctl .title small{display:block;font-weight:400;color:var(--muted);font-size:12px}
+.tabs{display:flex;gap:4px;background:var(--card-2);padding:4px;border-radius:10px}
+.tabs button{border:0;background:transparent;color:var(--muted);font:inherit;font-weight:600;padding:7px 12px;border-radius:7px;cursor:pointer}
+.tabs button[aria-current="true"]{background:var(--accent);color:var(--accent-ink)}
+.tabs button:focus-visible,.ctl button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.theme{border:1px solid var(--line);background:var(--card);color:var(--text);font:inherit;padding:7px 12px;border-radius:8px;cursor:pointer}
+.swatches{display:flex;gap:6px;align-items:center}
+.swatches span{font-size:12px;color:var(--muted);margin-right:4px}
+.swatches button{width:22px;height:22px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0}
+.swatches button[aria-pressed="true"]{border-color:var(--text);box-shadow:0 0 0 2px var(--card)}
+
+.variant{display:block;padding:28px 20px 40px;scroll-margin-top:70px}
+.variant+.variant{border-top:1px dashed var(--line)}
+.mock{max-width:1280px;margin:0 auto}
+.mock-head{display:flex;justify-content:space-between;align-items:baseline;gap:20px;margin:0 0 16px}
+.mock-head h2{font-size:20px;font-weight:700}
+.mock-head p{margin:0;color:var(--muted);max-width:62ch}
+.frame{background:var(--bg);border:1px solid var(--line);border-radius:18px;overflow:hidden;box-shadow:var(--shadow)}
+
+/* ---------- общие элементы ---------- */
+.side{background:var(--bg-side);border-right:1px solid var(--line);padding:18px 14px;display:flex;flex-direction:column;gap:6px}
+.logo{display:flex;align-items:center;gap:10px;padding:4px 8px 16px;font-weight:700}
+.logo i{width:28px;height:28px;border-radius:8px;background:var(--accent);display:inline-block}
+.nav a{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;color:var(--muted);text-decoration:none;font-weight:500}
+.nav a.on{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--text)}
+.nav a b{width:8px;height:8px;border-radius:2px;background:currentColor;opacity:.55}
+.nav a.on b{background:var(--accent);opacity:1}
+.side .spacer{flex:1}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:600;border:1px solid transparent}
+.pill i{width:7px;height:7px;border-radius:50%;background:currentColor}
+.p-passed{color:var(--passed);background:color-mix(in srgb,var(--passed) 14%,transparent)}
+.p-failed{color:var(--failed);background:color-mix(in srgb,var(--failed) 14%,transparent)}
+.p-running{color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.p-skipped{color:var(--skipped);background:color-mix(in srgb,var(--skipped) 16%,transparent)}
+.p-xfail{color:var(--xfail);background:color-mix(in srgb,var(--xfail) 16%,transparent)}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:9px 14px;border-radius:9px;font:inherit;font-weight:600;border:1px solid var(--line);background:var(--card);color:var(--text);cursor:pointer}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px}
+.card h3{font-size:13px;font-weight:600;color:var(--muted);margin-bottom:10px}
+.kpi .v{font-size:26px;font-weight:700;line-height:1.1}
+.kpi .d{font-size:12px;color:var(--muted);margin-top:4px}
+.kpi .d.up{color:var(--passed)}.kpi .d.down{color:var(--failed)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;vertical-align:middle}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600;padding:8px 10px;border-bottom:1px solid var(--line)}
+td{padding:10px;border-bottom:1px solid var(--line-2);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+.bar{height:6px;border-radius:3px;background:var(--line);overflow:hidden;display:flex}
+.bar b{display:block;height:100%}
+.color-dot{width:14px;height:14px;border-radius:50%;background:var(--accent);display:inline-block;vertical-align:middle;border:2px solid var(--card);box-shadow:0 0 0 1px var(--line)}
+svg text{font-family:var(--mono);font-size:10px;fill:var(--muted)}
+.topbar{display:flex;align-items:center;gap:14px;padding:14px 22px;border-bottom:1px solid var(--line);background:var(--card)}
+.topbar .who{margin-left:auto;display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13px}
+.topbar .who i{width:28px;height:28px;border-radius:50%;background:var(--card-2);border:1px solid var(--line);display:inline-block}
+.search{flex:0 1 280px;border:1px solid var(--line);background:var(--card-2);border-radius:9px;padding:7px 11px;color:var(--faint);font-size:13px}
+
+/* ---------- В1 Панель ---------- */
+.v1 .frame{display:grid;grid-template-columns:220px 1fr;min-height:760px}
+.v1 .main{padding:20px 22px;display:grid;gap:16px;align-content:start}
+.v1 .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:12px}
+.v1 .row2{display:grid;grid-template-columns:300px 1fr;gap:16px}
+.v1 .row3{display:grid;grid-template-columns:1fr 340px;gap:16px}
+
+/* ---------- В2 Лента ---------- */
+.v2 .frame{background:var(--bg)}
+.v2 .hero{display:grid;grid-template-columns:1.2fr 1fr;gap:16px;padding:22px}
+.v2 .last{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px;display:grid;grid-template-columns:auto 1fr;gap:24px;align-items:center;position:relative;overflow:hidden}
+.v2 .last:before{content:"";position:absolute;inset:0 0 auto 0;height:4px;background:linear-gradient(90deg,var(--accent),var(--grad-b),var(--grad-c))}
+.v2 .last .big{font-size:44px;font-weight:700;line-height:1}
+.v2 .stats{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.v2 .body{display:grid;grid-template-columns:1fr 320px;gap:16px;padding:0 22px 22px}
+.v2 .feed{display:grid;gap:10px}
+.v2 .run{display:grid;grid-template-columns:70px 1fr 160px 120px 90px;gap:14px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 16px}
+.v2 .run .id{font-weight:700}
+.v2 .run .meta{color:var(--muted);font-size:12px}
+.v2 .rail{display:grid;gap:12px;align-content:start}
+
+/* ---------- В3 Сетка ---------- */
+.v3 .frame{display:grid;grid-template-columns:76px 1fr;min-height:780px}
+.v3 .rail{background:var(--bg-side);border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;gap:10px;padding:16px 0}
+.v3 .rail i{width:36px;height:36px;border-radius:10px;background:var(--card-2);border:1px solid var(--line);display:block}
+.v3 .rail i.on{background:var(--accent);border-color:var(--accent)}
+.v3 .rail i.logo{background:linear-gradient(135deg,var(--accent),var(--grad-b));border:0;margin-bottom:10px}
+.v3 .main{padding:22px;display:grid;gap:14px}
+.v3 .head{display:flex;align-items:center;gap:14px}
+.v3 .head h1{font-size:24px;font-weight:700}
+.v3 .bento{display:grid;grid-template-columns:repeat(12,1fr);grid-auto-rows:118px;gap:14px}
+.v3 .b{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px 18px;overflow:hidden;position:relative}
+.v3 .b.glow{background:linear-gradient(140deg,color-mix(in srgb,var(--accent) 22%,var(--card)),var(--card) 60%)}
+.v3 .b .v{font-size:30px;font-weight:700;line-height:1}
+.v3 .b .l{font-size:12px;color:var(--muted);margin-bottom:8px}
+.v3 .c3{grid-column:span 3}.v3 .c4{grid-column:span 4}.v3 .c5{grid-column:span 5}.v3 .c6{grid-column:span 6}.v3 .c7{grid-column:span 7}.v3 .c8{grid-column:span 8}.v3 .c12{grid-column:span 12}
+.v3 .r2{grid-row:span 2}.v3 .r3{grid-row:span 3}
+.v3 .chips{display:flex;gap:8px;flex-wrap:wrap}
+.v3 .chip{padding:8px 12px;border-radius:10px;background:var(--card-2);border:1px solid var(--line);font-size:12px;display:flex;gap:8px;align-items:center}
+
+/* ---------- В4 Таблица ---------- */
+.v4 .frame{background:var(--card)}
+.v4 .head{display:flex;align-items:center;gap:18px;padding:18px 24px;border-bottom:1px solid var(--line)}
+.v4 .head h1{font-size:18px;font-weight:700;display:flex;align-items:center;gap:10px}
+.v4 .head .crumbs{color:var(--muted);font-size:13px}
+.v4 .strip{display:flex;gap:0;border-bottom:1px solid var(--line);background:var(--card-2)}
+.v4 .strip div{padding:12px 24px;border-right:1px solid var(--line);min-width:150px}
+.v4 .strip .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+.v4 .strip .v{font-size:20px;font-weight:700;margin-top:2px}
+.v4 .grid{display:grid;grid-template-columns:230px 1fr;min-height:640px}
+.v4 .filters{border-right:1px solid var(--line);padding:18px 20px;display:grid;gap:16px;align-content:start;background:var(--bg-side)}
+.v4 .filters h4{margin:0 0 8px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.v4 .filters label{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:13px;color:var(--text)}
+.v4 .filters input{accent-color:var(--accent)}
+.v4 .tbl{padding:6px 0}
+.v4 td .id{font-weight:700}
+.v4 .trend{stroke:var(--accent);fill:none;stroke-width:1.6}
+.v4 .foot{display:flex;justify-content:space-between;padding:12px 24px;border-top:1px solid var(--line);color:var(--muted);font-size:12px}
+
+.note{max-width:1280px;margin:30px auto 0;color:var(--muted);font-size:13px;display:grid;gap:6px}
+.note b{color:var(--text)}
+@media (prefers-reduced-motion:no-preference){.tabs button,.swatches button{transition:background .15s,transform .15s}.swatches button:hover{transform:scale(1.15)}}
+@media (max-width:900px){.v1 .frame,.v3 .frame,.v4 .grid{grid-template-columns:1fr}.v1 .kpis{grid-template-columns:repeat(3,1fr)}.v1 .row2,.v1 .row3,.v2 .hero,.v2 .body{grid-template-columns:1fr}.v3 .bento>*{grid-column:span 12}.side,.v3 .rail{display:none}.v2 .run{grid-template-columns:1fr 1fr}}
+</style>
+
+<div class="ctl">
+  <div class="title">test_hub · страница проекта<small>4 варианта на одной странице · реальные данные test_hub: прогоны 14–31, реестр xfail, флаки, покрытие</small></div>
+  <div class="tabs" role="tablist">
+    <button data-v="1">1 · Панель</button>
+    <button data-v="2">2 · Лента</button>
+    <button data-v="3">3 · Сетка</button>
+    <button data-v="4">4 · Таблица</button>
+  </div>
+  <div class="swatches"><span>Цвет проекта</span></div>
+  <button class="theme" id="theme">Тема: светлая</button>
+</div>
+
+<!-- ================= В1 ================= -->
+<section class="variant v1 active" id="v1">
+ <div class="mock">
+  <div class="mock-head"><h2>Вариант 1 · Панель</h2><p>Классическая аналитическая панель: сайдбар, ряд KPI, кольцо статусов, столбцы по прогонам, лента и xfail. Ближе всего к тому, что уже сделано, но с цветом проекта и светлой темой.</p></div>
+  <div class="frame">
+   <aside class="side">
+    <div class="logo"><i></i>test_hub</div>
+    <nav class="nav">
+      <a href="#"><b></b>Проекты</a><a class="on" href="#"><b></b>Прогоны</a><a href="#"><b></b>Покрытие</a><a href="#"><b></b>Xfail</a><a href="#"><b></b>Расписания</a><a href="#"><b></b>Настройки</a>
+    </nav>
+    <div class="spacer"></div>
+    <div class="nav"><a href="#"><b></b>Выйти</a></div>
+   </aside>
+   <div class="main">
+    <div style="display:flex;align-items:center;gap:14px">
+      <span class="color-dot"></span>
+      <div><div class="eyebrow">Проект</div><h1 style="font-size:22px">auto_tests_vshgu_cloude</h1></div>
+      <span class="pill p-running"><i></i>Прогон 31 идёт · 146 passed · 3 failed</span>
+      <div style="margin-left:auto;display:flex;gap:8px"><button class="btn">Расписание</button><button class="btn primary">Запустить прогон</button></div>
+    </div>
+    <div class="kpis">
+      <div class="card kpi"><h3>Всего тестов</h3><div class="v num">221</div><div class="d">API 110 · UI 75 · E2E 15</div></div>
+      <div class="card kpi"><h3>Успешных, прогон 30</h3><div class="v num">96,6 %</div><div class="d up">▲ 0,8 п.п. к прогону 28 (95,8 %)</div></div>
+      <div class="card kpi"><h3>Упало</h3><div class="v num" style="color:var(--failed)">4</div><div class="d">CAS sync, поиск БЗ, внешний контент</div></div>
+      <div class="card kpi"><h3>Длительность</h3><div class="v num">58 мин</div><div class="d up">▲ на 3 мин быстрее прогона 28</div></div>
+      <div class="card kpi"><h3>Флаки</h3><div class="v num" style="color:var(--flaky)">4</div><div class="d">score ≥ 0,25 · cookie-баннер 6/8</div></div>
+      <div class="card kpi"><h3>Xfail в реестре</h3><div class="v num" style="color:var(--xfail)">17</div><div class="d">онбординг 8 · ПЗ 5 · курсы 3 · БУК 1</div></div>
+    </div>
+    <div class="row2">
+      <div class="card"><h3>Статусы прогона 30 · 24.09 09:52</h3><svg viewBox="0 0 220 180" width="100%" data-donut="113,4,64"></svg>
+        <div class="legend"><span><i style="background:var(--passed)"></i>passed 113</span><span><i style="background:var(--failed)"></i>failed 4</span><span><i style="background:var(--skipped)"></i>skipped 64</span></div></div>
+      <div class="card"><h3>Полные прогоны develop · passed / failed+broken</h3><svg viewBox="0 0 760 190" width="100%" data-bars></svg></div>
+    </div>
+    <div class="row3">
+      <div class="card"><h3>Лента прогонов</h3>
+        <table><thead><tr><th>#</th><th>Стенд</th><th>Цель</th><th>Статус</th><th>Итог</th><th>Время</th></tr></thead><tbody data-runs-table></tbody></table></div>
+      <div class="card"><h3>Известные дефекты (xfail)</h3>
+        <div style="display:grid;gap:10px;font-size:13px">
+          <div><span class="pill p-xfail"><i></i>онбординг · 8</span><div style="margin-top:4px">Первичный и повторный онбординг: дефект стенда develop</div></div>
+          <div><span class="pill p-xfail"><i></i>ПЗ · 5</span><div style="margin-top:4px">Групповое, индивидуальное, проверка, форма потока</div></div>
+          <div><span class="pill p-xfail"><i></i>курсы · 3</span><div style="margin-top:4px">АОС и TinCan: контент не виден у слушателя</div></div>
+          <div><span class="pill p-xfail"><i></i>БУК · 1</span><div style="margin-top:4px">Согласие ведёт в БУК: стенд test-dp не авторизует</div></div>
+        </div></div>
+    </div>
+   </div>
+  </div>
+ </div>
+</section>
+
+<!-- ================= В2 ================= -->
+<section class="variant v2" id="v2">
+ <div class="mock">
+  <div class="mock-head"><h2>Вариант 2 · Лента</h2><p>Первым экраном — последний прогон крупно, под ним хронологическая лента прогонов с мини-графиком тренда. Для заказчика и менеджера: «что сейчас» и «как было», без плотных таблиц.</p></div>
+  <div class="frame">
+   <div class="topbar"><span class="color-dot"></span><b>auto_tests_vshgu_cloude</b><span style="color:var(--faint)">/</span><span style="color:var(--muted)">Прогоны</span><div class="search">Поиск по прогонам, тестам, стендам…</div><div class="who">qa · QA-инженер<i></i></div></div>
+   <div class="hero">
+    <div class="last">
+      <svg viewBox="0 0 220 180" width="200" data-donut="113,4,64"></svg>
+      <div>
+        <div class="eyebrow">Последний завершённый · прогон 30 · develop</div>
+        <div class="big num">96,6 %</div>
+        <div style="color:var(--muted);margin:6px 0 14px">113 passed · 4 failed · 64 skipped · 58 мин · 24.09 09:52 · develop · all</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><span class="pill p-failed"><i></i>CAS sync 400</span><span class="pill p-failed"><i></i>Поиск статьи БЗ</span><span class="pill p-failed"><i></i>Внешний контент 500</span></div>
+        <div style="margin-top:16px;display:flex;gap:8px"><button class="btn primary">Открыть Allure</button><button class="btn">Поделиться</button></div>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="card kpi"><h3>Идёт сейчас · #31</h3><div class="v num">146 / <span style="color:var(--failed)">3</span></div><div class="d">develop · all · с 20:52 · 93 %</div><div class="bar" style="margin-top:10px"><b style="width:93%;background:var(--accent)"></b></div></div>
+      <div class="card kpi"><h3>Доля passed · прогоны 14 → 30</h3><svg viewBox="0 0 260 60" width="100%" data-spark="66,90,89,42,59,49,96,97" style="margin-top:4px"></svg></div>
+      <div class="card kpi"><h3>Покрытие маршрутов</h3><div class="v num">10 %</div><div class="d up">▲ 60 из 595 · страниц 10 из 48</div></div>
+      <div class="card kpi"><h3>Ближайший запуск</h3><div class="v num">02:00</div><div class="d">ночной · develop · api+ui</div></div>
+    </div>
+   </div>
+   <div class="body">
+    <div>
+      <div class="eyebrow" style="margin-bottom:10px">Лента прогонов</div>
+      <div class="feed" data-runs-feed></div>
+    </div>
+    <div class="rail">
+      <div class="card"><h3>Стенды</h3><div style="display:grid;gap:8px;font-size:13px"><div style="display:flex;justify-content:space-between"><span>develop</span><span class="pill p-passed"><i></i>доступен</span></div><div style="display:flex;justify-content:space-between"><span>stage</span><span class="pill p-skipped"><i></i>только вручную</span></div></div></div>
+      <div class="card"><h3>Флаки · score</h3><div style="display:grid;gap:8px;font-size:13px"><div style="display:flex;justify-content:space-between"><span>test_login_with_user_credentials</span><span class="num" style="color:var(--flaky)">0,40</span></div><div style="display:flex;justify-content:space-between"><span>test_admin_sees_teacher_role</span><span class="num" style="color:var(--flaky)">0,33</span></div><div style="display:flex;justify-content:space-between"><span>test_user_cookie_banner</span><span class="num" style="color:var(--flaky)">0,29</span></div><div style="display:flex;justify-content:space-between"><span>test_user_open_lpd_stream</span><span class="num" style="color:var(--flaky)">0,17</span></div></div></div>
+      <div class="card"><h3>Xfail в реестре · 17</h3><div style="display:grid;gap:6px;font-size:13px"><div>онбординг 8 · ПЗ 5 · курсы 3 · БУК 1</div><div class="bar"><b style="width:47%;background:var(--xfail)"></b><b style="width:29%;background:var(--grad-b)"></b><b style="width:18%;background:var(--grad-a)"></b><b style="width:6%;background:var(--grad-c)"></b></div></div></div>
+    </div>
+   </div>
+  </div>
+ </div>
+</section>
+
+<!-- ================= В3 ================= -->
+<section class="variant v3" id="v3">
+ <div class="mock">
+  <div class="mock-head"><h2>Вариант 3 · Сетка</h2><p>Bento-сетка: узкий рейл иконок вместо сайдбара, крупные плитки разного размера, градиенты от цвета проекта. Самый «витринный» вариант, для демонстраций и экрана в кабинете.</p></div>
+  <div class="frame">
+   <div class="rail"><i class="logo"></i><i></i><i class="on"></i><i></i><i></i><i></i><div style="flex:1"></div><i></i></div>
+   <div class="main">
+    <div class="head"><span class="color-dot"></span><h1>auto_tests_vshgu_cloude</h1><span class="pill p-running"><i></i>#31 идёт</span><div style="margin-left:auto;display:flex;gap:8px"><button class="btn">develop ▾</button><button class="btn primary">Запустить</button></div></div>
+    <div class="bento">
+      <div class="b glow c3 r2"><div class="l">Успешных, прогон 30</div><div class="v num">96,6 %</div><svg viewBox="0 0 260 70" width="100%" data-spark="66,90,89,42,59,49,96,97" style="margin-top:14px"></svg><div class="l" style="margin-top:8px">прогоны 14 → 30 · ▲ 0,8 п.п. к 28</div></div>
+      <div class="b c3"><div class="l">Всего тестов</div><div class="v num">221</div></div>
+      <div class="b c3"><div class="l">Упало</div><div class="v num" style="color:var(--failed)">4</div></div>
+      <div class="b c3"><div class="l">Длительность</div><div class="v num">0:58</div></div>
+      <div class="b c3"><div class="l">Флаки</div><div class="v num" style="color:var(--flaky)">4</div></div>
+      <div class="b c3"><div class="l">Xfail</div><div class="v num" style="color:var(--xfail)">17</div></div>
+      <div class="b c3"><div class="l">Покрытие</div><div class="v num">10 %</div></div>
+      <div class="b c8 r2"><div class="l">Прогоны 14 → 31 · passed / failed+broken / skipped</div><svg viewBox="0 0 760 170" width="100%" data-area></svg></div>
+      <div class="b c4 r2"><div class="l">Статусы прогона 30</div><svg viewBox="0 0 220 180" width="100%" data-donut="113,4,64"></svg></div>
+      <div class="b c7 r2"><div class="l">Последние прогоны</div><table><thead><tr><th>#</th><th>Стенд</th><th>Статус</th><th>Итог</th><th>Время</th></tr></thead><tbody data-runs-table-short></tbody></table></div>
+      <div class="b c5 r2"><div class="l">Области с падениями</div><div class="chips" style="margin-top:6px"><span class="chip"><i style="width:8px;height:8px;border-radius:50%;background:var(--failed)"></i>CAS · 1</span><span class="chip"><i style="width:8px;height:8px;border-radius:50%;background:var(--failed)"></i>База знаний · 1</span><span class="chip"><i style="width:8px;height:8px;border-radius:50%;background:var(--failed)"></i>Внешний контент · 1</span><span class="chip"><i style="width:8px;height:8px;border-radius:50%;background:var(--xfail)"></i>Онбординг · 8 xfail</span><span class="chip"><i style="width:8px;height:8px;border-radius:50%;background:var(--xfail)"></i>ПЗ · 5 xfail</span><span class="chip"><i style="width:8px;height:8px;border-radius:50%;background:var(--xfail)"></i>Курсы · 3 xfail</span><span class="chip"><i style="width:8px;height:8px;border-radius:50%;background:var(--flaky)"></i>Cookie-баннер · флаки 6/8</span></div></div>
+    </div>
+   </div>
+  </div>
+ </div>
+</section>
+
+<!-- ================= В4 ================= -->
+<section class="variant v4" id="v4">
+ <div class="mock">
+  <div class="mock-head"><h2>Вариант 4 · Таблица</h2><p>Рабочее место инженера: минимум декора, числа полосой сверху, большая таблица прогонов с фильтрами слева и трендом в строке. Быстрее всех читается и проще всех поддерживать.</p></div>
+  <div class="frame">
+   <div class="head"><div class="crumbs">Проекты /</div><h1><span class="color-dot"></span>auto_tests_vshgu_cloude</h1><span class="pill p-running"><i></i>#31 идёт · 146 / 3</span><div style="margin-left:auto;display:flex;gap:8px"><button class="btn">Покрытие</button><button class="btn">Xfail</button><button class="btn primary">Запустить прогон</button></div></div>
+   <div class="strip">
+     <div><div class="l">Тестов</div><div class="v num">221</div></div>
+     <div><div class="l">Успешных</div><div class="v num" style="color:var(--passed)">96,6 %</div></div>
+     <div><div class="l">Упало</div><div class="v num" style="color:var(--failed)">4</div></div>
+     <div><div class="l">Skipped</div><div class="v num">64</div></div>
+     <div><div class="l">Xfail</div><div class="v num" style="color:var(--xfail)">17</div></div>
+     <div><div class="l">Флаки</div><div class="v num" style="color:var(--flaky)">4</div></div>
+     <div><div class="l">Длительность</div><div class="v num">58 мин</div></div>
+     <div style="border-right:0"><div class="l">Покрытие</div><div class="v num">10 %</div></div>
+   </div>
+   <div class="grid">
+    <div class="filters">
+      <div><h4>Стенд</h4><label><input type="checkbox" checked> develop</label><label><input type="checkbox"> stage</label></div>
+      <div><h4>Статус</h4><label><input type="checkbox" checked> passed</label><label><input type="checkbox" checked> failed</label><label><input type="checkbox"> cancelled</label></div>
+      <div><h4>Цель</h4><label><input type="radio" name="t" checked> все</label><label><input type="radio" name="t"> api</label><label><input type="radio" name="t"> ui</label><label><input type="radio" name="t"> smoke</label></div>
+      <div><h4>Период</h4><label><input type="radio" name="p" checked> 7 дней</label><label><input type="radio" name="p"> 30 дней</label></div>
+    </div>
+    <div class="tbl"><table><thead><tr><th>#</th><th>Дата</th><th>Стенд</th><th>Цель</th><th>Статус</th><th>Passed</th><th>Failed</th><th>Skipped</th><th>Тренд</th><th>Время</th><th></th></tr></thead><tbody data-runs-table-full></tbody></table></div>
+   </div>
+   <div class="foot"><span>Показано 9 из 14 прогонов проекта</span><span>Покрытие пересчитано 24.09 17:21 · 60 / 595 маршрутов</span></div>
+  </div>
+ </div>
+</section>
+
+<div class="note">
+  <div><b>Общее для всех вариантов.</b> Стартовая страница и список проектов — светлые по умолчанию, переключатель темы в шапке; цвет проекта выбирается из палитры (сверху) и красит акцент, активный пункт меню, KPI и графики; статусы прогонов палитрой не меняются.</div>
+  <div><b>Данные.</b> Все цифры из базы test_hub на 24.09 22:10: таблица runs (прогоны 14–31 проекта auto_tests_vshgu_cloude), xfail_registry (17 записей), flaky_stats, coverage.json (60/595 маршрутов, 10/48 страниц). Прогон 31 идёт, его цифры — на момент снимка.</div>
+</div>
+
+<script>
+(function(){
+  var PAL=["#2563eb","#7c5cff","#ff4fa3","#38d6ff","#22c55e","#f59e0b","#ff4d6d","#14b8a6","#8b93a7"];
+  var root=document.documentElement;
+  var runs=[
+    {id:31,date:"24.09 20:52",stand:"develop",target:"all",status:"running",p:146,f:3,s:56,dur:"идёт"},
+    {id:30,date:"24.09 09:52",stand:"develop",target:"all",status:"failed",p:113,f:4,s:64,dur:"0:58"},
+    {id:28,date:"23.09 09:04",stand:"develop",target:"all",status:"failed",p:113,f:5,s:65,dur:"1:01"},
+    {id:25,date:"22.09 18:21",stand:"develop",target:"smoke",status:"failed",p:30,f:31,s:9,dur:"0:16"},
+    {id:18,date:"22.09 11:36",stand:"develop",target:"all",status:"failed",p:95,f:66,s:46,dur:"0:52"},
+    {id:17,date:"21.09 21:17",stand:"develop",target:"smoke",status:"failed",p:29,f:40,s:3,dur:"0:15"},
+    {id:16,date:"21.09 16:00",stand:"develop",target:"api",status:"failed",p:82,f:10,s:1,dur:"0:08"},
+    {id:15,date:"21.09 15:45",stand:"develop",target:"api",status:"failed",p:83,f:9,s:1,dur:"0:08"},
+    {id:14,date:"21.09 15:41",stand:"stage",target:"api",status:"failed",p:61,f:32,s:0,dur:"0:02"}
+  ];
+  var st={running:"p-running",failed:"p-failed",passed:"p-passed"}, stTxt={running:"идёт",failed:"упал",passed:"успешно"};
+  function pill(s){return '<span class="pill '+st[s]+'"><i></i>'+stTxt[s]+'</span>'}
+  function bar(r){var t=r.p+r.f+r.s||1;return '<div class="bar" style="width:120px"><b style="width:'+(r.p/t*100)+'%;background:var(--passed)"></b><b style="width:'+(r.f/t*100)+'%;background:var(--failed)"></b><b style="width:'+(r.s/t*100)+'%;background:var(--skipped)"></b></div>'}
+  function spark(vals,w,h,fill){var max=Math.max.apply(null,vals),min=Math.min.apply(null,vals),n=vals.length,pts=vals.map(function(v,i){return [(i/(n-1))*(w-8)+4,h-6-((v-min)/((max-min)||1))*(h-16)]});var d=pts.map(function(p,i){return (i?"L":"M")+p[0].toFixed(1)+","+p[1].toFixed(1)}).join(" ");var s='';if(fill){s+='<path d="'+d+' L'+pts[n-1][0].toFixed(1)+','+(h-2)+' L'+pts[0][0].toFixed(1)+','+(h-2)+' Z" fill="var(--accent)" opacity=".14"/>'}s+='<path d="'+d+'" fill="none" stroke="var(--accent)" stroke-width="2"/>';var e=pts[n-1];s+='<circle cx="'+e[0]+'" cy="'+e[1]+'" r="3.5" fill="var(--accent)"/>';return s}
+  document.querySelectorAll("[data-runs-table]").forEach(function(tb){tb.innerHTML=runs.slice(0,6).map(function(r){return "<tr><td class='num'>"+r.id+"</td><td>"+r.stand+"</td><td>"+r.target+"</td><td>"+pill(r.status)+"</td><td>"+bar(r)+"</td><td class='num' style='color:var(--muted)'>"+r.date+"</td></tr>"}).join("")});
+  document.querySelectorAll("[data-runs-table-short]").forEach(function(tb){tb.innerHTML=runs.slice(0,5).map(function(r){return "<tr><td class='num'>"+r.id+"</td><td>"+r.stand+"</td><td>"+pill(r.status)+"</td><td>"+bar(r)+"</td><td class='num' style='color:var(--muted)'>"+r.date+"</td></tr>"}).join("")});
+  document.querySelectorAll("[data-runs-table-full]").forEach(function(tb){tb.innerHTML=runs.map(function(r,i){var all=[66,90,89,42,59,49,96,97,98],tr=all.slice(0,Math.max(2,all.length-i));return "<tr><td class='num id'>"+r.id+"</td><td class='num' style='color:var(--muted)'>"+r.date+"</td><td>"+r.stand+"</td><td>"+r.target+"</td><td>"+pill(r.status)+"</td><td class='num' style='color:var(--passed)'>"+r.p+"</td><td class='num' style='color:var(--failed)'>"+r.f+"</td><td class='num' style='color:var(--muted)'>"+r.s+"</td><td><svg viewBox='0 0 90 26' width='90' height='26'>"+spark(tr,90,26,false)+"</svg></td><td class='num' style='color:var(--muted)'>"+r.dur+"</td><td><a href='#' style='color:var(--accent);font-weight:600'>Allure</a></td></tr>"}).join("")});
+  document.querySelectorAll("[data-runs-feed]").forEach(function(el){el.innerHTML=runs.slice(0,6).map(function(r){return '<div class="run"><div class="id num">#'+r.id+'</div><div><div>'+r.stand+' · '+r.target+'</div><div class="meta">'+r.date+' · '+r.dur+'</div></div><div>'+bar(r)+'</div><div class="num" style="color:var(--muted)">'+r.p+' / <span style="color:var(--failed)">'+r.f+'</span> / '+r.s+'</div><div>'+pill(r.status)+'</div></div>'}).join("")});
+  document.querySelectorAll("[data-spark]").forEach(function(s){var v=s.getAttribute("data-spark").split(",").map(Number);s.innerHTML=spark(v,260,parseInt(s.getAttribute("viewBox").split(" ")[3]),true)});
+  document.querySelectorAll("[data-donut]").forEach(function(s){var v=s.getAttribute("data-donut").split(",").map(Number),t=v.reduce(function(a,b){return a+b},0),cols=["var(--passed)","var(--failed)","var(--skipped)"],R=62,C=2*Math.PI*R,off=0,h='';v.forEach(function(x,i){var len=C*x/t;h+='<circle cx="110" cy="90" r="'+R+'" fill="none" stroke="'+cols[i]+'" stroke-width="18" stroke-dasharray="'+(len-2)+' '+(C-len+2)+'" stroke-dashoffset="'+(-off)+'" transform="rotate(-90 110 90)"/>';off+=len});h+='<text x="110" y="86" text-anchor="middle" style="font-size:24px;font-weight:700;fill:var(--text)">'+Math.round(v[0]/(v[0]+v[1])*1000)/10+'%</text><text x="110" y="104" text-anchor="middle">passed из завершённых</text>';s.innerHTML=h});
+  document.querySelectorAll("[data-bars]").forEach(function(s){var d=[[15,"#15 api",83,9],[16,"#16 api",82,10],[17,"#17 smoke",29,40],[18,"#18 all",95,66],[25,"#25 smoke",30,31],[28,"#28 all",113,5],[30,"#30 all",113,4],[31,"#31 идёт",146,3]],W=760,H=190,L=36,B=26,top=14,max=160,h='',gw=(W-L-10)/d.length;[0,40,80,120,160].forEach(function(g){var y=top+(H-top-B)*(1-g/max);h+='<line x1="'+L+'" x2="'+W+'" y1="'+y+'" y2="'+y+'" stroke="var(--line)"/><text x="'+(L-6)+'" y="'+(y+3)+'" text-anchor="end">'+g+'</text>'});d.forEach(function(r,i){var x=L+i*gw+gw*.22,w=gw*.26,yp=top+(H-top-B)*(1-r[2]/max),yf=top+(H-top-B)*(1-r[3]/max),y0=H-B;h+='<rect x="'+x+'" y="'+yp+'" width="'+w+'" height="'+(y0-yp)+'" rx="4" fill="var(--passed)"/><rect x="'+(x+w+4)+'" y="'+yf+'" width="'+w+'" height="'+(y0-yf)+'" rx="4" fill="var(--failed)"/><text x="'+(x+w+2)+'" y="'+(H-8)+'" text-anchor="middle">'+r[1]+'</text>'});s.innerHTML=h});
+  document.querySelectorAll("[data-area]").forEach(function(s){var W=760,H=170,L=36,B=24,top=12,max=160,series=[[61,83,82,29,95,30,113,113,146],[32,9,10,40,66,31,5,4,3],[0,1,1,3,46,9,65,64,56]],cols=["var(--passed)","var(--failed)","var(--skipped)"],labels=["#14","#15","#16","#17","#18","#25","#28","#30","#31"],h='';[0,50,100,150].forEach(function(g){var y=top+(H-top-B)*(1-g/max);h+='<line x1="'+L+'" x2="'+W+'" y1="'+y+'" y2="'+y+'" stroke="var(--line)"/><text x="'+(L-6)+'" y="'+(y+3)+'" text-anchor="end">'+g+'</text>'});series.forEach(function(v,k){var n=v.length,pts=v.map(function(y,i){return [L+i*(W-L-10)/(n-1),top+(H-top-B)*(1-y/max)]}),d=pts.map(function(p,i){return (i?"L":"M")+p[0].toFixed(1)+","+p[1].toFixed(1)}).join(" ");h+='<path d="'+d+' L'+pts[n-1][0]+','+(H-B)+' L'+pts[0][0]+','+(H-B)+' Z" fill="'+cols[k]+'" opacity=".12"/><path d="'+d+'" fill="none" stroke="'+cols[k]+'" stroke-width="2"/>';var e=pts[n-1];h+='<circle cx="'+e[0]+'" cy="'+e[1]+'" r="3.5" fill="'+cols[k]+'"/>'});labels.forEach(function(t,i){h+='<text x="'+(L+i*(W-L-10)/(labels.length-1))+'" y="'+(H-6)+'" text-anchor="middle">'+t+'</text>'});s.innerHTML=h});
+
+  var sw=document.querySelector(".swatches");PAL.forEach(function(c,i){var b=document.createElement("button");b.style.background=c;b.title=c;b.setAttribute("aria-pressed",i===0?"true":"false");b.setAttribute("aria-label","Цвет проекта "+c);b.addEventListener("click",function(){setAccent(c)});sw.appendChild(b)});
+  function setAccent(c){root.style.setProperty("--accent",c);var l=/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(c);var lum=l?(parseInt(l[1],16)*.299+parseInt(l[2],16)*.587+parseInt(l[3],16)*.114):0;root.style.setProperty("--accent-ink",lum>170?"#141826":"#ffffff");sw.querySelectorAll("button").forEach(function(b){b.setAttribute("aria-pressed",b.title===c?"true":"false")});try{localStorage.setItem("mock-accent",c)}catch(e){}}
+  function setTheme(t){if(t){root.setAttribute("data-theme",t)}else{root.removeAttribute("data-theme")}var dark=t==="dark"||(!t&&matchMedia("(prefers-color-scheme: dark)").matches);document.getElementById("theme").textContent="Тема: "+(dark?"тёмная":"светлая");try{if(t)localStorage.setItem("mock-theme",t)}catch(e){}}
+  document.getElementById("theme").addEventListener("click",function(){var cur=root.getAttribute("data-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");setTheme(cur==="dark"?"light":"dark")});
+  function mark(v){document.querySelectorAll(".tabs button").forEach(function(b){b.setAttribute("aria-current",b.getAttribute("data-v")===String(v)?"true":"false")})}
+  function show(v){var el=document.getElementById("v"+v);if(el)el.scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth",block:"start"});mark(v)}
+  document.querySelectorAll(".tabs button").forEach(function(b){b.addEventListener("click",function(){show(b.getAttribute("data-v"))})});
+  if("IntersectionObserver" in window){var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting)mark(e.target.id.slice(1))})},{rootMargin:"-40% 0px -55% 0px"});document.querySelectorAll(".variant").forEach(function(s){io.observe(s)})}
+  window.mock={show:show,setTheme:setTheme,setAccent:setAccent};
+  var q=new URLSearchParams(location.search),sa,stt;try{sa=localStorage.getItem("mock-accent");stt=localStorage.getItem("mock-theme")}catch(e){}
+  if(q.get("v"))show(q.get("v"));else mark(1);if(q.get("accent")||sa)setAccent(q.get("accent")||sa);setTheme(q.get("theme")||stt||"light");
+})();
+</script>
