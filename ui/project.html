@@ -18,6 +18,45 @@
       <a id="xfail-link" class="coverage-link" href="#">Известные дефекты</a>
     </div>
     <div id="page-error" class="error-box" hidden></div>
+    <div id="dashboard-error" class="error-box" hidden></div>
+
+    <div class="kpi-row" id="kpi-row"><p class="muted">Загрузка панели…</p></div>
+
+    <div class="card" id="dashboard-charts-card">
+      <h2>Дашборд проекта</h2>
+      <div class="charts-grid">
+        <div class="chart-box" id="status-donut-box">
+          <h3>Статусы последнего прогона</h3>
+          <div class="chart-donut-wrap">
+            <canvas id="status-donut-chart"></canvas>
+            <div class="chart-donut-center" id="status-donut-center"></div>
+          </div>
+        </div>
+        <div class="chart-box" id="area-rings-box">
+          <h3>Тесты по областям</h3>
+          <div id="area-rings-row" class="chart-rings-row"><p class="muted">Загрузка…</p></div>
+        </div>
+        <div class="chart-box chart-box-wide" id="passfail-bar-box">
+          <h3>Passed / failed по прогонам</h3>
+          <div class="chart-canvas-wrap"><canvas id="passfail-bar-chart"></canvas></div>
+        </div>
+        <div class="chart-box chart-box-wide" id="duration-area-box">
+          <h3>Длительность прогонов</h3>
+          <div class="chart-canvas-wrap"><canvas id="duration-area-chart"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dashboard-lists-grid">
+      <div class="card" id="longest-tests-card">
+        <h2>Самые долгие тесты</h2>
+        <ol id="longest-tests-list" class="detail-list"><li class="muted">Загрузка…</li></ol>
+      </div>
+      <div class="card" id="runs-feed-card">
+        <h2>Лента прогонов</h2>
+        <div id="runs-feed" class="runs-feed"><p class="muted">Загрузка…</p></div>
+      </div>
+    </div>
 
     <div class="project-layout">
       <div class="card" id="tests-card">
@@ -35,7 +74,7 @@
         </div>
         <div id="tests-error" class="error-box" hidden></div>
         <div id="tests-tree" class="test-tree"><p class="muted">Загрузка…</p></div>
-        <div class="run-buttons">
+        <div class="run-buttons" id="run-buttons-row">
           <button id="run-all-btn" class="primary">Запустить всё</button>
           <button id="run-selected-btn">Запустить выбранное</button>
         </div>
@@ -189,6 +228,9 @@
     </div>
   </div>
 
+  <!-- Chart.js UMD, закреплённая версия с cdnjs (только столбцы/донат/площадь; спарклайны
+       и кольца по областям — чистый inline SVG без библиотек, см. project.js). -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="common.js"></script>
   <script src="project.js"></script>
 </body>

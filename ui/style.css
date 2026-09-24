@@ -806,6 +806,50 @@ tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 .project-card:hover .project-logo-big { filter: grayscale(0) opacity(1) brightness(1.06) drop-shadow(0 0 14px rgba(47,111,237,.55)); }
 .project-card:hover .logo-placeholder { filter: grayscale(0) opacity(1); }
 
+/* ---------------- дашборд проекта: KPI/графики/лента прогонов ---------------- */
+@keyframes dash-fade-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+.kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.kpi-tile {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--shadow-card);
+  padding: 14px 16px;
+  opacity: 0;
+  animation: dash-fade-in .4s ease forwards;
+}
+.kpi-tile-label { font-size: 11px; text-transform: uppercase; letter-spacing: .03em; color: var(--text-muted); margin-bottom: 6px; }
+.kpi-tile-value { font-size: 22px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+.kpi-tile-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.kpi-spark { display: block; flex: 0 0 auto; }
+.kpi-trend { font-size: 14px; font-weight: 700; min-width: 14px; text-align: right; }
+.kpi-trend-good { color: var(--passed); }
+.kpi-trend-bad { color: var(--failed); }
+.kpi-trend-flat { color: var(--text-muted); }
+
+.chart-canvas-wrap { position: relative; height: 220px; }
+.chart-donut-wrap { position: relative; height: 220px; }
+.chart-donut-center {
+  position: absolute; inset: 0 0 28px 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  pointer-events: none;
+}
+.chart-donut-center .value { font-size: 22px; font-weight: 700; color: var(--text); }
+.chart-donut-center .label { font-size: 11px; color: var(--text-muted); }
+
+.dash-ring-progress { transition: stroke-dashoffset .8s ease; }
+
+.dashboard-lists-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+@media (max-width: 900px) { .dashboard-lists-grid { grid-template-columns: 1fr; } }
+
+.runs-feed { display: flex; flex-direction: column; gap: 8px; }
+.runs-feed-item { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; }
+.runs-feed-meta { flex: 1 1 auto; min-width: 0; display: flex; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--text-muted); }
+.runs-feed-id { font-weight: 600; color: var(--text); }
+.runs-feed-actions { display: flex; gap: 6px; flex: 0 0 auto; }
+.runs-feed-actions button { padding: 4px 10px; font-size: 12px; }
+
 /* ---------- мобильная раскладка (телефон) ---------- */
 .project-layout { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.4fr); } /* minmax(0) — колонки не растягиваются под длинные пути тестов */
 .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
@@ -836,6 +880,9 @@ tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
   .coverage-layout { grid-template-columns: 1fr; }
   .coverage-toolbar { gap: 8px; }
   .project-grid { grid-template-columns: repeat(2, 1fr); }
+  .kpi-row { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .kpi-tile { padding: 10px 12px; }
+  .kpi-tile-value { font-size: 18px; }
   .project-card .logo-box { height: 90px; }
   .project-card .project-logo-big { max-height: 90px; }
   .project-card .logo-placeholder { width: 72px; height: 72px; font-size: 26px; }

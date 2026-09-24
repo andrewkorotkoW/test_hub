@@ -46,6 +46,13 @@
 
   const canShare = ["qa", "manager", "superadmin"].includes(user.role);
 
+  // Заказчик видит карточки только для чтения — кнопки запуска прогона скрыты
+  // (сам POST /runs бэкенд всё ещё разрешает роли customer, см. app/routers/runs.py,
+  // это ограничение только на уровне UI по условию задачи).
+  if (user.role === "customer") {
+    document.getElementById("run-buttons-row").hidden = true;
+  }
+
   const flakyStandSelect = document.getElementById("flaky-stand-select");
   const flakyRows = document.getElementById("flaky-rows");
   const flakyError = document.getElementById("flaky-error");
@@ -653,27 +660,445 @@
     if (ev.target === shareOverlay) shareOverlay.hidden = true;
   });
 
+  // ---------------- дашборд проекта: KPI, кольца, столбцы, площадь, лента ----------------
+  // Источники данных — уже существующие эндпоинты (без изменений в app/):
+  // GET .../runs (история, DESC по id), GET .../flaky, GET .../xfail, GET /api/runs/{id}/report.
+  const dashboardError = document.getElementById("dashboard-error");
+  const kpiRow = document.getElementById("kpi-row");
+  const areaRingsRow = document.getElementById("area-rings-row");
+  const longestTestsList = document.getElementById("longest-tests-list");
+  const runsFeedBox = document.getElementById("runs-feed");
+  const DASH_SPARK_N = 10;
+
+  let donutChart = null;
+  let barChart = null;
+  let areaChart = null;
+
+  function cssVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
+  function hexWithAlpha(hex, alpha) {
+    const h = String(hex).replace("#", "").trim();
+    const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+    const n = parseInt(full, 16);
+    const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+
+  function tooltipStyle() {
+    return {
+      backgroundColor: cssVar("--surface"),
+      titleColor: cssVar("--text"),
+      bodyColor: cssVar("--text"),
+      borderColor: cssVar("--border"),
+      borderWidth: 1,
+      padding: 8,
+      cornerRadius: 6,
+      displayColors: false,
+    };
+  }
+
+  function chartScales() {
+    return {
+      x: { ticks: { color: cssVar("--text-muted"), font: { size: 11 } }, grid: { display: false } },
+      y: { ticks: { color: cssVar("--text-muted"), font: { size: 11 } }, grid: { color: cssVar("--border") }, beginAtZero: true },
+    };
+  }
+
+  // Подпись оси X по прогону: дата+время, если есть, иначе #id — единый формат
+  // для столбчатой и площадной диаграммы.
+  function shortRunLabel(m) {
+    if (!m.started) return `#${m.id}`;
+    const [datePart, timePart] = String(m.started).replace("T", " ").split(" ");
+    if (!datePart) return `#${m.id}`;
+    const [, mo, d] = datePart.split("-");
+    const hm = (timePart || "").slice(0, 5);
+    return `${d}.${mo}${hm ? " " + hm : ""}`;
+  }
+
+  // failed объединяет failed+broken (оба — «упало» на дашборде, badges на карточке
+  // прогона ниже по-прежнему показывают их раздельно).
+  function runMetrics(run) {
+    const counts = run.counts || {};
+    const passed = counts.passed || 0;
+    const failed = (counts.failed || 0) + (counts.broken || 0);
+    const skipped = counts.skipped || 0;
+    const total = passed + failed + skipped;
+    const percent = total ? Math.round((passed / total) * 1000) / 10 : null;
+    return { id: run.id, status: run.status, started: run.started, duration: run.duration, passed, failed, skipped, total, percent };
+  }
+
+  function sparklineSvg(values, colorVar) {
+    const width = 80, height = 26, pad = 3;
+    if (!values.length) return `<svg class="kpi-spark" width="${width}" height="${height}"></svg>`;
+    if (values.length === 1) {
+      return `<svg class="kpi-spark" width="${width}" height="${height}"><circle cx="${width / 2}" cy="${height / 2}" r="2.5" fill="${colorVar}" /></svg>`;
+    }
+    const min = Math.min.apply(null, values);
+    const max = Math.max.apply(null, values);
+    const span = max - min || 1;
+    const stepX = (width - pad * 2) / (values.length - 1);
+    const points = values.map((v, i) => [pad + i * stepX, height - pad - ((v - min) / span) * (height - pad * 2)]);
+    const d = points.map((p, i) => `${i === 0 ? "M" : "L"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
+    const last = points[points.length - 1];
+    return `
+      <svg class="kpi-spark" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+        <path class="kpi-spark-line" d="${d}" fill="none" stroke="${colorVar}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+        <circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="2.4" fill="${colorVar}" />
+      </svg>
+    `;
+  }
+
+  // «К прошлому прогону» = последние две точки спарклайна (для флаки/xfail это не
+  // буквально id прогона, см. flakyInstabilitySpark/xfailHitsSpark ниже, но то же
+  // самое «было — стало»).
+  function sparkTrend(values, higherIsBetter) {
+    if (values.length < 2) return { arrow: "", cls: "kpi-trend-flat" };
+    const prev = values[values.length - 2];
+    const curr = values[values.length - 1];
+    if (curr === prev) return { arrow: "→", cls: "kpi-trend-flat" };
+    const up = curr > prev;
+    const good = higherIsBetter ? up : !up;
+    return { arrow: up ? "▲" : "▼", cls: good ? "kpi-trend-good" : "kpi-trend-bad" };
+  }
+
+  function kpiTileHtml(i, { label, valueText, values, color, higherIsBetter }) {
+    const trend = sparkTrend(values, higherIsBetter);
+    return `
+      <div class="kpi-tile" style="animation-delay: ${i * 50}ms">
+        <div class="kpi-tile-label">${escapeHtml(label)}</div>
+        <div class="kpi-tile-value">${valueText}</div>
+        <div class="kpi-tile-foot">
+          ${sparklineSvg(values, color)}
+          <span class="kpi-trend ${trend.cls}" title="к прошлому прогону">${trend.arrow}</span>
+        </div>
+      </div>
+    `;
+  }
+
+  function animateSparklines(root) {
+    requestAnimationFrame(() => {
+      root.querySelectorAll(".kpi-spark-line").forEach((path) => {
+        const len = path.getTotalLength();
+        path.style.strokeDasharray = String(len);
+        path.style.strokeDashoffset = String(len);
+        path.getBoundingClientRect();
+        path.style.transition = "stroke-dashoffset .6s ease";
+        requestAnimationFrame(() => { path.style.strokeDashoffset = "0"; });
+      });
+    });
+  }
+
+  // Доля непройденных срезов последних до 10 статусов у каждого нестабильного
+  // теста (last_statuses уже накапливается от старых к новым, как в flakyDotsHtml
+  // выше) — proxy-тренд «стало ли лучше/хуже», т.к. флаки-счётчик сам по себе не
+  // привязан к конкретным id прогонов.
+  function flakyInstabilitySpark(flakyItems) {
+    const slots = new Array(DASH_SPARK_N).fill(null).map(() => ({ fail: 0, total: 0 }));
+    flakyItems.forEach((item) => {
+      const statuses = (item.last_statuses || []).slice(-DASH_SPARK_N);
+      const offset = DASH_SPARK_N - statuses.length;
+      statuses.forEach((s, i) => {
+        slots[offset + i].total += 1;
+        if (s && s !== "passed") slots[offset + i].fail += 1;
+      });
+    });
+    return slots.map((s) => (s.total ? Math.round((s.fail / s.total) * 100) : 0));
+  }
+
+  // Число известных дефектов (xfail), «попавших» именно в этот прогон
+  // (xfail_registry.last_run_id) — реальные точки по тем же прогонам, что и
+  // остальные KPI-карточки.
+  function xfailHitsSpark(activeXfail, chronoRuns) {
+    return chronoRuns.map((run) => activeXfail.filter((it) => it.last_run_id === run.id).length);
+  }
+
+  function renderKpiRow(chronoRuns, chronoMetrics, flakyItemsAll, xfailItemsAll) {
+    if (!chronoMetrics.length) {
+      kpiRow.innerHTML = `<p class="muted">Прогонов пока не было — панель появится после первого запуска.</p>`;
+      return;
+    }
+    const latest = chronoMetrics[chronoMetrics.length - 1];
+    const activeFlaky = flakyItemsAll.filter((it) => it.score >= FLAKY_THRESHOLD);
+    const activeXfail = xfailItemsAll.filter((it) => it.state === "xfail");
+
+    const tiles = [
+      { label: "Всего тестов", valueText: String(latest.total), values: chronoMetrics.map((m) => m.total), color: "var(--accent)", higherIsBetter: true },
+      { label: "% passed", valueText: latest.percent === null ? "—" : `${latest.percent}%`, values: chronoMetrics.map((m) => m.percent ?? 0), color: "var(--passed)", higherIsBetter: true },
+      { label: "Упало", valueText: String(latest.failed), values: chronoMetrics.map((m) => m.failed), color: "var(--failed)", higherIsBetter: false },
+      { label: "Длительность", valueText: fmtDuration(latest.duration), values: chronoMetrics.map((m) => m.duration ?? 0), color: "var(--gradient-end)", higherIsBetter: false },
+      { label: "Флаки-тесты", valueText: String(activeFlaky.length), values: flakyInstabilitySpark(activeFlaky), color: "var(--flaky)", higherIsBetter: false },
+      { label: "Xfail", valueText: String(activeXfail.length), values: xfailHitsSpark(activeXfail, chronoRuns), color: "var(--xfail)", higherIsBetter: false },
+    ];
+    kpiRow.innerHTML = tiles.map((t, i) => kpiTileHtml(i, t)).join("");
+    animateSparklines(kpiRow);
+  }
+
+  function renderDonutChart(latest) {
+    const canvas = document.getElementById("status-donut-chart");
+    const centerBox = document.getElementById("status-donut-center");
+    if (donutChart) { donutChart.destroy(); donutChart = null; }
+    if (!latest || !window.Chart) {
+      centerBox.innerHTML = `<span class="label">${window.Chart ? "Нет прогонов" : ""}</span>`;
+      return;
+    }
+    donutChart = new Chart(canvas, {
+      type: "doughnut",
+      data: {
+        labels: ["passed", "failed", "skipped"],
+        datasets: [{
+          data: [latest.passed, latest.failed, latest.skipped],
+          backgroundColor: [cssVar("--passed"), cssVar("--failed"), cssVar("--skipped")],
+          borderWidth: 0,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: "72%",
+        animation: { duration: 700, easing: "easeOutQuart" },
+        plugins: {
+          legend: { display: true, position: "bottom", labels: { color: cssVar("--text-muted"), boxWidth: 10, font: { size: 11 } } },
+          tooltip: tooltipStyle(),
+        },
+      },
+    });
+    centerBox.innerHTML = `<span class="value">${latest.percent === null ? "—" : latest.percent + "%"}</span><span class="label">passed</span>`;
+  }
+
+  function renderBarChart(chronoMetrics) {
+    const canvas = document.getElementById("passfail-bar-chart");
+    if (barChart) { barChart.destroy(); barChart = null; }
+    if (!chronoMetrics.length || !window.Chart) return;
+    barChart = new Chart(canvas, {
+      type: "bar",
+      data: {
+        labels: chronoMetrics.map(shortRunLabel),
+        datasets: [
+          { label: "passed", data: chronoMetrics.map((m) => m.passed), backgroundColor: cssVar("--passed"), borderRadius: 4, maxBarThickness: 22 },
+          { label: "failed", data: chronoMetrics.map((m) => m.failed), backgroundColor: cssVar("--failed"), borderRadius: 4, maxBarThickness: 22 },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 600, easing: "easeOutQuart" },
+        plugins: {
+          legend: { display: true, position: "bottom", labels: { color: cssVar("--text-muted"), boxWidth: 10, font: { size: 11 } } },
+          tooltip: tooltipStyle(),
+        },
+        scales: chartScales(),
+      },
+    });
+  }
+
+  function renderAreaChart(chronoMetrics) {
+    const canvas = document.getElementById("duration-area-chart");
+    if (areaChart) { areaChart.destroy(); areaChart = null; }
+    if (!chronoMetrics.length || !window.Chart) return;
+    const ctx = canvas.getContext("2d");
+    const gradient = ctx.createLinearGradient(0, 0, 0, canvas.clientHeight || 220);
+    gradient.addColorStop(0, hexWithAlpha(cssVar("--gradient-start"), 0.55));
+    gradient.addColorStop(0.5, hexWithAlpha(cssVar("--gradient-mid"), 0.35));
+    gradient.addColorStop(1, hexWithAlpha(cssVar("--gradient-end"), 0.05));
+    areaChart = new Chart(canvas, {
+      type: "line",
+      data: {
+        labels: chronoMetrics.map(shortRunLabel),
+        datasets: [{
+          label: "длительность, с",
+          data: chronoMetrics.map((m) => m.duration ?? null),
+          borderColor: cssVar("--gradient-mid"),
+          backgroundColor: gradient,
+          fill: true,
+          tension: 0.35,
+          pointRadius: 3,
+          pointBackgroundColor: cssVar("--gradient-end"),
+          spanGaps: true,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 600, easing: "easeOutQuart" },
+        plugins: { legend: { display: false }, tooltip: tooltipStyle() },
+        scales: chartScales(),
+      },
+    });
+  }
+
+  function ringSvgAnimated(percent, colorVar) {
+    const size = 96, strokeWidth = 12;
+    const r = (size - strokeWidth) / 2;
+    const c = 2 * Math.PI * r;
+    const dash = ((percent || 0) / 100) * c;
+    return `
+      <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+        <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="var(--border)" stroke-width="${strokeWidth}" />
+        <circle class="dash-ring-progress" cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${colorVar}"
+                stroke-width="${strokeWidth}" stroke-dasharray="${c} ${c}" stroke-dashoffset="${c}"
+                data-target-offset="${c - dash}" stroke-linecap="round"
+                transform="rotate(-90 ${size / 2} ${size / 2})" />
+        <text x="50%" y="50%" text-anchor="middle" dominant-baseline="central" class="ring-text">${percent === null ? "—" : percent + "%"}</text>
+      </svg>
+    `;
+  }
+
+  function animateRings(container) {
+    requestAnimationFrame(() => {
+      container.querySelectorAll(".dash-ring-progress").forEach((circle) => {
+        const target = circle.dataset.targetOffset;
+        requestAnimationFrame(() => circle.setAttribute("stroke-dashoffset", target));
+      });
+    });
+  }
+
+  const AREA_KIND_LABELS = { api: "tests/api", ui: "tests/ui", e2e: "e2e" };
+
+  // Тесты отчёта прогона хранят allure fullName (dot-путь + "#test", см.
+  // app/core/allure_report.py), а не nodeid со слэшами, поэтому дерево->область
+  // из ui/coverage-areas-logic.js (splitFilePath, слэши) сюда не подходит напрямую
+  // — минимальная своя разборка по конвенции tests.<api|ui|e2e>.<...>.
+  function areaKindFromFullName(name) {
+    const parts = String(name || "").split("#")[0].split(".");
+    for (let i = 0; i < parts.length; i++) {
+      if (parts[i] === "api" || parts[i] === "ui" || parts[i] === "e2e") return parts[i];
+    }
+    return "other";
+  }
+
+  function renderAreaRings(tests) {
+    if (!tests || !tests.length) {
+      areaRingsRow.innerHTML = `<p class="muted">Нет данных последнего прогона.</p>`;
+      return;
+    }
+    const buckets = { api: { passed: 0, total: 0 }, ui: { passed: 0, total: 0 }, e2e: { passed: 0, total: 0 } };
+    tests.forEach((t) => {
+      const kind = areaKindFromFullName(t.name);
+      if (!buckets[kind]) return;
+      buckets[kind].total += 1;
+      if (t.status === "passed") buckets[kind].passed += 1;
+    });
+    const kinds = ["api", "ui", "e2e"].filter((k) => buckets[k].total > 0);
+    if (!kinds.length) {
+      areaRingsRow.innerHTML = `<p class="muted">Тесты вне tests/api, tests/ui, e2e не размечены по областям.</p>`;
+      return;
+    }
+    const colors = { api: "var(--gradient-start)", ui: "var(--gradient-mid)", e2e: "var(--gradient-end)" };
+    areaRingsRow.innerHTML = kinds.map((k) => {
+      const b = buckets[k];
+      const percent = b.total ? Math.round((b.passed / b.total) * 100) : null;
+      return `
+        <div class="chart-ring">
+          ${ringSvgAnimated(percent, colors[k])}
+          <div class="chart-ring-label">${escapeHtml(AREA_KIND_LABELS[k])} (${b.passed}/${b.total})</div>
+        </div>
+      `;
+    }).join("");
+    animateRings(areaRingsRow);
+  }
+
+  function renderLongestTests(tests) {
+    const withDuration = (tests || [])
+      .filter((t) => typeof t.duration === "number")
+      .sort((a, b) => b.duration - a.duration)
+      .slice(0, 5);
+    if (!withDuration.length) {
+      longestTestsList.innerHTML = `<li class="muted">Нет данных последнего прогона.</li>`;
+      return;
+    }
+    longestTestsList.innerHTML = withDuration.map((t) => `
+      <li title="${escapeHtml(t.name)}">
+        <span class="status-text ${escapeHtml(t.status)}">${escapeHtml(String(t.name).split("#").pop())}</span>
+        — ${fmtDuration(t.duration)}
+      </li>
+    `).join("");
+  }
+
+  function renderRunsFeed(runs) {
+    const items = runs.slice(0, 8);
+    if (!items.length) {
+      runsFeedBox.innerHTML = `<p class="muted">Прогонов ещё не было.</p>`;
+      return;
+    }
+    runsFeedBox.innerHTML = items.map((r) => `
+      <div class="runs-feed-item">
+        <span class="status-pill ${escapeHtml(r.status)}" data-status="${escapeHtml(r.status)}">${escapeHtml(r.status)}</span>
+        <div class="runs-feed-meta">
+          <span class="runs-feed-id">#${r.id}</span>
+          <span>${escapeHtml(r.stand || "без стенда")}</span>
+          <span>${fmtDate(r.started)}</span>
+          <span>${fmtDuration(r.duration)}</span>
+        </div>
+        <div class="runs-feed-actions">
+          <button type="button" class="runs-feed-report-btn" data-run-id="${r.id}">Отчёт</button>
+          ${canShare ? `<button type="button" class="runs-feed-share-btn" data-run-id="${r.id}">Поделиться</button>` : ""}
+        </div>
+      </div>
+    `).join("");
+  }
+
+  runsFeedBox.addEventListener("click", (ev) => {
+    const reportBtn = ev.target.closest(".runs-feed-report-btn");
+    if (reportBtn) { openRun(Number(reportBtn.dataset.runId)); return; }
+    const shareBtn = ev.target.closest(".runs-feed-share-btn");
+    if (shareBtn) openShareModal(Number(shareBtn.dataset.runId));
+  });
+
+  async function renderDashboard(runs) {
+    dashboardError.hidden = true;
+    const chronoRuns = runs.slice(0, DASH_SPARK_N).reverse();
+    const chronoMetrics = chronoRuns.map(runMetrics);
+    try {
+      const [flakyAll, xfailAll] = await Promise.all([
+        api(`/api/projects/${encodeURIComponent(projectName)}/flaky?min_runs=3`),
+        api(`/api/projects/${encodeURIComponent(projectName)}/xfail`),
+      ]);
+      renderKpiRow(chronoRuns, chronoMetrics, flakyAll.items || [], xfailAll.items || []);
+      renderBarChart(chronoMetrics);
+      renderAreaChart(chronoMetrics);
+
+      let latestTests = [];
+      if (runs.length) {
+        const report = await api(`/api/runs/${runs[0].id}/report`);
+        latestTests = report.tests || [];
+        renderDonutChart(runMetrics(runs[0]));
+      } else {
+        renderDonutChart(null);
+      }
+      renderAreaRings(latestTests);
+      renderLongestTests(latestTests);
+      renderRunsFeed(runs);
+    } catch (err) {
+      dashboardError.textContent = `Не удалось загрузить дашборд: ${err.message}`;
+      dashboardError.hidden = false;
+    }
+  }
+
   // ---------------- history ----------------
   async function loadHistory() {
     try {
       const runs = await api(`/api/projects/${encodeURIComponent(projectName)}/runs`);
       if (!runs.length) {
         historyRows.innerHTML = `<tr><td colspan="7" class="muted">Прогонов ещё не было.</td></tr>`;
-        return;
+      } else {
+        historyRows.innerHTML = runs.map((r) => `
+          <tr class="clickable" data-run-id="${r.id}">
+            <td>${r.id}</td>
+            <td class="status-text ${escapeHtml(r.status)}">${escapeHtml(r.status)}</td>
+            <td>${escapeHtml(r.stand || "—")}</td>
+            <td>${r.target === "all" ? "всё" : "выборочно"}</td>
+            <td>${fmtDate(r.started)}</td>
+            <td>${fmtDuration(r.duration)}</td>
+            <td>${escapeHtml(r.requested_by || "—")}</td>
+          </tr>
+        `).join("");
       }
-      historyRows.innerHTML = runs.map((r) => `
-        <tr class="clickable" data-run-id="${r.id}">
-          <td>${r.id}</td>
-          <td class="status-text ${escapeHtml(r.status)}">${escapeHtml(r.status)}</td>
-          <td>${escapeHtml(r.stand || "—")}</td>
-          <td>${r.target === "all" ? "всё" : "выборочно"}</td>
-          <td>${fmtDate(r.started)}</td>
-          <td>${fmtDuration(r.duration)}</td>
-          <td>${escapeHtml(r.requested_by || "—")}</td>
-        </tr>
-      `).join("");
+      await renderDashboard(runs);
     } catch (err) {
       historyRows.innerHTML = `<tr><td colspan="7" class="error-box">Не удалось загрузить историю: ${escapeHtml(err.message)}</td></tr>`;
+      await renderDashboard([]);
     }
   }
 
