@@ -55,7 +55,83 @@ function currentPage() {
   return path;
 }
 
-// ---------- тема: localStorage + prefers-color-scheme, дефолт — тёмная ----------
+// ---------- палитра акцентных цветов проекта (app/schemas.py::PROJECT_COLOR_PALETTE) ----------
+const PROJECT_COLOR_PALETTE = [
+  "#2563eb", "#7c5cff", "#ff4fa3", "#38d6ff", "#22c55e",
+  "#f59e0b", "#ff4d6d", "#14b8a6", "#8b93a7",
+];
+
+function hexToRgb(hex) {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex || "");
+  if (!m) return { r: 37, g: 99, b: 235 };
+  return { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) };
+}
+
+function rgbToHex({ r, g, b }) {
+  const toHex = (v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0");
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+// затемняет (percent < 0) или осветляет (percent > 0) цвет на долю расстояния до чёрного/белого
+function shadeColor(hex, percent) {
+  const { r, g, b } = hexToRgb(hex);
+  const target = percent < 0 ? 0 : 255;
+  const p = Math.abs(percent);
+  const mix = (c) => c + (target - c) * p;
+  return rgbToHex({ r: mix(r), g: mix(g), b: mix(b) });
+}
+
+// относительная яркость по WCAG — определяет, какой текст (тёмный/светлый) читается
+// поверх этого цвета лучше
+function relativeLuminance(hex) {
+  const { r, g, b } = hexToRgb(hex);
+  const [rs, gs, bs] = [r, g, b].map((c) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
+}
+
+function contrastTextColor(hex) {
+  return relativeLuminance(hex) > 0.5 ? "#12141f" : "#ffffff";
+}
+
+// Применяет цвет проекта к --accent/--accent-hover/--accent-text и к градиенту
+// (--gradient-start/-mid/-end): кнопки, активный пункт сайдбара и графики в
+// project.js используют эти переменные и перекрашиваются без правки их кода.
+// Статусы прогонов (--passed/--failed/--skipped/--xfail/--flaky) не трогаем.
+function applyProjectColor(color) {
+  const root = document.documentElement;
+  root.style.setProperty("--accent", color);
+  root.style.setProperty("--accent-hover", shadeColor(color, -0.18));
+  root.style.setProperty("--accent-text", contrastTextColor(color));
+  root.style.setProperty("--gradient-start", color);
+  root.style.setProperty("--gradient-mid", shadeColor(color, 0.25));
+  root.style.setProperty("--gradient-end", shadeColor(color, -0.25));
+}
+
+// Рисует ряд из 9 точек палитры в container. editable=true — точки кликабельны
+// (вызывают onPick(hex)); иначе — просто индикатор текущего цвета.
+function renderColorPicker(container, { color, editable = false, onPick } = {}) {
+  if (!container) return;
+  container.innerHTML = PROJECT_COLOR_PALETTE.map((hex) => {
+    const active = hex === color ? " color-dot-active" : "";
+    const tag = editable ? "button" : "span";
+    const typeAttr = editable ? ' type="button"' : "";
+    return `<${tag}${typeAttr} class="color-dot${active}" style="background:${hex}" data-color="${hex}" title="${hex}" aria-label="${hex}"></${tag}>`;
+  }).join("");
+  if (editable && onPick) {
+    container.querySelectorAll(".color-dot").forEach((dot) => {
+      dot.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        onPick(dot.dataset.color);
+      });
+    });
+  }
+}
+
+// ---------- тема: localStorage + prefers-color-scheme, дефолт — светлая ----------
 const THEME_STORAGE_KEY = "testhub-theme";
 
 function detectPreferredTheme() {
@@ -67,8 +143,8 @@ function detectPreferredTheme() {
     if (window.matchMedia("(prefers-color-scheme: light)").matches) return "light";
     if (window.matchMedia("(prefers-color-scheme: dark)").matches) return "dark";
   }
-  // системная тема явно не задана — по ТЗ дефолт тёмная
-  return "dark";
+  // системная тема явно не задана — по ТЗ дефолт светлая
+  return "light";
 }
 
 function applyTheme(theme) {

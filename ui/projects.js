@@ -15,6 +15,8 @@ const PROJECT_NAME_RE = /^[a-zA-Z0-9_-]+$/;
   const formError = document.getElementById("add-project-error");
   const cancelBtn = document.getElementById("add-project-cancel");
 
+  const canEditColor = user.role === "qa" || user.role === "superadmin";
+
   function renderProjects(projects) {
     if (!projects.length) {
       grid.innerHTML = `<p class="muted">Проектов пока нет.</p>`;
@@ -27,6 +29,7 @@ const PROJECT_NAME_RE = /^[a-zA-Z0-9_-]+$/;
         </div>
         <div class="name">${escapeHtml(p.name)}</div>
         <div class="stands-count">Стендов: ${p.stands.length}</div>
+        <div class="color-picker" data-project="${escapeHtml(p.name)}"></div>
       </a>
     `).join("");
     // нет файла логотипа — вместо битой картинки круг с инициалами проекта
@@ -37,6 +40,23 @@ const PROJECT_NAME_RE = /^[a-zA-Z0-9_-]+$/;
         ph.textContent = img.dataset.initials;
         img.replaceWith(ph);
       });
+    });
+    projects.forEach((p) => {
+      const picker = grid.querySelector(`.color-picker[data-project="${CSS.escape(p.name)}"]`);
+      const onPick = async (color) => {
+        try {
+          const updated = await api(`/api/projects/${encodeURIComponent(p.name)}/color`, {
+            method: "PUT",
+            json: { color },
+          });
+          p.color = updated.color;
+          renderColorPicker(picker, { color: p.color, editable: canEditColor, onPick });
+        } catch (err) {
+          errorBox.textContent = `Не удалось изменить цвет: ${err.message}`;
+          errorBox.hidden = false;
+        }
+      };
+      renderColorPicker(picker, { color: p.color, editable: canEditColor, onPick });
     });
   }
 

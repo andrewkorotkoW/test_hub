@@ -17,7 +17,8 @@ CREATE TABLE IF NOT EXISTS projects (
     path TEXT NOT NULL,
     venv TEXT NOT NULL,
     stands TEXT NOT NULL DEFAULT '[]',
-    use_env_flag INTEGER NOT NULL DEFAULT 0
+    use_env_flag INTEGER NOT NULL DEFAULT 0,
+    color TEXT
 );
 
 CREATE TABLE IF NOT EXISTS stands (
@@ -336,6 +337,7 @@ def init_db() -> None:
         _migrate_add_column(conn, "runs", "marker", "marker TEXT")
         _migrate_add_column(conn, "runs", "repeat", "repeat INTEGER NOT NULL DEFAULT 1")
         _migrate_add_column(conn, "stands", "manual_only", "manual_only INTEGER NOT NULL DEFAULT 0")
+        _migrate_add_column(conn, "projects", "color", "color TEXT")
         # flaky_stats, xfail_registry, schedules и stand_presets сами по себе — новые
         # таблицы (не существующие с другой схемой в старых БД), поэтому их создание
         # уже покрыто CREATE TABLE IF NOT EXISTS в SCHEMA выше и отдельной ALTER-
