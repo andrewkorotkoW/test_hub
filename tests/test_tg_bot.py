@@ -27,12 +27,16 @@ from app.main import app, lifespan
 from app.security import verify_password
 from app.tg_bot import (
     ACCESS_DENIED_MESSAGE,
+    STAGE_USAGE,
     HubClient,
     AccessMiddleware,
     _is_allowed,
+    _manual_confirm_text,
     build_callback,
     build_confirm_keyboard,
+    build_manual_confirm_keyboard,
     build_marker_keyboard,
+    build_preset_keyboard,
     build_run_args,
     build_run_keyboard,
     build_schedules_keyboard,
@@ -49,6 +53,7 @@ from app.tg_bot import (
     parse_run_args,
     parse_run_command,
     parse_run_id,
+    parse_stage_args,
     router,
 )
 
@@ -366,12 +371,53 @@ def test_parse_callback_run_actions(action):
     assert parse_callback(f"{action}:42") == {"action": action, "run_id": 42}
 
 
+def test_parse_callback_preset():
+    assert parse_callback("preset:bike_fit:stage:5") == {
+        "action": "preset",
+        "project": "bike_fit",
+        "stand": "stage",
+        "preset_id": 5,
+    }
+
+
+def test_parse_callback_preset_confirm():
+    assert parse_callback("preset_confirm:bike_fit:stage:5") == {
+        "action": "preset_confirm",
+        "project": "bike_fit",
+        "stand": "stage",
+        "preset_id": 5,
+    }
+
+
+def test_parse_callback_preset_non_integer_id_is_invalid():
+    assert parse_callback("preset:bike_fit:stage:abc") == {"action": "invalid", "raw": "preset:bike_fit:stage:abc"}
+
+
+def test_parse_callback_tree_run_confirm_has_no_fields():
+    assert parse_callback("tree_run_confirm") == {"action": "tree_run_confirm"}
+
+
 @pytest.mark.parametrize(
     "data",
     ["", "unknown", "project", "project:a:b", "run_status:not-a-number", "marker:a:b"],
 )
 def test_parse_callback_invalid_returns_invalid_action(data):
     assert parse_callback(data) == {"action": "invalid", "raw": data}
+
+
+# ------------------------------------------------------------------ /stage: разбор аргументов
+def test_parse_stage_args_happy_path():
+    assert parse_stage_args("bike_fit Smoke") == ("bike_fit", "Smoke")
+
+
+def test_parse_stage_args_preset_name_with_spaces():
+    assert parse_stage_args("bike_fit Custom preset name") == ("bike_fit", "Custom preset name")
+
+
+@pytest.mark.parametrize("text", ["", "bike_fit"])
+def test_parse_stage_args_missing_arguments_raises(text):
+    with pytest.raises(ValueError, match="Использование"):
+        parse_stage_args(text)
 
 
 # ------------------------------------------------------------------ inline-клавиатуры
@@ -388,6 +434,13 @@ def test_build_stands_keyboard_no_stands_shows_no_stand_button():
     assert "stand:bike_fit:_" in data
 
 
+def test_build_stands_keyboard_manual_only_stand_shows_lock_label():
+    markup = build_stands_keyboard("bike_fit", [{"name": "stage", "manual_only": True}, {"name": "develop", "manual_only": False}])
+    buttons = {btn.text: btn.callback_data for row in markup.inline_keyboard for btn in row}
+    assert buttons["🔒 stage (только вручную)"] == "stand:bike_fit:stage"
+    assert buttons["develop"] == "stand:bike_fit:develop"
+
+
 def test_build_marker_keyboard_covers_all_four_options():
     markup = build_marker_keyboard("bike_fit", "stage")
     data = [btn.callback_data for row in markup.inline_keyboard for btn in row]
@@ -402,6 +455,27 @@ def test_build_confirm_keyboard_has_yes_and_cancel():
     data = [btn.callback_data for row in markup.inline_keyboard for btn in row]
     assert "confirm:bike_fit:stage:smoke" in data
     assert "menu" in data
+
+
+def test_build_preset_keyboard_lists_presets_and_tests_and_back_buttons():
+    presets = [{"id": 1, "name": "Smoke"}, {"id": 2, "name": "БУК"}]
+    markup = build_preset_keyboard("bike_fit", "stage", presets)
+    buttons = {btn.text: btn.callback_data for row in markup.inline_keyboard for btn in row}
+    assert buttons["Smoke"] == "preset:bike_fit:stage:1"
+    assert buttons["БУК"] == "preset:bike_fit:stage:2"
+    assert buttons["Выбрать тесты"] == "tests:bike_fit:stage"
+    assert buttons["« К стендам"] == "project:bike_fit"
+
+
+def test_build_manual_confirm_keyboard_has_yes_and_cancel():
+    markup = build_manual_confirm_keyboard("preset_confirm:bike_fit:stage:1")
+    buttons = {btn.text: btn.callback_data for row in markup.inline_keyboard for btn in row}
+    assert buttons["Да, запустить"] == "preset_confirm:bike_fit:stage:1"
+    assert buttons["Отмена"] == "menu"
+
+
+def test_manual_confirm_text_matches_expected_wording():
+    assert _manual_confirm_text("stage", "Smoke") == "⚠️ Запуск на stage: Smoke. Подтвердить?"
 
 
 def test_build_run_keyboard_has_status_report_cancel_trend_share():
@@ -647,11 +721,16 @@ async def test_button_flow_without_env_flag_omits_env_in_confirm_hint(monkeypatc
 
 
 async def test_button_flow_stand_step_does_not_call_hub_client(monkeypatch):
-    """cb_stand только строит клавиатуру маркеров из уже известных project/stand
-    в callback_data — HTTP не нужен (в отличие от cb_project/cb_marker)."""
+    """cb_stand строит клавиатуру маркеров из уже известных project/stand в
+    callback_data (см. cb_project/cb_marker для сравнения) — но с задачи
+    "пресеты и подтверждение запуска на stage" он всё же ходит в list_stands,
+    чтобы узнать manual_only (это не приходит в callback_data, см.
+    build_stands_keyboard/_stand_manual_only) и решить, показывать пресеты
+    (manual_only-стенд) или обычную клавиатуру маркеров, как здесь."""
     monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
     bot, session = _make_bot()
     client = AsyncMock(spec=HubClient)
+    client.list_stands.return_value = [{"name": "stage", "manual_only": False}]
     dispatcher = _make_dispatcher(client)
 
     flow_message = _message(bot, text="Выберите стенд:")
@@ -661,10 +740,279 @@ async def test_button_flow_stand_step_does_not_call_hub_client(monkeypatch):
     )
 
     client.list_projects.assert_not_called()
-    client.list_stands.assert_not_called()
+    client.list_stands.assert_awaited_once_with("bike_fit")
     edited = [c for c in session.calls if isinstance(c, EditMessageText)]
     assert len(edited) == 1
     assert "Выберите набор тестов" in edited[0].text
+
+
+# ------------------------------------------------------------------ manual_only-стенд: пресеты + подтверждение запуска на stage
+async def test_button_flow_manual_only_stand_shows_preset_keyboard_instead_of_markers(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    client.list_stands.return_value = [{"name": "stage", "manual_only": True}]
+    client.list_stand_presets.return_value = [{"id": 1, "name": "Smoke", "target": "all", "marker": "smoke"}]
+    dispatcher = _make_dispatcher(client)
+
+    flow_message = _message(bot, text="Выберите стенд:")
+    await dispatcher.feed_update(
+        bot,
+        Update(update_id=1, callback_query=_callback(bot, flow_message, "stand:bike_fit:stage", cb_id="c1")),
+    )
+
+    client.list_stand_presets.assert_awaited_once_with("bike_fit", "stage")
+    edited = [c for c in session.calls if isinstance(c, EditMessageText)]
+    assert len(edited) == 1
+    assert "Выберите пресет" in edited[0].text
+    assert "только вручную" in edited[0].text
+    callback_datas = [btn.callback_data for row in edited[0].reply_markup.inline_keyboard for btn in row]
+    assert "preset:bike_fit:stage:1" in callback_datas
+    assert "tests:bike_fit:stage" in callback_datas
+
+
+async def test_button_flow_preset_leads_to_confirmation_before_submit(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    client.list_stand_presets.return_value = [{"id": 1, "name": "Smoke", "target": "all", "marker": "smoke"}]
+    dispatcher = _make_dispatcher(client)
+
+    flow_message = _message(bot, text="Выберите пресет:")
+    await dispatcher.feed_update(
+        bot,
+        Update(update_id=1, callback_query=_callback(bot, flow_message, "preset:bike_fit:stage:1", cb_id="c1")),
+    )
+
+    client.submit_run.assert_not_called()
+    edited = [c for c in session.calls if isinstance(c, EditMessageText)]
+    assert len(edited) == 1
+    assert edited[0].text == "⚠️ Запуск на stage: Smoke. Подтвердить?"
+    buttons = {btn.text: btn.callback_data for row in edited[0].reply_markup.inline_keyboard for btn in row}
+    assert buttons["Да, запустить"] == "preset_confirm:bike_fit:stage:1"
+    assert buttons["Отмена"] == "menu"
+
+
+async def test_button_flow_preset_confirm_submits_with_confirm_manual_true(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    monkeypatch.setattr(tg_bot, "_watch_run", AsyncMock())
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    client.list_stand_presets.return_value = [{"id": 1, "name": "Smoke", "target": "all", "marker": "smoke"}]
+    client.submit_run.return_value = {"id": 99, "status": "queued"}
+    dispatcher = _make_dispatcher(client)
+
+    flow_message = _message(bot, text="⚠️ Запуск на stage: Smoke. Подтвердить?")
+    await dispatcher.feed_update(
+        bot,
+        Update(update_id=1, callback_query=_callback(bot, flow_message, "preset_confirm:bike_fit:stage:1", cb_id="c1")),
+    )
+
+    client.submit_run.assert_awaited_once_with("bike_fit", "stage", "smoke", target="all", confirm_manual=True)
+    edited = [c for c in session.calls if isinstance(c, EditMessageText)]
+    assert len(edited) == 1
+    assert "Прогон #99 поставлен в очередь." in edited[0].text
+    callback_datas = [btn.callback_data for row in edited[0].reply_markup.inline_keyboard for btn in row]
+    assert callback_datas == ["run_status:99", "run_report:99", "run_cancel:99", "run_trend:99", "run_share:99"]
+
+
+async def test_button_flow_preset_confirm_unknown_preset_shows_error_and_does_not_submit(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    client.list_stand_presets.return_value = []
+    dispatcher = _make_dispatcher(client)
+
+    flow_message = _message(bot, text="⚠️ Запуск на stage: Smoke. Подтвердить?")
+    await dispatcher.feed_update(
+        bot,
+        Update(update_id=1, callback_query=_callback(bot, flow_message, "preset_confirm:bike_fit:stage:1", cb_id="c1")),
+    )
+
+    client.submit_run.assert_not_called()
+    edited = [c for c in session.calls if isinstance(c, EditMessageText)]
+    assert edited[0].text == "Пресет не найден."
+
+
+async def test_button_flow_preset_confirm_shows_generic_error_when_submit_fails(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    client.list_stand_presets.return_value = [{"id": 1, "name": "Smoke", "target": "all", "marker": "smoke"}]
+    client.submit_run.side_effect = httpx.HTTPStatusError(
+        "409", request=httpx.Request("POST", "http://x"), response=httpx.Response(409, json={"detail": "manual only"})
+    )
+    dispatcher = _make_dispatcher(client)
+
+    flow_message = _message(bot, text="⚠️ Запуск на stage: Smoke. Подтвердить?")
+    await dispatcher.feed_update(
+        bot,
+        Update(update_id=1, callback_query=_callback(bot, flow_message, "preset_confirm:bike_fit:stage:1", cb_id="c1")),
+    )
+
+    edited = [c for c in session.calls if isinstance(c, EditMessageText)]
+    assert edited[0].text == "Не удалось поставить прогон."
+
+
+# ------------------------------------------------------------------ /stage <проект> <пресет>
+async def test_cmd_stage_missing_arguments_shows_usage(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    dispatcher = _make_dispatcher(client)
+
+    message = _message(bot, text="/stage bike_fit")
+    await dispatcher.feed_update(bot, Update(update_id=1, message=message))
+
+    client.list_stands.assert_not_called()
+    sent = [c for c in session.calls if isinstance(c, SendMessage)]
+    assert sent[0].text == STAGE_USAGE
+
+
+async def test_cmd_stage_project_without_stage_stand(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    client.list_stands.return_value = [{"name": "develop", "manual_only": False}]
+    dispatcher = _make_dispatcher(client)
+
+    message = _message(bot, text="/stage bike_fit Smoke")
+    await dispatcher.feed_update(bot, Update(update_id=1, message=message))
+
+    client.list_stand_presets.assert_not_called()
+    sent = [c for c in session.calls if isinstance(c, SendMessage)]
+    assert "нет стенда «stage»" in sent[0].text
+
+
+async def test_cmd_stage_unknown_preset_lists_available_names(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    client.list_stands.return_value = [{"name": "stage", "manual_only": True}]
+    client.list_stand_presets.return_value = [{"id": 1, "name": "Smoke", "target": "all", "marker": "smoke"}]
+    dispatcher = _make_dispatcher(client)
+
+    message = _message(bot, text="/stage bike_fit Unknown")
+    await dispatcher.feed_update(bot, Update(update_id=1, message=message))
+
+    sent = [c for c in session.calls if isinstance(c, SendMessage)]
+    assert "Пресет «Unknown» не найден" in sent[0].text
+    assert "Smoke" in sent[0].text
+
+
+async def test_cmd_stage_known_preset_shows_confirmation_keyboard(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    client.list_stands.return_value = [{"name": "stage", "manual_only": True}]
+    client.list_stand_presets.return_value = [{"id": 7, "name": "Smoke", "target": "all", "marker": "smoke"}]
+    dispatcher = _make_dispatcher(client)
+
+    message = _message(bot, text="/stage bike_fit Smoke")
+    await dispatcher.feed_update(bot, Update(update_id=1, message=message))
+
+    client.submit_run.assert_not_called()
+    sent = [c for c in session.calls if isinstance(c, SendMessage)]
+    assert sent[0].text == "⚠️ Запуск на stage: Smoke. Подтвердить?"
+    buttons = {btn.text: btn.callback_data for row in sent[0].reply_markup.inline_keyboard for btn in row}
+    assert buttons["Да, запустить"] == "preset_confirm:bike_fit:stage:7"
+
+
+async def test_cmd_stage_denied_for_user_outside_allowlist(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    dispatcher = _make_dispatcher(client)
+
+    message = _message(bot, user_id=999, text="/stage bike_fit Smoke")
+    await dispatcher.feed_update(bot, Update(update_id=1, message=message))
+
+    client.list_stands.assert_not_called()
+    sent = [c for c in session.calls if isinstance(c, SendMessage)]
+    assert sent[0].text == ACCESS_DENIED_MESSAGE
+
+
+# ------------------------------------------------------------------ HubClient: confirm_manual в payload, список пресетов
+async def test_hub_client_submit_run_omits_confirm_manual_when_false():
+    submitted: list[dict] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        submitted.append(json.loads(request.content))
+        return httpx.Response(200, json={"id": 1, "status": "queued"})
+
+    client = HubClient()
+    client._client = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://testserver")
+    client._logged_in = True
+    try:
+        await client.submit_run("p", "stage", "smoke")
+    finally:
+        await client.aclose()
+
+    assert submitted == [{"stand": "stage", "target": "all", "marker": "smoke"}]
+
+
+async def test_hub_client_submit_run_includes_confirm_manual_when_true():
+    submitted: list[dict] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        submitted.append(json.loads(request.content))
+        return httpx.Response(200, json={"id": 1, "status": "queued"})
+
+    client = HubClient()
+    client._client = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://testserver")
+    client._logged_in = True
+    try:
+        await client.submit_run("p", "stage", "smoke", target="tests/test_a.py", confirm_manual=True)
+    finally:
+        await client.aclose()
+
+    assert submitted == [
+        {"stand": "stage", "target": "tests/test_a.py", "marker": "smoke", "confirm_manual": True}
+    ]
+
+
+async def test_hub_client_list_stand_presets_matches_api_format():
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/projects/p/stands/stage/presets"
+        return httpx.Response(200, json=[{"id": 1, "project": "p", "stand": "stage", "name": "Smoke", "target": "all", "marker": "smoke"}])
+
+    client = HubClient()
+    client._client = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://testserver")
+    client._logged_in = True
+    try:
+        presets = await client.list_stand_presets("p", "stage")
+    finally:
+        await client.aclose()
+
+    assert presets == [{"id": 1, "project": "p", "stand": "stage", "name": "Smoke", "target": "all", "marker": "smoke"}]
+
+
+# ------------------------------------------------------------------ реальный сервер: сервисная учётка бота всё равно не может запустить manual_only-стенд
+async def test_bot_service_account_still_gets_409_on_manual_only_stand_even_via_new_flow(
+    qa_client, isolated_allure_dir, runnable_project_dir
+):
+    """Задача добавляет боту UX подтверждения (confirm_manual=True), но не должна
+    ослаблять существующую защиту (см. app/core/runner.py::ManualRunNotConfirmed) —
+    сервисная учётка бота (settings.TH_TG_SERVICE_LOGIN) остаётся заблокированной
+    даже когда сама «подтверждает» запуск, ровно как и раньше (см.
+    tests/test_run_manual_stage.py::test_run_on_manual_only_stand_confirm_but_service_login_still_409)."""
+    await register_project(qa_client, "stage_guard_proj", runnable_project_dir)
+    stand_resp = await qa_client.post("/api/projects/stage_guard_proj/stands", json={"name": "stage", "url": ""})
+    stand_id = stand_resp.json()["id"]
+    await qa_client.patch(f"/api/projects/stage_guard_proj/stands/{stand_id}", json={"manual_only": True})
+
+    client = _hub_client()
+    try:
+        with pytest.raises(httpx.HTTPStatusError) as exc_info:
+            await client.submit_run(
+                "stage_guard_proj", "stage", None, target="tests/test_sample.py", confirm_manual=True
+            )
+    finally:
+        await client.aclose()
+    assert exc_info.value.response.status_code == 409
+
+    rows = (await qa_client.get("/api/projects/stage_guard_proj/runs")).json()
+    assert rows == []
 
 
 # ------------------------------------------------------------------ фото-отчёт: кнопка «Отчёт»/«Тренд»

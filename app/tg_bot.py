@@ -6,6 +6,15 @@
 команды (/projects, /run, /status, /report, /last) дублируют тот же функционал через
 HTTP API test_hub — обе ветки используют один и тот же HubClient.
 
+Стенд с manual_only=1 (боевой stage, см. app/db.py::VSHGU_MANUAL_ONLY_STAND) вместо
+маркеров показывает пресеты (build_preset_keyboard) и требует ещё один шаг
+подтверждения (build_manual_confirm_keyboard/_manual_confirm_text) перед
+submit_run(confirm_manual=True) — как для пресета (cb_preset/cb_preset_confirm),
+так и для дерева тестов (cb_tree_run/cb_tree_run_confirm), и то же самое даёт
+команда /stage <проект> <пресет>. Сервисная учётка бота при этом всё равно не
+может ничего запустить на таком стенде — submit_run блокирует её отдельно, см.
+app/core/runner.py::ManualRunNotConfirmed.
+
 Бот работает поверх REST API самого test_hub (app/routers/projects.py, app/routers/runs.py)
 под сервисной учёткой settings.TH_TG_SERVICE_LOGIN (сидится в app/db.py::_seed_tg_bot_user),
 используя фичи t1 — RunCreate.marker и projects.use_env_flag/--env (app/schemas.py,
@@ -75,6 +84,8 @@ FLAKY_TOP_N = 10
 XFAIL_USAGE = "Использование: /xfail <проект> [стенд]"
 XFAIL_TOP_N = 10
 SCHEDULE_USAGE = "Использование: /schedules <проект>"
+STAGE_USAGE = "Использование: /stage <проект> <пресет>"
+STAGE_STAND_NAME = "stage"
 
 ACCESS_DENIED_MESSAGE = "Извините, у вас нет доступа к этому боту."
 MENU_TEXT = "Выберите проект:"
@@ -131,11 +142,24 @@ class HubClient:
         resp = await self._request("GET", f"/api/projects/{project}/stands")
         return resp.json()
 
-    async def submit_run(self, project: str, stand: str | None, marker: str | None, target: str = "all") -> dict:
+    async def submit_run(
+        self,
+        project: str,
+        stand: str | None,
+        marker: str | None,
+        target: str = "all",
+        confirm_manual: bool = False,
+    ) -> dict:
         payload: dict = {"stand": stand, "target": target}
         if marker:
             payload["marker"] = marker
+        if confirm_manual:
+            payload["confirm_manual"] = True
         resp = await self._request("POST", f"/api/projects/{project}/runs", json=payload)
+        return resp.json()
+
+    async def list_stand_presets(self, project: str, stand: str) -> list[dict]:
+        resp = await self._request("GET", f"/api/projects/{project}/stands/{stand}/presets")
         return resp.json()
 
     async def get_tests(self, project: str) -> dict:
@@ -254,6 +278,16 @@ def parse_xfail_args(text: str) -> tuple[str, str | None]:
     return project, rest[0] if rest else None
 
 
+def parse_stage_args(text: str) -> tuple[str, str]:
+    """"<проект> <пресет>" — имя пресета может содержать пробелы (как и маркер
+    в parse_run_args), поэтому всё после проекта склеивается в имя целиком."""
+    parts = text.split()
+    if len(parts) < 2:
+        raise ValueError(STAGE_USAGE)
+    project, *rest = parts
+    return project, " ".join(rest)
+
+
 # ------------------------------------------------------------------ callback_data кнопок
 def _encode_token(value: str | None) -> str:
     return _NONE_TOKEN if value is None else value
@@ -302,6 +336,12 @@ def parse_callback(data: str) -> dict:
         return {"action": action, "run_id": run_id}
     if action == "tests" and len(rest) == 2:
         return {"action": "tests", "project": rest[0], "stand": _decode_token(rest[1])}
+    if action in ("preset", "preset_confirm") and len(rest) == 3:
+        try:
+            preset_id = int(rest[2])
+        except ValueError:
+            return {"action": "invalid", "raw": data}
+        return {"action": action, "project": rest[0], "stand": _decode_token(rest[1]), "preset_id": preset_id}
     if action == "flaky" and len(rest) == 1:
         return {"action": "flaky", "project": rest[0]}
     if action in ("xfail", "xfail_check") and len(rest) == 1:
@@ -319,7 +359,9 @@ def parse_callback(data: str) -> dict:
             return {"action": "invalid", "raw": data}
         key = "node" if action == "tree_open" else "page"
         return {"action": action, key: value}
-    if action in ("tree_up", "tree_refresh", "tree_select_file", "tree_clear", "tree_run") and not rest:
+    if action in (
+        "tree_up", "tree_refresh", "tree_select_file", "tree_clear", "tree_run", "tree_run_confirm",
+    ) and not rest:
         return {"action": action}
     if action in ("fail_open", "fail_restart_one") and len(rest) == 2:
         try:
@@ -600,6 +642,13 @@ def _confirm_text(project: str, stand: str | None, marker: str | None, args: lis
     return "\n".join(lines)
 
 
+def _manual_confirm_text(stand: str | None, label: str) -> str:
+    """Подтверждение запуска на manual_only-стенде (boевой stage) — отдельный
+    текст от _confirm_text, т.к. submit_run на таком стенде требует
+    confirm_manual=True (см. app/core/runner.py::ManualRunNotConfirmed)."""
+    return f"⚠️ Запуск на {_stand_label(stand)}: {label}. Подтвердить?"
+
+
 # ------------------------------------------------------------------ inline-клавиатуры
 def build_projects_keyboard(projects: list[dict]) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
@@ -613,8 +662,9 @@ def build_stands_keyboard(project: str, stands: list[dict]) -> InlineKeyboardMar
     builder = InlineKeyboardBuilder()
     if stands:
         for stand in stands:
+            label = f"🔒 {stand['name']} (только вручную)" if stand.get("manual_only") else stand["name"]
             builder.button(
-                text=stand["name"], callback_data=build_callback("stand", project=project, stand=stand["name"])
+                text=label, callback_data=build_callback("stand", project=project, stand=stand["name"])
             )
     else:
         builder.button(text="Без стенда", callback_data=build_callback("stand", project=project, stand=None))
@@ -658,6 +708,32 @@ def build_confirm_keyboard(project: str, stand: str | None, marker: str | None) 
     builder = InlineKeyboardBuilder()
     builder.button(text="Да", callback_data=build_callback("confirm", project=project, stand=stand, marker=marker))
     builder.button(text="Отмена", callback_data="menu")
+    builder.adjust(2)
+    return builder.as_markup()
+
+
+def build_preset_keyboard(project: str, stand: str | None, presets: list[dict]) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for preset in presets:
+        builder.button(
+            text=preset["name"],
+            callback_data=build_callback("preset", project=project, stand=stand, id=str(preset["id"])),
+        )
+    builder.button(text="Выбрать тесты", callback_data=build_callback("tests", project=project, stand=stand))
+    builder.button(text="« К стендам", callback_data=build_callback("project", project=project))
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def build_manual_confirm_keyboard(yes_callback: str, cancel_callback: str = "menu") -> InlineKeyboardMarkup:
+    """Подтверждение запуска на manual_only-стенде — тот же двухкнопочный вид,
+    что и build_confirm_keyboard, но с явной формулировкой ("Да, запустить") и
+    свободным yes_callback: вызывающий код (пресет/дерево) сам решает, что
+    произойдёт по "Да" — submit_run с confirm_manual=True в разных вариантах
+    target/marker, которые не укладываются в формат build_callback("confirm", ...)."""
+    builder = InlineKeyboardBuilder()
+    builder.button(text="Да, запустить", callback_data=yes_callback)
+    builder.button(text="Отмена", callback_data=cancel_callback)
     builder.adjust(2)
     return builder.as_markup()
 
@@ -825,6 +901,20 @@ async def _project_use_env_flag(client: HubClient, project: str) -> bool:
         return False
     row = next((p for p in projects if p["name"] == project), None)
     return bool(row and row.get("use_env_flag"))
+
+
+async def _stand_manual_only(client: HubClient, project: str, stand: str | None) -> bool:
+    """manual_only приходит только из /api/projects/{name}/stands, не из
+    callback_data (см. build_stands_keyboard) — cb_stand и cb_tree_run
+    перезапрашивают его тем же способом, что и _project_use_env_flag."""
+    if stand is None:
+        return False
+    try:
+        stands = await client.list_stands(project)
+    except httpx.HTTPError:
+        return False
+    row = next((s for s in stands if s.get("name") == stand), None)
+    return bool(row and row.get("manual_only"))
 
 
 # ------------------------------------------------------------------ кэш дерева тестов (per project, TTL ~5 минут)
@@ -1035,6 +1125,16 @@ async def cb_stand(query: CallbackQuery, client: HubClient) -> None:
         return
     parsed = parse_callback(query.data)
     project, stand = parsed["project"], parsed["stand"]
+    if await _stand_manual_only(client, project, stand):
+        try:
+            presets = await client.list_stand_presets(project, stand)
+        except httpx.HTTPError as exc:
+            logger.warning("tg_bot: не удалось получить пресеты стенда %s/%s: %s", project, stand, exc)
+            await _safe_edit(query.message, f"Не удалось получить пресеты стенда «{stand}».")
+            return
+        text = f"Проект: {project}\nСтенд: {_stand_label(stand)} 🔒 (только вручную)\nВыберите пресет:"
+        await _safe_edit(query.message, text, build_preset_keyboard(project, stand, presets))
+        return
     text = f"Проект: {project}\nСтенд: {_stand_label(stand)}\nВыберите набор тестов:"
     await _safe_edit(query.message, text, build_marker_keyboard(project, stand))
 
@@ -1050,6 +1150,73 @@ async def cb_marker(query: CallbackQuery, client: HubClient) -> None:
     args = build_run_args(env_flag, stand, marker)
     text = _confirm_text(project, stand, marker, args)
     await _safe_edit(query.message, text, build_confirm_keyboard(project, stand, marker))
+
+
+async def _get_preset_or_notify(query: CallbackQuery, client: HubClient, project: str, stand: str, preset_id: int) -> dict | None:
+    try:
+        presets = await client.list_stand_presets(project, stand)
+    except httpx.HTTPError as exc:
+        logger.warning("tg_bot: не удалось получить пресеты стенда %s/%s: %s", project, stand, exc)
+        await _safe_edit(query.message, "Не удалось получить пресеты.")
+        return None
+    preset = next((p for p in presets if p["id"] == preset_id), None)
+    if preset is None:
+        await _safe_edit(query.message, "Пресет не найден.")
+        return None
+    return preset
+
+
+@router.callback_query(F.data.startswith("preset:"))
+async def cb_preset(query: CallbackQuery, client: HubClient) -> None:
+    await query.answer()
+    if query.message is None:
+        return
+    parsed = parse_callback(query.data)
+    if parsed["action"] != "preset":
+        return
+    project, stand, preset_id = parsed["project"], parsed["stand"], parsed["preset_id"]
+    preset = await _get_preset_or_notify(query, client, project, stand, preset_id)
+    if preset is None:
+        return
+    text = _manual_confirm_text(stand, preset["name"])
+    yes_callback = build_callback("preset_confirm", project=project, stand=stand, id=str(preset_id))
+    await _safe_edit(query.message, text, build_manual_confirm_keyboard(yes_callback))
+
+
+@router.callback_query(F.data.startswith("preset_confirm:"))
+async def cb_preset_confirm(
+    query: CallbackQuery,
+    client: HubClient,
+    run_chats: dict[int, int],
+    last_run: dict[int, int],
+    bot: Bot,
+    failed_cache: dict[int, list[dict]] | None = None,
+) -> None:
+    await query.answer()
+    if query.message is None:
+        return
+    parsed = parse_callback(query.data)
+    if parsed["action"] != "preset_confirm":
+        return
+    project, stand, preset_id = parsed["project"], parsed["stand"], parsed["preset_id"]
+    preset = await _get_preset_or_notify(query, client, project, stand, preset_id)
+    if preset is None:
+        return
+    try:
+        run = await client.submit_run(
+            project, stand, preset.get("marker"), target=preset["target"], confirm_manual=True
+        )
+    except httpx.HTTPError as exc:
+        logger.warning("tg_bot: не удалось поставить прогон по пресету %s: %s", preset.get("name"), exc)
+        await _safe_edit(query.message, "Не удалось поставить прогон.")
+        return
+
+    run_id = run["id"]
+    chat_id = query.message.chat.id
+    run_chats[run_id] = chat_id
+    last_run[chat_id] = run_id
+    await _safe_edit(query.message, f"Прогон #{run_id} поставлен в очередь.", build_run_keyboard(run_id))
+    asyncio.create_task(_watch_run(bot, client, run_chats, run_id, failed_cache if failed_cache is not None else {}))
 
 
 @router.callback_query(F.data.startswith("tests:"))
@@ -1259,6 +1426,40 @@ async def cb_tree_clear(
     )
 
 
+async def _submit_selected_tests(
+    query: CallbackQuery,
+    client: HubClient,
+    state: dict,
+    selected: set[str],
+    browse_state: dict[int, dict],
+    selections: dict[int, set[str]],
+    run_chats: dict[int, int],
+    last_run: dict[int, int],
+    bot: Bot,
+    failed_cache: dict[int, list[dict]] | None,
+    confirm_manual: bool,
+) -> None:
+    chat_id = query.message.chat.id
+    target = "\n".join(sorted(selected))
+    kwargs = {"confirm_manual": True} if confirm_manual else {}
+    try:
+        run = await client.submit_run(state["project"], state["stand"], None, target=target, **kwargs)
+    except httpx.HTTPError as exc:
+        logger.warning("tg_bot: не удалось поставить прогон по выбранным тестам: %s", exc)
+        await _safe_edit(query.message, "Не удалось поставить прогон.")
+        return
+
+    run_id = run["id"]
+    run_chats[run_id] = chat_id
+    last_run[chat_id] = run_id
+    selections[chat_id] = set()
+    browse_state.pop(chat_id, None)
+    await _safe_edit(
+        query.message, f"Прогон #{run_id} поставлен в очередь ({len(selected)} тест(ов)).", build_run_keyboard(run_id)
+    )
+    asyncio.create_task(_watch_run(bot, client, run_chats, run_id, failed_cache if failed_cache is not None else {}))
+
+
 @router.callback_query(F.data == "tree_run")
 async def cb_tree_run(
     query: CallbackQuery,
@@ -1279,25 +1480,46 @@ async def cb_tree_run(
     if state is None or not selected:
         await query.answer("Сначала выберите хотя бы один тест.", show_alert=True)
         return
-    await query.answer()
 
-    target = "\n".join(sorted(selected))
-    try:
-        run = await client.submit_run(state["project"], state["stand"], None, target=target)
-    except httpx.HTTPError as exc:
-        logger.warning("tg_bot: не удалось поставить прогон по выбранным тестам: %s", exc)
-        await _safe_edit(query.message, "Не удалось поставить прогон.")
+    if await _stand_manual_only(client, state["project"], state["stand"]):
+        await query.answer()
+        text = _manual_confirm_text(state["stand"], f"{len(selected)} тест(ов)")
+        await _safe_edit(query.message, text, build_manual_confirm_keyboard("tree_run_confirm"))
         return
 
-    run_id = run["id"]
-    run_chats[run_id] = chat_id
-    last_run[chat_id] = run_id
-    selections[chat_id] = set()
-    browse_state.pop(chat_id, None)
-    await _safe_edit(
-        query.message, f"Прогон #{run_id} поставлен в очередь ({len(selected)} тест(ов)).", build_run_keyboard(run_id)
+    await query.answer()
+    await _submit_selected_tests(
+        query, client, state, selected, browse_state, selections, run_chats, last_run, bot, failed_cache,
+        confirm_manual=False,
     )
-    asyncio.create_task(_watch_run(bot, client, run_chats, run_id, failed_cache if failed_cache is not None else {}))
+
+
+@router.callback_query(F.data == "tree_run_confirm")
+async def cb_tree_run_confirm(
+    query: CallbackQuery,
+    client: HubClient,
+    browse_state: dict[int, dict],
+    selections: dict[int, set[str]],
+    run_chats: dict[int, int],
+    last_run: dict[int, int],
+    bot: Bot,
+    failed_cache: dict[int, list[dict]] | None = None,
+) -> None:
+    if query.message is None:
+        await query.answer()
+        return
+    chat_id = query.message.chat.id
+    state = _tree_nav_state(browse_state, chat_id)
+    selected = selections.get(chat_id) or set()
+    if state is None or not selected:
+        await query.answer("Информация устарела, выберите тесты заново.", show_alert=True)
+        return
+
+    await query.answer()
+    await _submit_selected_tests(
+        query, client, state, selected, browse_state, selections, run_chats, last_run, bot, failed_cache,
+        confirm_manual=True,
+    )
 
 
 @router.callback_query(F.data.startswith("confirm:"))
@@ -1614,6 +1836,42 @@ async def cmd_run(
     last_run[chat_id] = run_id
     await message.answer(f"Прогон #{run_id} поставлен в очередь.")
     asyncio.create_task(_watch_run(bot, client, run_chats, run_id, failed_cache if failed_cache is not None else {}))
+
+
+@router.message(Command("stage"))
+async def cmd_stage(message: Message, command: CommandObject, client: HubClient) -> None:
+    """/stage <проект> <пресет> — тот же путь подтверждения, что и у кнопки
+    пресета (cb_preset/cb_preset_confirm): "Да, запустить" здесь шлёт то же
+    callback_data "preset_confirm:...", обработанное тем же хендлером."""
+    try:
+        project, preset_name = parse_stage_args(command.args or "")
+    except ValueError as exc:
+        await message.answer(str(exc))
+        return
+
+    try:
+        stands = await client.list_stands(project)
+    except httpx.HTTPError as exc:
+        await _reply_http_error(message, exc, "получить стенды", not_found=f"Проект «{project}» не найден.")
+        return
+    if not any(s.get("name") == STAGE_STAND_NAME for s in stands):
+        await message.answer(f"У проекта «{project}» нет стенда «{STAGE_STAND_NAME}».")
+        return
+
+    try:
+        presets = await client.list_stand_presets(project, STAGE_STAND_NAME)
+    except httpx.HTTPError as exc:
+        await _reply_http_error(message, exc, "получить пресеты")
+        return
+    preset = next((p for p in presets if p["name"] == preset_name), None)
+    if preset is None:
+        names = ", ".join(p["name"] for p in presets) or "—"
+        await message.answer(f"Пресет «{preset_name}» не найден. Доступные: {names}")
+        return
+
+    text = _manual_confirm_text(STAGE_STAND_NAME, preset["name"])
+    yes_callback = build_callback("preset_confirm", project=project, stand=STAGE_STAND_NAME, id=str(preset["id"]))
+    await message.answer(text, reply_markup=build_manual_confirm_keyboard(yes_callback))
 
 
 @router.message(Command("status"))
