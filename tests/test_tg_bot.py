@@ -647,11 +647,16 @@ async def test_button_flow_without_env_flag_omits_env_in_confirm_hint(monkeypatc
 
 
 async def test_button_flow_stand_step_does_not_call_hub_client(monkeypatch):
-    """cb_stand только строит клавиатуру маркеров из уже известных project/stand
-    в callback_data — HTTP не нужен (в отличие от cb_project/cb_marker)."""
+    """cb_stand строит клавиатуру маркеров из уже известных project/stand в
+    callback_data (см. cb_project/cb_marker для сравнения) — но с задачи
+    "пресеты и подтверждение запуска на stage" он всё же ходит в list_stands,
+    чтобы узнать manual_only (это не приходит в callback_data, см.
+    build_stands_keyboard/_stand_manual_only) и решить, показывать пресеты
+    (manual_only-стенд) или обычную клавиатуру маркеров, как здесь."""
     monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
     bot, session = _make_bot()
     client = AsyncMock(spec=HubClient)
+    client.list_stands.return_value = [{"name": "stage", "manual_only": False}]
     dispatcher = _make_dispatcher(client)
 
     flow_message = _message(bot, text="Выберите стенд:")
@@ -661,7 +666,7 @@ async def test_button_flow_stand_step_does_not_call_hub_client(monkeypatch):
     )
 
     client.list_projects.assert_not_called()
-    client.list_stands.assert_not_called()
+    client.list_stands.assert_awaited_once_with("bike_fit")
     edited = [c for c in session.calls if isinstance(c, EditMessageText)]
     assert len(edited) == 1
     assert "Выберите набор тестов" in edited[0].text
