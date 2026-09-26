@@ -21,7 +21,7 @@ import pytest
 from unittest.mock import AsyncMock
 
 from aiogram import Dispatcher
-from aiogram.methods import SendMessage, SendPhoto
+from aiogram.methods import EditMessageText, SendMessage, SendPhoto
 from aiogram.types import Update
 
 from app import tg_bot
@@ -282,6 +282,68 @@ async def test_cb_tree_run_without_selection_shows_alert_and_does_not_submit():
     assert query.answers[-1][1].get("show_alert") is True
 
 
+# ------------------------------------------------------------------ manual_only-стенд: дерево ведёт на подтверждение, не сразу на submit_run
+async def test_cb_tree_run_manual_only_stand_shows_confirmation_instead_of_submitting():
+    nodes, idx_one, idx_two = _two_test_nodes()
+    chat_id = 555
+    browse_state = {chat_id: {"project": "proj", "stand": "stage"}}
+    selections = {chat_id: {nodes[idx_one]["nodeid"], nodes[idx_two]["nodeid"]}}
+    message = _FakeTreeMessage(chat_id)
+    client = AsyncMock(spec=HubClient)
+    client.list_stands.return_value = [{"name": "stage", "manual_only": True}]
+
+    query = _FakeTreeCallback("tree_run", message)
+    await tg_bot.cb_tree_run(query, client, browse_state, selections, {}, {}, bot=None)
+
+    client.submit_run.assert_not_called()
+    assert message.edits, "должно быть показано подтверждение, а не мгновенный запуск"
+    text, markup = message.edits[-1]
+    assert text == "⚠️ Запуск на stage: 2 тест(ов). Подтвердить?"
+    buttons = {btn.text: btn.callback_data for row in markup.inline_keyboard for btn in row}
+    assert buttons["Да, запустить"] == "tree_run_confirm"
+    # состояние (выбор/browse_state) не тронуто — юзер ещё может отменить
+    assert selections[chat_id] == {nodes[idx_one]["nodeid"], nodes[idx_two]["nodeid"]}
+    assert chat_id in browse_state
+
+
+async def test_cb_tree_run_confirm_submits_with_confirm_manual_true(monkeypatch):
+    monkeypatch.setattr(tg_bot, "_watch_run", AsyncMock())
+    nodes, idx_one, idx_two = _two_test_nodes()
+    chat_id = 555
+    browse_state = {chat_id: {"project": "proj", "stand": "stage"}}
+    selections = {chat_id: {nodes[idx_two]["nodeid"], nodes[idx_one]["nodeid"]}}
+    run_chats: dict[int, int] = {}
+    last_run: dict[int, int] = {}
+    message = _FakeTreeMessage(chat_id)
+    client = AsyncMock(spec=HubClient)
+    client.submit_run.return_value = {"id": 654, "status": "queued"}
+
+    query = _FakeTreeCallback("tree_run_confirm", message)
+    await tg_bot.cb_tree_run_confirm(query, client, browse_state, selections, run_chats, last_run, bot=None)
+
+    client.submit_run.assert_awaited_once_with(
+        "proj", "stage", None,
+        target=f"{nodes[idx_one]['nodeid']}\n{nodes[idx_two]['nodeid']}",
+        confirm_manual=True,
+    )
+    assert selections[chat_id] == set()
+    assert chat_id not in browse_state
+
+
+async def test_cb_tree_run_confirm_without_selection_shows_alert_and_does_not_submit():
+    chat_id = 555
+    browse_state = {chat_id: {"project": "proj", "stand": "stage"}}
+    selections: dict[int, set[str]] = {}
+    message = _FakeTreeMessage(chat_id)
+    client = AsyncMock(spec=HubClient)
+
+    query = _FakeTreeCallback("tree_run_confirm", message)
+    await tg_bot.cb_tree_run_confirm(query, client, browse_state, selections, {}, {}, bot=None)
+
+    client.submit_run.assert_not_called()
+    assert query.answers[-1][1].get("show_alert") is True
+
+
 # ------------------------------------------------------------------ интеграция: полный Dispatcher + FakeTelegramSession
 def _make_full_dispatcher(client, tree_cache=None, browse_state=None, selections=None, failed_cache=None) -> Dispatcher:
     router._parent_router = None
@@ -340,6 +402,48 @@ async def test_tree_flow_selects_two_tests_and_runs_them_and_clears_selection(mo
     chat_id = flow_message.chat.id
     assert selections.get(chat_id, set()) == set()
     assert chat_id not in browse_state
+
+
+async def test_tree_flow_manual_only_stand_requires_confirmation_step_before_submit(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    monkeypatch.setattr(tg_bot, "_watch_run", AsyncMock())
+    bot, session = _make_bot()
+
+    tree = {"tests/test_a.py": {"": ["test_one"]}}
+    nodes = build_flat_tree(tree)
+    idx_one = next(i for i, n in enumerate(nodes) if n.get("nodeid") == "tests/test_a.py::test_one")
+
+    client = AsyncMock(spec=HubClient)
+    client.get_tests.return_value = {"tree": tree}
+    client.list_stands.return_value = [{"name": "stage", "manual_only": True}]
+    client.submit_run.return_value = {"id": 88, "status": "queued"}
+
+    dispatcher = _make_full_dispatcher(client)
+
+    flow_message = _message(bot, text="Выберите набор тестов:")
+    await dispatcher.feed_update(
+        bot, Update(update_id=1, callback_query=_callback(bot, flow_message, "tests:bike_fit:stage", cb_id="c1"))
+    )
+    await dispatcher.feed_update(
+        bot, Update(update_id=2, callback_query=_callback(bot, flow_message, f"tree_open:{idx_one}", cb_id="c2"))
+    )
+    await dispatcher.feed_update(
+        bot, Update(update_id=3, callback_query=_callback(bot, flow_message, "tree_run", cb_id="c3"))
+    )
+
+    client.submit_run.assert_not_called()  # первый клик — только подтверждение
+    edited = [c for c in session.calls if isinstance(c, EditMessageText)]
+    assert edited[-1].text == "⚠️ Запуск на stage: 1 тест(ов). Подтвердить?"
+
+    await dispatcher.feed_update(
+        bot, Update(update_id=4, callback_query=_callback(bot, flow_message, "tree_run_confirm", cb_id="c4"))
+    )
+
+    client.submit_run.assert_awaited_once_with(
+        "bike_fit", "stage", None, target="tests/test_a.py::test_one", confirm_manual=True
+    )
+    final = [c for c in session.calls if isinstance(c, EditMessageText)][-1]
+    assert "Прогон #88 поставлен в очередь" in final.text
 
 
 # ------------------------------------------------------------------ интеграция: упавшие тесты, детали ошибки и перезапуск
