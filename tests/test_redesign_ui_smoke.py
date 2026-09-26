@@ -11,6 +11,7 @@ import re
 
 import pytest
 
+from app.schemas import PROJECT_COLOR_PALETTE
 
 # Страницы с общим shell (сайдбар + хедер), собранным renderHeader()/renderSidebar() из
 # common.js в id="app-header"/id="app-sidebar". share.html сознательно вне этого списка —
@@ -161,6 +162,96 @@ async def test_project_js_hides_run_buttons_row_for_customer_role():
     assert match, "не найдена ветка `user.role === \"customer\"` в ui/project.js"
     assert 'getElementById("run-buttons-row")' in match.group(1)
     assert ".hidden = true" in match.group(1)
+
+
+async def test_project_html_chart_and_list_ids_present_exactly_once(client):
+    """ui/project.js (renderDashboard()) адресуется к этим id напрямую через
+    getElementById — после перестройки project.html (t2) они должны остаться в
+    разметке ровно по одному разу, иначе JS молча возьмёт не тот узел/упадёт."""
+    resp = await client.get("/project.html")
+    html = resp.text
+    ids = [
+        "status-donut-chart",
+        "status-donut-center",
+        "area-rings-row",
+        "passfail-bar-chart",
+        "duration-area-chart",
+        "longest-tests-list",
+        "runs-feed",
+        "kpi-row",
+    ]
+    for i in ids:
+        assert html.count(f'id="{i}"') == 1, f"id={i} должен встречаться ровно один раз"
+
+
+async def test_project_html_has_project_color_picker(client):
+    """ui/project.js рендерит палитру цвета проекта (renderColorPicker(), common.js)
+    в этот контейнер — см. app/schemas.py::PROJECT_COLOR_PALETTE."""
+    resp = await client.get("/project.html")
+    html = resp.text
+    assert html.count('id="project-color-picker"') == 1
+
+
+# ---------------------------------------------------- дефолт светлой темы без вспышки
+
+@pytest.mark.parametrize("page", ["index.html", "projects.html", "project.html"])
+async def test_common_js_script_tag_is_in_head_not_at_end_of_body(client, page):
+    """common.js выставляет data-theme на <html> синхронно при загрузке (до отрисовки
+    body) — если <script src="common.js"> уедет в конец <body>, страница на секунду
+    отрендерится с браузерной тёмной темой по умолчанию, а потом мигнёт в light."""
+    resp = await client.get(f"/{page}")
+    html = resp.text
+
+    head_match = re.search(r"<head[^>]*>(.*?)</head>", html, re.DOTALL | re.IGNORECASE)
+    assert head_match, f"{page}: не найден <head>"
+    assert 'src="common.js"' in head_match.group(1), (
+        f"{page}: <script src=\"common.js\"> должен быть в <head>, иначе возможна вспышка тёмного фона"
+    )
+
+    body_match = re.search(r"<body[^>]*>(.*?)</body>", html, re.DOTALL | re.IGNORECASE)
+    assert body_match
+    assert 'src="common.js"' not in body_match.group(1), (
+        f"{page}: <script src=\"common.js\"> не должен дублироваться/переезжать в конец <body>"
+    )
+
+
+def test_detect_preferred_theme_defaults_to_light_without_saved_or_system_preference():
+    """Прямой запуск ui/common.js через node невозможен в этом окружении (node 12.13.0,
+    файл использует `??` (ES2020) и выполняет document.*/localStorage.* на верхнем
+    уровне модуля без DOM-шима — см. память testhub-redesign-ui-smoke-tests) — поэтому
+    проверяем через исходник, как test_project_js_hides_run_buttons_row_for_customer_role
+    выше: detectPreferredTheme() при отсутствии localStorage-значения и без совпадения
+    ни с одним prefers-color-scheme должна фолбэчиться на "light", а не на "dark"."""
+    import pathlib
+
+    common_js = (pathlib.Path(__file__).resolve().parent.parent / "ui" / "common.js").read_text()
+
+    match = re.search(r"function detectPreferredTheme\(\)\s*\{(.*?)\n\}", common_js, re.DOTALL)
+    assert match, "не найдена функция detectPreferredTheme() в ui/common.js"
+    body = match.group(1)
+
+    # последний return в функции — это фолбэк, когда ни сохранённое значение, ни
+    # prefers-color-scheme не сработали (все предыдущие return срабатывают раньше).
+    returns = re.findall(r'return\s+"(light|dark)"', body)
+    assert returns, "detectPreferredTheme() не возвращает строковый литерал темы"
+    assert returns[-1] == "light", (
+        "последний return в detectPreferredTheme() должен быть \"light\" (дефолт светлой темы),"
+        f" а не {returns[-1]!r}"
+    )
+
+
+def test_common_js_color_palette_matches_backend_palette():
+    """ui/common.js держит свою копию PROJECT_COLOR_PALETTE (для renderColorPicker()
+    без похода на бэкенд) — она должна дословно совпадать с app/schemas.py, иначе
+    клик по цвету из UI будет отклонён бэкендом как значение вне палитры (422)."""
+    import pathlib
+
+    common_js = (pathlib.Path(__file__).resolve().parent.parent / "ui" / "common.js").read_text()
+
+    match = re.search(r"const PROJECT_COLOR_PALETTE\s*=\s*\[(.*?)\];", common_js, re.DOTALL)
+    assert match, "не найдена PROJECT_COLOR_PALETTE в ui/common.js"
+    js_colors = re.findall(r'"(#[0-9a-fA-F]{3,8})"', match.group(1))
+    assert js_colors == list(PROJECT_COLOR_PALETTE)
 
 
 async def test_project_html_run_buttons_row_has_no_static_hidden_attribute():

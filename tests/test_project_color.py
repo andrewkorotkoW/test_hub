@@ -91,3 +91,37 @@ async def test_customer_cannot_set_project_color(customer_client):
         "/api/projects/bike_fit/color", json={"color": PROJECT_COLOR_PALETTE[1]}
     )
     assert resp.status_code == 403
+
+
+@pytest.mark.parametrize(
+    "color",
+    [
+        "",  # пусто
+        PROJECT_COLOR_PALETTE[0].upper(),  # тот же цвет, но не тем регистром — не строковое совпадение
+        PROJECT_COLOR_PALETTE[0] + " ",  # с лишним пробелом
+    ],
+)
+async def test_set_project_color_rejects_various_values_outside_palette(qa_client, color):
+    resp = await qa_client.put("/api/projects/bike_fit/color", json={"color": color})
+    assert resp.status_code == 422
+
+
+async def test_set_project_color_unknown_project_returns_404(qa_client):
+    resp = await qa_client.put(
+        "/api/projects/does-not-exist/color", json={"color": PROJECT_COLOR_PALETTE[0]}
+    )
+    assert resp.status_code == 404
+
+
+async def test_create_project_without_color_defaults_to_first_palette_entry(qa_client, tmp_path):
+    project_dir = tmp_path / "no_color_proj"
+    project_dir.mkdir()
+    create_resp = await qa_client.post(
+        "/api/projects", json={"name": "no_color_proj", "path": str(project_dir), "venv": ".venv"}
+    )
+    assert create_resp.status_code == 201
+    assert create_resp.json()["color"] == PROJECT_COLOR_PALETTE[0]
+
+    list_resp = await qa_client.get("/api/projects")
+    row = next(p for p in list_resp.json() if p["name"] == "no_color_proj")
+    assert row["color"] == PROJECT_COLOR_PALETTE[0]
