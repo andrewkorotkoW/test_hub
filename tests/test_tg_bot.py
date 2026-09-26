@@ -27,6 +27,7 @@ from app.main import app, lifespan
 from app.security import verify_password
 from app.tg_bot import (
     ACCESS_DENIED_MESSAGE,
+    MENU_TEXT,
     STAGE_USAGE,
     HubClient,
     AccessMiddleware,
@@ -816,6 +817,49 @@ async def test_button_flow_preset_confirm_submits_with_confirm_manual_true(monke
     assert callback_datas == ["run_status:99", "run_report:99", "run_cancel:99", "run_trend:99", "run_share:99"]
 
 
+@pytest.mark.parametrize(
+    "preset,expected_marker",
+    [
+        pytest.param(
+            {"id": 2, "name": "БУК", "target": "tests/api/buk\ntests/ui/buk", "marker": None},
+            None,
+            id="buk-two-path-target-no-marker",
+        ),
+        pytest.param(
+            {"id": 3, "name": "API", "target": "tests/api", "marker": "api"},
+            "api",
+            id="api-target-with-marker",
+        ),
+    ],
+)
+async def test_button_flow_preset_confirm_submits_expected_target_and_marker(monkeypatch, preset, expected_marker):
+    """Разные пресеты — разный target/marker в payload submit_run, но всегда
+    confirm_manual=True (см. checklist "миссии": пресет БУК -> два пути через
+    \\n и marker=None, пресет с явным маркером -> тот же путь)."""
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    monkeypatch.setattr(tg_bot, "_watch_run", AsyncMock())
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    client.list_stand_presets.return_value = [preset]
+    client.submit_run.return_value = {"id": 100, "status": "queued"}
+    dispatcher = _make_dispatcher(client)
+
+    flow_message = _message(bot, text=f"⚠️ Запуск на stage: {preset['name']}. Подтвердить?")
+    await dispatcher.feed_update(
+        bot,
+        Update(
+            update_id=1,
+            callback_query=_callback(
+                bot, flow_message, f"preset_confirm:bike_fit:stage:{preset['id']}", cb_id="c1"
+            ),
+        ),
+    )
+
+    client.submit_run.assert_awaited_once_with(
+        "bike_fit", "stage", expected_marker, target=preset["target"], confirm_manual=True
+    )
+
+
 async def test_button_flow_preset_confirm_unknown_preset_shows_error_and_does_not_submit(monkeypatch):
     monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
     bot, session = _make_bot()
@@ -852,6 +896,46 @@ async def test_button_flow_preset_confirm_shows_generic_error_when_submit_fails(
 
     edited = [c for c in session.calls if isinstance(c, EditMessageText)]
     assert edited[0].text == "Не удалось поставить прогон."
+
+
+async def test_button_flow_preset_confirm_cancel_returns_to_menu_without_submitting(monkeypatch):
+    """Полный флоу: стенд -> пресет -> экран подтверждения -> кнопка "Отмена"
+    (callback_data "menu", см. build_manual_confirm_keyboard) — прогон не
+    создаётся, submit_run не вызывается вовсе за весь флоу."""
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    client.list_stands.return_value = [{"name": "stage", "manual_only": True}]
+    client.list_stand_presets.return_value = [{"id": 1, "name": "Smoke", "target": "all", "marker": "smoke"}]
+    client.list_projects.return_value = [{"name": "bike_fit", "stands": [], "use_env_flag": False}]
+    dispatcher = _make_dispatcher(client)
+
+    flow_message = _message(bot, text="Выберите стенд:")
+    await dispatcher.feed_update(
+        bot,
+        Update(update_id=1, callback_query=_callback(bot, flow_message, "stand:bike_fit:stage", cb_id="c1")),
+    )
+    await dispatcher.feed_update(
+        bot,
+        Update(update_id=2, callback_query=_callback(bot, flow_message, "preset:bike_fit:stage:1", cb_id="c2")),
+    )
+    edited_before_cancel = [c for c in session.calls if isinstance(c, EditMessageText)]
+    assert edited_before_cancel[-1].text == "⚠️ Запуск на stage: Smoke. Подтвердить?"
+    cancel_callback = {
+        btn.text: btn.callback_data
+        for row in edited_before_cancel[-1].reply_markup.inline_keyboard
+        for btn in row
+    }["Отмена"]
+
+    await dispatcher.feed_update(
+        bot,
+        Update(update_id=3, callback_query=_callback(bot, flow_message, cancel_callback, cb_id="c3")),
+    )
+
+    client.submit_run.assert_not_called()
+    client.list_projects.assert_awaited_once()
+    edited = [c for c in session.calls if isinstance(c, EditMessageText)]
+    assert edited[-1].text == MENU_TEXT
 
 
 # ------------------------------------------------------------------ /stage <проект> <пресет>

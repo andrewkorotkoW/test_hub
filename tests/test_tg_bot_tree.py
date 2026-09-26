@@ -28,6 +28,7 @@ from app import tg_bot
 from app.config import settings
 from app.tg_bot import (
     MAX_ERROR_TEXT_LEN,
+    MENU_TEXT,
     TREE_PAGE_SIZE,
     AccessMiddleware,
     HubClient,
@@ -444,6 +445,51 @@ async def test_tree_flow_manual_only_stand_requires_confirmation_step_before_sub
     )
     final = [c for c in session.calls if isinstance(c, EditMessageText)][-1]
     assert "Прогон #88 поставлен в очередь" in final.text
+
+
+async def test_tree_flow_manual_only_stand_cancel_returns_to_menu_without_submitting(monkeypatch):
+    """Кнопка "Отмена" на экране подтверждения дерева (callback_data "menu")
+    — submit_run не вызывается, бот возвращается в меню проектов."""
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+
+    tree = {"tests/test_a.py": {"": ["test_one"]}}
+    nodes = build_flat_tree(tree)
+    idx_one = next(i for i, n in enumerate(nodes) if n.get("nodeid") == "tests/test_a.py::test_one")
+
+    client = AsyncMock(spec=HubClient)
+    client.get_tests.return_value = {"tree": tree}
+    client.list_stands.return_value = [{"name": "stage", "manual_only": True}]
+    client.list_projects.return_value = [{"name": "bike_fit", "stands": [], "use_env_flag": False}]
+
+    dispatcher = _make_full_dispatcher(client)
+
+    flow_message = _message(bot, text="Выберите набор тестов:")
+    await dispatcher.feed_update(
+        bot, Update(update_id=1, callback_query=_callback(bot, flow_message, "tests:bike_fit:stage", cb_id="c1"))
+    )
+    await dispatcher.feed_update(
+        bot, Update(update_id=2, callback_query=_callback(bot, flow_message, f"tree_open:{idx_one}", cb_id="c2"))
+    )
+    await dispatcher.feed_update(
+        bot, Update(update_id=3, callback_query=_callback(bot, flow_message, "tree_run", cb_id="c3"))
+    )
+    edited_before_cancel = [c for c in session.calls if isinstance(c, EditMessageText)]
+    assert edited_before_cancel[-1].text == "⚠️ Запуск на stage: 1 тест(ов). Подтвердить?"
+    cancel_callback = {
+        btn.text: btn.callback_data
+        for row in edited_before_cancel[-1].reply_markup.inline_keyboard
+        for btn in row
+    }["Отмена"]
+
+    await dispatcher.feed_update(
+        bot, Update(update_id=4, callback_query=_callback(bot, flow_message, cancel_callback, cb_id="c4"))
+    )
+
+    client.submit_run.assert_not_called()
+    client.list_projects.assert_awaited_once()
+    edited = [c for c in session.calls if isinstance(c, EditMessageText)]
+    assert edited[-1].text == MENU_TEXT
 
 
 # ------------------------------------------------------------------ интеграция: упавшие тесты, детали ошибки и перезапуск
