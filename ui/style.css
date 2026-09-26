@@ -947,6 +947,10 @@ tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 .runs-feed-item { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; }
 .runs-feed-meta { flex: 1 1 auto; min-width: 0; display: flex; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--text-muted); }
 .runs-feed-id { font-weight: 600; color: var(--text); }
+/* REFERENCES.md, п.4: «спарклайн в строке» — сегментный бар passed/failed/skipped,
+   как в docs/missions/redesign/variants/mockups.html (.bar). */
+.runs-feed-bar { flex: 0 0 90px; height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; display: flex; }
+.runs-feed-bar span { display: block; height: 100%; }
 .runs-feed-actions { display: flex; gap: 6px; flex: 0 0 auto; }
 .runs-feed-actions button { padding: 4px 10px; font-size: 12px; }
 

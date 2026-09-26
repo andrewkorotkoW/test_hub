@@ -60,6 +60,26 @@ async def test_project_html_has_kpi_row_and_dashboard_charts(client):
     assert 'id="run-buttons-row"' in html
 
 
+async def test_project_html_dashboard_charts_order_matches_references(client):
+    """REFERENCES.md, «Итог: обязательный состав дашборда проекта…», п.2-3: сначала
+    пара донат+столбцы passed/failed, затем пара площадной график+кольца по областям —
+    проверяем порядок id в разметке (сами графики отрисовывает project.js)."""
+    resp = await client.get("/project.html")
+    html = resp.text
+    ids = ["status-donut-box", "passfail-bar-box", "duration-area-box", "area-rings-box"]
+    positions = [html.index(f'id="{i}"') for i in ids]
+    assert positions == sorted(positions), f"порядок блоков дашборда нарушен: {ids}"
+
+
+async def test_project_js_renders_runs_feed_progress_bar(client):
+    """REFERENCES.md, п.4: «лента прогонов (спарклайн в строке…)» — сегментный бар
+    passed/failed/skipped на основе тех же counts, что и donut/KPI (runMetrics())."""
+    resp = await client.get("/project.js")
+    js = resp.text
+    assert "runs-feed-bar" in js
+    assert "runMetrics(r)" in js
+
+
 async def test_coverage_html_has_areas_and_tree_blocks(client):
     resp = await client.get("/coverage.html")
     html = resp.text
