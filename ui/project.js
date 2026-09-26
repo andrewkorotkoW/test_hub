@@ -1002,7 +1002,26 @@
         cutout: "72%",
         animation: { duration: 700, easing: "easeOutQuart" },
         plugins: {
-          legend: { display: true, position: "bottom", labels: { color: cssVar("--text-muted"), boxWidth: 10, font: { size: 11 } } },
+          legend: {
+            display: true,
+            position: "bottom",
+            labels: {
+              color: cssVar("--text-muted"),
+              boxWidth: 10,
+              font: { size: 11 },
+              // REFERENCES.md, п.2: «легенда с процентами» — доля каждого статуса от суммы датасета.
+              generateLabels(chart) {
+                const data = chart.data.datasets[0].data;
+                const total = data.reduce((a, b) => a + b, 0) || 1;
+                return chart.data.labels.map((label, i) => ({
+                  text: `${label} ${Math.round((data[i] / total) * 1000) / 10}%`,
+                  fillStyle: chart.data.datasets[0].backgroundColor[i],
+                  strokeStyle: chart.data.datasets[0].backgroundColor[i],
+                  index: i,
+                }));
+              },
+            },
+          },
           tooltip: tooltipStyle(),
         },
       },

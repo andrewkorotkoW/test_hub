@@ -720,6 +720,15 @@ tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 .chart-box { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; min-width: 0; }
 .chart-box h3 { margin: 0 0 10px; font-size: 14px; }
 .chart-box-wide { grid-column: 1 / -1; }
+/* Дашборд проекта (REFERENCES.md, порядок сверху вниз, п.2-3): пара
+   «кольцо + столбцы», затем пара «площадной график + кольца по областям» — у
+   каждой пары своя узкая/широкая колонка, поэтому .charts-grid здесь стек
+   строк .chart-row, а не общая 2-колоночная сетка (как в coverage.html). */
+#dashboard-charts-card .charts-grid { grid-template-columns: 1fr; }
+.chart-row { display: grid; grid-template-columns: minmax(260px, 320px) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 900px) {
+  .chart-row { grid-template-columns: 1fr; }
+}
 .chart-rings-row { display: flex; flex-wrap: wrap; gap: 24px; }
 .chart-ring { text-align: center; }
 .chart-ring-label { margin-top: 6px; font-size: 12px; color: var(--text-muted); }
