@@ -13,6 +13,8 @@ import pytest
 
 from app.schemas import PROJECT_COLOR_PALETTE
 
+from .conftest import register_project
+
 # Страницы с общим shell (сайдбар + хедер), собранным renderHeader()/renderSidebar() из
 # common.js в id="app-header"/id="app-sidebar". share.html сознательно вне этого списка —
 # у неё свой статичный header без сайдбара (публичный read-only отчёт, см. ui/share.html).
@@ -264,3 +266,69 @@ async def test_project_html_run_buttons_row_has_no_static_hidden_attribute():
     assert m, "не найден #run-buttons-row в ui/project.html"
     # сам открывающий тег #run-buttons-row не должен нести статичный hidden
     assert "hidden" not in m.group(0)
+
+
+# ------------------------------------------------- manual_only-стенд (stage): блок пресетов + модалка подтверждения
+async def test_project_html_has_manual_run_block_and_confirm_modal(client):
+    """ui/project.js::updateRunControlsForStand/openManualRunModal адресуются к этим id
+    напрямую (см. app/tg_bot.py-аналог confirm_manual, но здесь — веб-версия того же
+    UX). Полноценный клик/чекбокс/модалка проверяются только вручную в браузере — тут
+    только то, что серверная разметка отдаёт нужные крючки для JS."""
+    resp = await client.get("/project.html")
+    html = resp.text
+    assert 'id="manual-run-block" class="manual-run-block" hidden' in html
+    assert 'id="manual-run-stand-name"' in html
+    assert 'id="manual-run-presets"' in html
+    assert 'id="manual-run-selected-btn"' in html
+    assert 'id="manual-run-modal-overlay" class="modal-overlay" hidden' in html
+    assert 'id="manual-run-modal-text"' in html
+    assert 'id="manual-run-confirm-checkbox"' in html
+    assert 'id="manual-run-cancel-btn"' in html
+    assert 'id="manual-run-confirm-btn" class="primary" disabled' in html
+
+
+async def test_project_js_confirm_click_posts_confirm_manual_true_to_runs_endpoint(client):
+    """Замок соответствия между кнопкой «Запустить» модалки и телом POST /runs — если
+    confirm_manual потеряется при рефакторинге project.js, этот тест это поймает
+    раньше проверки в браузере (по образцу test_coverage_js_calls_all_five_router_endpoints)."""
+    resp = await client.get("/project.js")
+    js = resp.text
+    assert re.search(r"/api/projects/\$\{[^}]*\}/runs`", js)
+    assert re.search(r"confirm_manual:\s*true", js)
+
+
+async def test_manual_run_confirm_flow_reaches_page_and_proxies_confirm_manual_to_post_runs(
+    qa_client, isolated_allure_dir, runnable_project_dir
+):
+    """Бэкенд-интеграционная проверка того же пути, которым идёт кнопка «Запустить»
+    модалки ui/project.js (POST .../runs с confirm_manual: true) — через реальный
+    FastAPI TestClient (ASGITransport), без браузера. Само поведение чекбокса/модалки
+    (клиентский JS) этим не покрывается и проверялось только вручную — юнит-тестов на
+    чистый DOM/события в этом репозитории нет (см. tests/test_coverage_tree_logic_js.py
+    и др.: только там, где логика вынесена в чистый JS-модуль без DOM)."""
+    await register_project(qa_client, "manual_ui_proj", runnable_project_dir)
+    stand_resp = await qa_client.post(
+        "/api/projects/manual_ui_proj/stands", json={"name": "stage", "url": ""}
+    )
+    assert stand_resp.status_code == 201, stand_resp.text
+    stand = stand_resp.json()
+    patch_resp = await qa_client.patch(
+        f"/api/projects/manual_ui_proj/stands/{stand['id']}", json={"manual_only": True}
+    )
+    assert patch_resp.status_code == 200, patch_resp.text
+
+    page = await qa_client.get("/project.html?name=manual_ui_proj")
+    assert page.status_code == 200
+
+    stands = (await qa_client.get("/api/projects/manual_ui_proj/stands")).json()
+    assert next(s for s in stands if s["name"] == "stage")["manual_only"] is True
+
+    # То же тело, что собирает manualRunConfirmBtn.addEventListener в project.js.
+    resp = await qa_client.post(
+        "/api/projects/manual_ui_proj/runs",
+        json={"stand": "stage", "target": "tests/test_sample.py", "marker": None, "confirm_manual": True},
+    )
+    assert resp.status_code == 201, resp.text
+    run = resp.json()
+    assert run["stand"] == "stage"
+    assert run["target"] == "tests/test_sample.py"
