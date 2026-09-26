@@ -720,6 +720,15 @@ tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 .chart-box { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; min-width: 0; }
 .chart-box h3 { margin: 0 0 10px; font-size: 14px; }
 .chart-box-wide { grid-column: 1 / -1; }
+/* Дашборд проекта (REFERENCES.md, порядок сверху вниз, п.2-3): пара
+   «кольцо + столбцы», затем пара «площадной график + кольца по областям» — у
+   каждой пары своя узкая/широкая колонка, поэтому .charts-grid здесь стек
+   строк .chart-row, а не общая 2-колоночная сетка (как в coverage.html). */
+#dashboard-charts-card .charts-grid { grid-template-columns: 1fr; }
+.chart-row { display: grid; grid-template-columns: minmax(260px, 320px) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 900px) {
+  .chart-row { grid-template-columns: 1fr; }
+}
 .chart-rings-row { display: flex; flex-wrap: wrap; gap: 24px; }
 .chart-ring { text-align: center; }
 .chart-ring-label { margin-top: 6px; font-size: 12px; color: var(--text-muted); }
@@ -938,6 +947,10 @@ tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 .runs-feed-item { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; }
 .runs-feed-meta { flex: 1 1 auto; min-width: 0; display: flex; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--text-muted); }
 .runs-feed-id { font-weight: 600; color: var(--text); }
+/* REFERENCES.md, п.4: «спарклайн в строке» — сегментный бар passed/failed/skipped,
+   как в docs/missions/redesign/variants/mockups.html (.bar). */
+.runs-feed-bar { flex: 0 0 90px; height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; display: flex; }
+.runs-feed-bar span { display: block; height: 100%; }
 .runs-feed-actions { display: flex; gap: 6px; flex: 0 0 auto; }
 .runs-feed-actions button { padding: 4px 10px; font-size: 12px; }
 

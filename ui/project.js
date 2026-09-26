@@ -1002,7 +1002,26 @@
         cutout: "72%",
         animation: { duration: 700, easing: "easeOutQuart" },
         plugins: {
-          legend: { display: true, position: "bottom", labels: { color: cssVar("--text-muted"), boxWidth: 10, font: { size: 11 } } },
+          legend: {
+            display: true,
+            position: "bottom",
+            labels: {
+              color: cssVar("--text-muted"),
+              boxWidth: 10,
+              font: { size: 11 },
+              // REFERENCES.md, п.2: «легенда с процентами» — доля каждого статуса от суммы датасета.
+              generateLabels(chart) {
+                const data = chart.data.datasets[0].data;
+                const total = data.reduce((a, b) => a + b, 0) || 1;
+                return chart.data.labels.map((label, i) => ({
+                  text: `${label} ${Math.round((data[i] / total) * 1000) / 10}%`,
+                  fillStyle: chart.data.datasets[0].backgroundColor[i],
+                  strokeStyle: chart.data.datasets[0].backgroundColor[i],
+                  index: i,
+                }));
+              },
+            },
+          },
           tooltip: tooltipStyle(),
         },
       },
@@ -1159,6 +1178,20 @@
     `).join("");
   }
 
+  // REFERENCES.md, п.4: «лента прогонов (спарклайн в строке…)» — сегментный бар
+  // passed/failed/skipped по тем же counts, что и donut/KPI (runMetrics()).
+  function runsFeedBarHtml(r) {
+    const m = runMetrics(r);
+    if (!m.total) return `<div class="runs-feed-bar" title="Нет данных"></div>`;
+    return `
+      <div class="runs-feed-bar" title="${m.passed} passed / ${m.failed} failed / ${m.skipped} skipped">
+        <span style="width:${(m.passed / m.total) * 100}%; background: var(--passed)"></span>
+        <span style="width:${(m.failed / m.total) * 100}%; background: var(--failed)"></span>
+        <span style="width:${(m.skipped / m.total) * 100}%; background: var(--skipped)"></span>
+      </div>
+    `;
+  }
+
   function renderRunsFeed(runs) {
     const items = runs.slice(0, 8);
     if (!items.length) {
@@ -1175,6 +1208,7 @@
           <span>${fmtDuration(r.duration)}</span>
           <span>${escapeHtml(r.requested_by || "—")}</span>
         </div>
+        ${runsFeedBarHtml(r)}
         <div class="runs-feed-actions">
           <button type="button" class="runs-feed-report-btn" data-run-id="${r.id}">Отчёт</button>
           ${canShare ? `<button type="button" class="runs-feed-share-btn" data-run-id="${r.id}">Поделиться</button>` : ""}

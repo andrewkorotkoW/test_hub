@@ -27,24 +27,28 @@
     <div class="card" id="dashboard-charts-card">
       <h2>Дашборд проекта</h2>
       <div class="charts-grid">
-        <div class="chart-box" id="status-donut-box">
-          <h3>Статусы последнего прогона</h3>
-          <div class="chart-donut-wrap">
-            <canvas id="status-donut-chart"></canvas>
-            <div class="chart-donut-center" id="status-donut-center"></div>
+        <div class="chart-row">
+          <div class="chart-box" id="status-donut-box">
+            <h3>Статусы последнего прогона</h3>
+            <div class="chart-donut-wrap">
+              <canvas id="status-donut-chart"></canvas>
+              <div class="chart-donut-center" id="status-donut-center"></div>
+            </div>
+          </div>
+          <div class="chart-box" id="passfail-bar-box">
+            <h3>Passed / failed по прогонам</h3>
+            <div class="chart-canvas-wrap"><canvas id="passfail-bar-chart"></canvas></div>
           </div>
         </div>
-        <div class="chart-box" id="area-rings-box">
-          <h3>Тесты по областям</h3>
-          <div id="area-rings-row" class="chart-rings-row"><p class="muted">Загрузка…</p></div>
-        </div>
-        <div class="chart-box chart-box-wide" id="passfail-bar-box">
-          <h3>Passed / failed по прогонам</h3>
-          <div class="chart-canvas-wrap"><canvas id="passfail-bar-chart"></canvas></div>
-        </div>
-        <div class="chart-box chart-box-wide" id="duration-area-box">
-          <h3>Длительность прогонов</h3>
-          <div class="chart-canvas-wrap"><canvas id="duration-area-chart"></canvas></div>
+        <div class="chart-row">
+          <div class="chart-box" id="duration-area-box">
+            <h3>Длительность прогонов</h3>
+            <div class="chart-canvas-wrap"><canvas id="duration-area-chart"></canvas></div>
+          </div>
+          <div class="chart-box" id="area-rings-box">
+            <h3>Тесты по областям</h3>
+            <div id="area-rings-row" class="chart-rings-row"><p class="muted">Загрузка…</p></div>
+          </div>
         </div>
       </div>
     </div>
