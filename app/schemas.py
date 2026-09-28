@@ -318,5 +318,55 @@ class Schedule(BaseModel):
     next_run_at: Optional[str] = None
 
 
+class StatsSection(BaseModel):
+    section: str
+    tests_total: int
+    passed: int
+    failed: int
+    xfail: int
+    skipped: int
+    passed_percent: Optional[float] = None
+    avg_duration: Optional[float] = None
+    flaky_count: int
+    xfail_count: int
+    routes_total: Optional[int] = None
+    routes_covered: Optional[int] = None
+    routes_percent: Optional[float] = None
+
+
+class StatsDynamicsPoint(BaseModel):
+    run_id: int
+    started: Optional[str] = None
+    passed_percent: Optional[float] = None
+    duration: Optional[float] = None
+
+
+class StatsTopSlowTest(BaseModel):
+    name: str
+    section: Optional[str] = None
+    duration: float
+
+
+class StatsTopFlakyTest(BaseModel):
+    test: str
+    section: Optional[str] = None
+    score: float
+    runs: int
+    fails: int
+
+
+class StatsSummary(BaseModel):
+    project: str
+    stand: Optional[str] = None
+    generated_at: str
+    run_id: Optional[int] = None
+    sections: list[StatsSection]
+    empty_sections: list[str]
+    dynamics_project: list[StatsDynamicsPoint]
+    dynamics_by_section: dict[str, list[StatsDynamicsPoint]]
+    top_slowest: list[StatsTopSlowTest]
+    top_flaky: list[StatsTopFlakyTest]
+
+
 class ScheduleRunNowResult(BaseModel):
     run_id: int
