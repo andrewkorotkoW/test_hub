@@ -258,33 +258,40 @@ function applyTheme(theme) {
 document.documentElement.setAttribute("data-theme", detectPreferredTheme());
 
 // ---------- пункты меню сайдбара ----------
-// href отсутствует — раздела ещё нет, пункт показывается как «скоро».
 // needsProject — раздел завязан на конкретный проект (?name=...), без выбранного
-// проекта в URL пункт недоступен для клика.
+// проекта в URL пункт недоступен для клика. runsShortcut — «Прогоны» не открывает
+// собственную страницу, а ведёт на вкладку «История» текущего проекта (project.html
+// использует вкладки, см. ui/project.js) либо, если проект не выбран, на список
+// проектов — раздела «Прогоны» отдельно от project.html не существует.
 const APP_NAV_ITEMS = [
   { href: "projects.html", label: "Проекты" },
-  { label: "Прогоны" },
+  { label: "Прогоны", runsShortcut: true },
   { href: "coverage.html", label: "Покрытие", needsProject: true },
   { href: "stats.html", label: "Статистика", needsProject: true },
   { href: "xfail.html", label: "Xfail", needsProject: true },
-  { href: "project.html", hash: "#schedules-card", label: "Расписания", needsProject: true },
-  { label: "Настройки" },
+  { href: "project.html", hash: "#schedules", label: "Расписания", needsProject: true },
 ];
 
 function currentProjectNameFromUrl() {
   return new URLSearchParams(window.location.search).get("name");
 }
 
+function navItemHref(item, projectName) {
+  if (item.runsShortcut) {
+    return projectName ? `project.html?name=${encodeURIComponent(projectName)}#history` : "projects.html";
+  }
+  const query = item.needsProject ? `?name=${encodeURIComponent(projectName)}` : "";
+  return `${item.href}${query}${item.hash || ""}`;
+}
+
 function renderNavItem(item, page, projectName) {
   if (item.needsProject && !projectName) {
     return `<span class="app-nav-link app-nav-disabled" title="Откройте проект, чтобы перейти в раздел «${escapeHtml(item.label)}»">${escapeHtml(item.label)}</span>`;
   }
-  if (!item.href) {
-    return `<span class="app-nav-link app-nav-disabled" title="Раздел появится позже">${escapeHtml(item.label)} <span class="app-nav-soon">скоро</span></span>`;
-  }
-  const query = item.needsProject ? `?name=${encodeURIComponent(projectName)}` : "";
-  const href = `${item.href}${query}${item.hash || ""}`;
-  const active = item.href === page ? " active" : "";
+  const href = navItemHref(item, projectName);
+  const [hrefPathAndQuery, hrefHash] = href.split("#");
+  const hrefPage = hrefPathAndQuery.split("?")[0];
+  const active = hrefPage === page && (!hrefHash || window.location.hash === `#${hrefHash}`) ? " active" : "";
   return `<a class="app-nav-link${active}" href="${href}">${escapeHtml(item.label)}</a>`;
 }
 
@@ -341,6 +348,18 @@ function renderSidebar(user, page) {
   // иначе оно перекрывает страницу при следующем открытии
   mount.querySelectorAll(".app-nav-link[href]").forEach((link) => {
     link.addEventListener("click", () => mount.classList.remove("app-sidebar-open"));
+  });
+
+  // project.html переключает вкладки (Дашборд/Запуск/.../История/Флаки) через
+  // #hash без перезагрузки страницы — «активный» пункт сайдбара (например,
+  // «Прогоны» -> #history) пересчитывается сравнением href, не пересобирая nav.
+  window.addEventListener("hashchange", () => {
+    mount.querySelectorAll(".app-nav-link[href]").forEach((link) => {
+      const linkUrl = new URL(link.getAttribute("href"), window.location.href);
+      const active = linkUrl.pathname === window.location.pathname &&
+        (!linkUrl.hash || linkUrl.hash === window.location.hash);
+      link.classList.toggle("active", active);
+    });
   });
 }
 

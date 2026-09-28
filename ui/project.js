@@ -20,6 +20,29 @@
   document.getElementById("xfail-link").href = `xfail.html?name=${encodeURIComponent(projectName)}`;
   const pageError = document.getElementById("page-error");
 
+  // ---------------- вкладки: Дашборд/Запуск/Расписания/История/Флаки ----------------
+  // Активная вкладка живёт в #hash (без хэша или с незнакомым значением — дашборд по
+  // умолчанию), сами блоки не меняются — только оборачиваются в [data-tab-panel].
+  const projectTabsNav = document.getElementById("project-tabs");
+  const tabPanels = document.querySelectorAll("[data-tab-panel]");
+  const TAB_IDS = Array.from(tabPanels).map((el) => el.dataset.tabPanel);
+
+  function activeTabId() {
+    const hash = window.location.hash.replace("#", "");
+    return TAB_IDS.includes(hash) ? hash : "dashboard";
+  }
+
+  function renderActiveTab() {
+    const active = activeTabId();
+    projectTabsNav.querySelectorAll("a[data-tab]").forEach((a) => {
+      a.classList.toggle("active", a.dataset.tab === active);
+    });
+    tabPanels.forEach((panel) => { panel.hidden = panel.dataset.tabPanel !== active; });
+  }
+
+  window.addEventListener("hashchange", renderActiveTab);
+  renderActiveTab();
+
   // Цвет проекта: акцент кнопок/сайдбара/графиков (--accent, --gradient-*, см.
   // applyProjectColor в common.js). Меняют только qa/superadmin, остальным — индикатор.
   const colorPickerEl = document.getElementById("project-color-picker");
@@ -751,6 +774,10 @@
   }
 
   async function openRun(runId) {
+    // run-card живёт во вкладке «Запуск» — открытие прогона (лента/история/расписания/
+    // deep link ?run=) должно переключать на неё, иначе карточка заполнится, но останется
+    // скрыта под hidden соседней вкладки.
+    if (window.location.hash !== "#run") window.location.hash = "run";
     closeWs();
     sawLine = false;
     runCard.hidden = false;
@@ -1038,12 +1065,30 @@
     animateSparklines(kpiRow);
   }
 
+  // DESIGN.md, Components: «Кольцо статусов»: сегменты passed/failed/skipped, в центре
+  // крупный моно-процент passed и подпись «passed из завершённых», легенда — плоский
+  // ряд ниже кольца (не встроенная легенда Chart.js — та мельчила и переносилась криво
+  // на карточке 300px, см. docs/missions redesign v3).
+  function renderDonutLegend(latest) {
+    const legendBox = document.getElementById("status-donut-legend");
+    if (!latest) { legendBox.innerHTML = ""; return; }
+    const items = [
+      { label: "passed", value: latest.passed, colorVar: "--passed" },
+      { label: "failed", value: latest.failed, colorVar: "--failed" },
+      { label: "skipped", value: latest.skipped, colorVar: "--skipped" },
+    ];
+    legendBox.innerHTML = items.map((it) => `
+      <span class="chart-legend-item"><span class="chart-legend-dot" style="background:var(${it.colorVar})"></span>${escapeHtml(it.label)} ${it.value}</span>
+    `).join("");
+  }
+
   function renderDonutChart(latest) {
     const canvas = document.getElementById("status-donut-chart");
     const centerBox = document.getElementById("status-donut-center");
     if (donutChart) { donutChart.destroy(); donutChart = null; }
     if (!latest || !window.Chart) {
       centerBox.innerHTML = `<span class="label">${window.Chart ? "Нет прогонов" : ""}</span>`;
+      renderDonutLegend(null);
       return;
     }
     donutChart = new Chart(canvas, {
@@ -1062,31 +1107,13 @@
         cutout: "72%",
         animation: { duration: 700, easing: "easeOutQuart" },
         plugins: {
-          legend: {
-            display: true,
-            position: "bottom",
-            labels: {
-              color: cssVar("--text-muted"),
-              boxWidth: 10,
-              font: { size: 11 },
-              // REFERENCES.md, п.2: «легенда с процентами» — доля каждого статуса от суммы датасета.
-              generateLabels(chart) {
-                const data = chart.data.datasets[0].data;
-                const total = data.reduce((a, b) => a + b, 0) || 1;
-                return chart.data.labels.map((label, i) => ({
-                  text: `${label} ${Math.round((data[i] / total) * 1000) / 10}%`,
-                  fillStyle: chart.data.datasets[0].backgroundColor[i],
-                  strokeStyle: chart.data.datasets[0].backgroundColor[i],
-                  index: i,
-                }));
-              },
-            },
-          },
+          legend: { display: false },
           tooltip: tooltipStyle(),
         },
       },
     });
-    centerBox.innerHTML = `<span class="value">${latest.percent === null ? "—" : latest.percent + "%"}</span><span class="label">passed</span>`;
+    centerBox.innerHTML = `<span class="value">${latest.percent === null ? "—" : latest.percent + "%"}</span><span class="label">passed из завершённых</span>`;
+    renderDonutLegend(latest);
   }
 
   function renderBarChart(chronoMetrics) {
@@ -1247,6 +1274,40 @@
     if (shareBtn) openShareModal(Number(shareBtn.dataset.runId));
   });
 
+  // ---------------- известные дефекты (xfail) по областям ----------------
+  // xfail_registry.test — тот же allure fullName, что и в areaKindFromFullName выше;
+  // область — сегмент после api/ui (копия app.core.stats._section_of_full_name без
+  // префикса раздела, только сам подкаталог — см. пилюли в докс/missions redesign v2).
+  function xfailAreaLabel(fullName) {
+    const module = String(fullName || "").split("#")[0];
+    const segments = module.split(".");
+    if (segments.length < 2 || segments[0] !== "tests") return "прочее";
+    const kind = segments[1];
+    if (kind === "e2e") return "e2e";
+    if ((kind === "api" || kind === "ui") && segments.length >= 3) return segments[2];
+    return kind || "прочее";
+  }
+
+  function renderXfailPills(xfailItems) {
+    const box = document.getElementById("xfail-pills");
+    const countLabel = document.getElementById("xfail-card-count");
+    const active = (xfailItems || []).filter((it) => it.state === "xfail");
+    if (countLabel) countLabel.textContent = active.length ? `· ${active.length}` : "";
+    if (!active.length) {
+      box.innerHTML = `<p class="muted">Известных дефектов нет.</p>`;
+      return;
+    }
+    const counts = new Map();
+    active.forEach((it) => {
+      const area = xfailAreaLabel(it.test);
+      counts.set(area, (counts.get(area) || 0) + 1);
+    });
+    const sorted = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
+    box.innerHTML = sorted.map(([area, count]) => `
+      <span class="xfail-pill"><span class="xfail-pill-dot"></span>${escapeHtml(area)} · ${count}</span>
+    `).join("");
+  }
+
   async function renderDashboard(runs) {
     dashboardError.hidden = true;
     const chronoRuns = runs.slice(0, DASH_SPARK_N).reverse();
@@ -1259,6 +1320,7 @@
       renderKpiRow(chronoRuns, chronoMetrics, flakyAll.items || [], xfailAll.items || []);
       renderBarChart(chronoMetrics);
       renderAreaChart(chronoMetrics);
+      renderXfailPills(xfailAll.items || []);
 
       let latestTests = [];
       if (runs.length) {
