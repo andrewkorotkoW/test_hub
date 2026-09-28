@@ -21,6 +21,9 @@
 
     <div class="card" id="summary-card">
       <h2>Сводка</h2>
+      <!-- вариант A «Панель» (DESIGN.md: KPI-карточка) — общие по проекту величины,
+           не привязанные к выбранному стенду (см. app/core/coverage.py::recalc). -->
+      <div class="kpi-row kpi-row-4" id="summary-kpi-row"></div>
       <div id="summary-stands" class="summary-badges"></div>
       <div id="summary-pages" class="summary-badges"></div>
       <div id="summary-zero" class="zero-coverage-box" hidden>
@@ -53,7 +56,7 @@
           </div>
           <div class="chart-box chart-box-wide" id="chart-areas-table-box">
             <h3>Области</h3>
-            <div class="table-wrap">
+            <div class="table-wrap table-scroll">
               <table id="areas-table">
                 <thead>
                   <tr>
