@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Test Hub — статистика</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="common.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside id="app-sidebar" class="app-sidebar"></aside>
+    <div class="app-content">
+  <header id="app-header" class="site-header"></header>
+  <main class="page page-wide">
+    <div class="page-head">
+      <h1 id="project-title">Статистика</h1>
+      <a id="project-link" href="#">← к проекту</a>
+    </div>
+    <div id="page-error" class="error-box" hidden></div>
+
+    <div class="card" id="stats-toolbar-card">
+      <div class="coverage-toolbar">
+        <div class="field">
+          <label for="stats-stand-select">Стенд</label>
+          <select id="stats-stand-select"></select>
+        </div>
+        <div class="toolbar-spacer"></div>
+        <button id="stats-export-btn">Выгрузить CSV</button>
+      </div>
+    </div>
+
+    <div class="card" id="sections-card">
+      <h2>Разделы</h2>
+      <p class="muted">По последнему полному прогону выбранного стенда. Область — папка <code>tests/api/&lt;area&gt;</code>,
+        <code>tests/ui/&lt;area&gt;</code> или весь <code>tests/e2e</code>.</p>
+      <div id="sections-empty-box" class="zero-coverage-box" hidden>
+        <strong>Разделы без единого теста:</strong> <span id="sections-empty-list"></span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Раздел</th><th>Тестов</th><th>Passed</th><th>Failed</th><th>Xfail</th><th>Skipped</th>
+              <th>% passed</th><th>Ср. длительность</th><th>Флаки</th><th>Xfail</th><th>Покрытие маршрутов</th>
+            </tr>
+          </thead>
+          <tbody id="sections-rows"><tr><td colspan="11" class="muted">Загрузка…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card" id="dynamics-card">
+      <h2>Динамика за 30 дней</h2>
+      <div class="field">
+        <label for="dynamics-section-select">Раздел</label>
+        <select id="dynamics-section-select"><option value="">Весь проект</option></select>
+      </div>
+      <div class="charts-grid">
+        <div class="chart-row">
+          <div class="chart-box">
+            <h3>Доля passed по прогонам</h3>
+            <div class="chart-canvas-wrap"><canvas id="dynamics-area-chart"></canvas></div>
+          </div>
+          <div class="chart-box">
+            <h3>Длительность по прогонам</h3>
+            <div class="chart-canvas-wrap"><canvas id="dynamics-bar-chart"></canvas></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dashboard-lists-grid">
+      <div class="card" id="top-slowest-card">
+        <h2>Топ-10 самых долгих тестов</h2>
+        <ol id="top-slowest-list" class="detail-list"><li class="muted">Загрузка…</li></ol>
+      </div>
+      <div class="card" id="top-flaky-card">
+        <h2>Топ-10 нестабильных тестов</h2>
+        <ol id="top-flaky-list" class="detail-list"><li class="muted">Загрузка…</li></ol>
+      </div>
+    </div>
+  </main>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="stats.js"></script>
+</body>
+</html>

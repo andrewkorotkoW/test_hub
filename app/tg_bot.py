@@ -83,6 +83,7 @@ FLAKY_USAGE = "Использование: /flaky <проект> [стенд]"
 FLAKY_TOP_N = 10
 XFAIL_USAGE = "Использование: /xfail <проект> [стенд]"
 XFAIL_TOP_N = 10
+STATS_USAGE = "Использование: /stats <проект> [стенд]"
 SCHEDULE_USAGE = "Использование: /schedules <проект>"
 STAGE_USAGE = "Использование: /stage <проект> <пресет>"
 STAGE_STAND_NAME = "stage"
@@ -200,6 +201,11 @@ class HubClient:
         resp = await self._request("GET", f"/api/projects/{project}/xfail", params=params)
         return resp.json()["items"]
 
+    async def get_stats(self, project: str, stand: str | None = None) -> dict:
+        params = {"stand": stand} if stand else {}
+        resp = await self._request("GET", f"/api/projects/{project}/stats", params=params)
+        return resp.json()
+
     async def list_schedules(self, project: str) -> list[dict]:
         resp = await self._request("GET", f"/api/projects/{project}/schedules")
         return resp.json()
@@ -274,6 +280,15 @@ def parse_xfail_args(text: str) -> tuple[str, str | None]:
     parts = text.split()
     if not parts:
         raise ValueError(XFAIL_USAGE)
+    project, *rest = parts
+    return project, rest[0] if rest else None
+
+
+def parse_stats_args(text: str) -> tuple[str, str | None]:
+    """"<проект> [стенд]" — то же соглашение, что и parse_flaky_args/parse_xfail_args."""
+    parts = text.split()
+    if not parts:
+        raise ValueError(STATS_USAGE)
     project, *rest = parts
     return project, rest[0] if rest else None
 
@@ -616,6 +631,38 @@ def format_xfail(project: str, items: list[dict]) -> str:
     remaining = len(items) - len(top)
     if remaining > 0:
         lines.append(f"…и ещё {remaining}")
+    return "\n".join(lines)
+
+
+STATS_SECTIONS_LIMIT = 15
+
+
+def format_stats(project: str, stand: str | None, data: dict) -> str:
+    """Краткая сводка по разделам для /stats — та же таблица, что и на
+    ui/stats.html, но текстом: раздел, тестов, доля passed, средняя длительность,
+    флаки, активные xfail (по последнему полному прогону выбранного стенда)."""
+    header = f"Статистика «{project}»" + (f" / {stand}" if stand else "") + ":"
+    sections = [s for s in data.get("sections", []) if s.get("tests_total")]
+    if not sections:
+        return f"{header}\nПока нет данных — ни один раздел не прогонялся полностью."
+    lines = [header]
+    for s in sections[:STATS_SECTIONS_LIMIT]:
+        percent = s["passed_percent"]
+        percent_text = f"{percent}%" if percent is not None else "—"
+        duration_text = f"{s['avg_duration']:.1f}с" if s.get("avg_duration") is not None else "—"
+        extra = []
+        if s.get("flaky_count"):
+            extra.append(f"флаки {s['flaky_count']}")
+        if s.get("xfail_count"):
+            extra.append(f"xfail {s['xfail_count']}")
+        extra_text = f" ({', '.join(extra)})" if extra else ""
+        lines.append(f"• {s['section']}: {s['tests_total']} тестов, {percent_text} passed, {duration_text}{extra_text}")
+    remaining = len(sections) - STATS_SECTIONS_LIMIT
+    if remaining > 0:
+        lines.append(f"…и ещё {remaining}")
+    empty = data.get("empty_sections") or []
+    if empty:
+        lines.append(f"Без единого теста: {', '.join(empty)}")
     return "\n".join(lines)
 
 
@@ -1956,6 +2003,22 @@ async def cmd_xfail(message: Message, command: CommandObject, client: HubClient)
         await _reply_http_error(message, exc, "получить известные дефекты", not_found=f"Проект «{project}» не найден.")
         return
     await message.answer(format_xfail(project, items))
+
+
+@router.message(Command("stats"))
+async def cmd_stats(message: Message, command: CommandObject, client: HubClient) -> None:
+    try:
+        project, stand = parse_stats_args(command.args or "")
+    except ValueError as exc:
+        await message.answer(str(exc))
+        return
+
+    try:
+        data = await client.get_stats(project, stand)
+    except httpx.HTTPError as exc:
+        await _reply_http_error(message, exc, "получить статистику", not_found=f"Проект «{project}» не найден.")
+        return
+    await message.answer(format_stats(project, data.get("stand"), data))
 
 
 @router.message(Command("schedules"))
