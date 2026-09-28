@@ -32,6 +32,7 @@ import asyncio
 import contextlib
 import functools
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 
@@ -87,6 +88,16 @@ STATS_USAGE = "Использование: /stats <проект> [стенд]"
 SCHEDULE_USAGE = "Использование: /schedules <проект>"
 STAGE_USAGE = "Использование: /stage <проект> <пресет>"
 STAGE_STAND_NAME = "stage"
+
+# Второй аргумент /run — либо имя стенда (старое поведение, см. RUN_USAGE), либо
+# раздел вида "api/<область>"/"ui/<область>"/"e2e" (часть 3 миссии про статистику
+# по разделам, дерево разделов в ui/project.js). Раздел проверяется вторым, после
+# сверки со списком реальных стендов проекта — так старые тексты вида "/run X prod"
+# продолжают работать один в один. Раздел не привязан к стенду (запуск без стенда,
+# как flaky-run-btn в ui/project.js), поэтому manual_only-проверка тут ни при чём —
+# см. app/core/runner.py::ManualRunNotConfirmed — у стенда stage свой отдельный
+# путь через /stage и пресеты, этот код его не затрагивает и не ослабляет.
+_SECTION_ARG_RE = re.compile(r"^(?:api|ui)/[\w-]+$|^e2e$")
 
 ACCESS_DENIED_MESSAGE = "Извините, у вас нет доступа к этому боту."
 MENU_TEXT = "Выберите проект:"
@@ -343,6 +354,8 @@ def parse_callback(data: str) -> dict:
             "stand": _decode_token(rest[1]),
             "marker": _decode_token(rest[2]),
         }
+    if action == "run_section_confirm" and len(rest) == 2:
+        return {"action": "run_section_confirm", "project": rest[0], "section": rest[1]}
     if action in ("run_status", "run_report", "run_cancel", "run_trend", "run_share") and len(rest) == 1:
         try:
             run_id = int(rest[0])
@@ -1266,6 +1279,41 @@ async def cb_preset_confirm(
     asyncio.create_task(_watch_run(bot, client, run_chats, run_id, failed_cache if failed_cache is not None else {}))
 
 
+@router.callback_query(F.data.startswith("run_section_confirm:"))
+async def cb_run_section_confirm(
+    query: CallbackQuery,
+    client: HubClient,
+    run_chats: dict[int, int],
+    last_run: dict[int, int],
+    bot: Bot,
+    failed_cache: dict[int, list[dict]] | None = None,
+) -> None:
+    """Подтверждение из /run <проект> <раздел> (см. cmd_run) — запуск без стенда,
+    target — путь папки раздела ("tests/api/notifications"), который одинаково
+    понимает и runner._execute (директория как аргумент pytest), и дерево
+    разделов в ui/project.js (тот же target у корневого чекбокса области)."""
+    await query.answer()
+    if query.message is None:
+        return
+    parsed = parse_callback(query.data)
+    if parsed["action"] != "run_section_confirm":
+        return
+    project, section = parsed["project"], parsed["section"]
+    try:
+        run = await client.submit_run(project, None, None, target=f"tests/{section}")
+    except httpx.HTTPError as exc:
+        logger.warning("tg_bot: не удалось поставить прогон раздела %s/%s: %s", project, section, exc)
+        await _safe_edit(query.message, "Не удалось поставить прогон.")
+        return
+
+    run_id = run["id"]
+    chat_id = query.message.chat.id
+    run_chats[run_id] = chat_id
+    last_run[chat_id] = run_id
+    await _safe_edit(query.message, f"Прогон #{run_id} поставлен в очередь.", build_run_keyboard(run_id))
+    asyncio.create_task(_watch_run(bot, client, run_chats, run_id, failed_cache if failed_cache is not None else {}))
+
+
 @router.callback_query(F.data.startswith("tests:"))
 async def cb_tests(
     query: CallbackQuery,
@@ -1868,6 +1916,16 @@ async def cmd_run(
         return
     stand_names = {s["name"] for s in project_row.get("stands", [])}
     if stand not in stand_names:
+        # Второй аргумент похож на раздел ("api/notifications", "e2e"), а не на
+        # стенд — предлагаем подтверждение и запуск без стенда по тому же пути,
+        # что и кнопка «Прогнать ×3» флаки-теста в ui/project.js (submit_run без
+        # stand). Маркер здесь не поддержан — раздел уже сам сужает выборку.
+        if marker is None and _SECTION_ARG_RE.match(stand):
+            section = stand
+            text = f"Запустить тесты раздела «{section}» в проекте «{project}»?"
+            yes_callback = build_callback("run_section_confirm", project=project, section=section)
+            await message.answer(text, reply_markup=build_manual_confirm_keyboard(yes_callback))
+            return
         await message.answer(f"Стенд «{stand}» не найден в проекте «{project}». См. /projects.")
         return
 

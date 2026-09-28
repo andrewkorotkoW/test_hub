@@ -370,3 +370,30 @@ class StatsSummary(BaseModel):
 
 class ScheduleRunNowResult(BaseModel):
     run_id: int
+
+
+class SectionFile(BaseModel):
+    name: str
+    target: str
+    tests_count: int
+
+
+class SectionArea(BaseModel):
+    area: Optional[str] = None
+    section: str
+    target: str
+    tests_count: int
+    files: list[SectionFile]
+    status: Optional[StatsSection] = None
+
+
+class SectionKind(BaseModel):
+    kind: str
+    target: str
+    areas: list[SectionArea]
+
+
+class SectionsTree(BaseModel):
+    project: str
+    generated_at: str
+    kinds: list[SectionKind]
