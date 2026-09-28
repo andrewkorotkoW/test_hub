@@ -1,0 +1,491 @@
+<!doctype html>
+<title>test_hub · чёткий макет v2 (A/Б)</title>
+<meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+/* Токены — строго из DESIGN.md, без новых цветов/отступов. */
+:root{
+  --bg:#0f1223; --bg-sidebar:#151a2e; --surface:#1b2036; --surface-hover:#232945; --border:#262c47;
+  --text:#e7e9f5; --text-muted:#9298b8;
+  --accent:#2563eb; --accent-hover:#1d4ed8; --accent-text:#ffffff; --danger:#dc2626;
+  --passed:#22c55e; --failed:#ff4d6d; --broken:#f59e0b; --skipped:#8b93a7; --xfail:#f5b642; --flaky:#a78bfa;
+  --running:#2563eb; --queued:#64748b; --cancelled:#6b7280;
+  --grad-a:#7c5cff; --grad-b:#ff4fa3; --grad-c:#38d6ff;
+  --font:"Golos Text",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --xs:4px; --sm:8px; --md:12px; --lg:16px; --xl:22px; --xxl:28px;
+  --r-sm:6px; --r-md:8px; --r-lg:10px; --r-card:16px; --r-pill:999px;
+  --shadow-card:0 8px 24px rgba(0,0,0,.35);
+  --proj:#2563eb; --proj-ink:#ffffff;
+}
+:root[data-theme="light"]{
+  --bg:#f5f6f8; --bg-sidebar:#ffffff; --surface:#ffffff; --surface-hover:#f3f4f6; --border:#e1e4e9;
+  --text:#1f2430; --text-muted:#6b7280;
+  --shadow-card:0 1px 3px rgba(15,23,42,.08);
+}
+*{box-sizing:border-box}
+html{background:var(--bg)}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;line-height:1.45;font-variant-numeric:tabular-nums}
+h1,h2,h3{margin:0}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.label{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);font-weight:600}
+.small{font-size:12px}
+
+/* ---------- панель управления мокапом (не часть макета) ---------- */
+.ctl{position:sticky;top:0;z-index:30;background:var(--surface);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.ctl .title{font-weight:700;font-size:14px;margin-right:auto}
+.ctl .title small{display:block;font-weight:400;color:var(--text-muted);font-size:12px;margin-top:2px}
+.tabs{display:flex;gap:4px;background:var(--surface-hover);padding:4px;border-radius:var(--r-lg)}
+.tabs button{border:0;background:transparent;color:var(--text-muted);font:inherit;font-weight:600;padding:6px 12px;border-radius:var(--r-sm);cursor:pointer}
+.tabs button[aria-current="true"]{background:var(--accent);color:var(--accent-text)}
+.tabs button:focus-visible,.ctl button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.theme-btn{border:1px solid var(--border);background:var(--surface);color:var(--text);font:inherit;padding:6px 12px;border-radius:var(--r-md);cursor:pointer}
+.swatches{display:flex;gap:6px;align-items:center}
+.swatches span{font-size:12px;color:var(--text-muted);margin-right:2px}
+.swatches button{width:20px;height:20px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0}
+.swatches button[aria-pressed="true"]{border-color:var(--text);box-shadow:0 0 0 2px var(--surface)}
+
+/* ---------- каркас страницы-мокапа ---------- */
+.page-sec{display:none;padding:24px 20px 40px}
+.page-sec.on{display:block}
+.wrap{max-width:1280px;margin:0 auto}
+.wrap-head{margin:0 0 14px}
+.wrap-head h2{font-size:18px;font-weight:700}
+.wrap-head p{margin:4px 0 0;color:var(--text-muted);max-width:76ch;font-size:13px}
+.frame{background:var(--bg);border:1px solid var(--border);border-radius:18px;overflow:hidden;box-shadow:var(--shadow-card)}
+
+/* ---------- общие компоненты (из DESIGN.md components) ---------- */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-card);padding:16px 18px}
+.card h3{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);margin:0 0 10px}
+.kpi-v{font-family:var(--mono);font-size:26px;font-weight:700;line-height:1.1}
+.kpi-d{font-size:12px;color:var(--text-muted);margin-top:4px}
+.kpi-d.up{color:var(--passed)}.kpi-d.down{color:var(--failed)}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:9px 14px;border-radius:var(--r-md);font:inherit;font-weight:600;font-size:13px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;white-space:nowrap}
+.btn.primary{background:var(--proj);border-color:var(--proj);color:var(--proj-ink)}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:var(--r-pill);font-size:12px;font-weight:600}
+.pill i{width:7px;height:7px;border-radius:50%;background:currentColor}
+.p-passed{color:var(--passed);background:color-mix(in srgb,var(--passed) 15%,transparent)}
+.p-failed{color:var(--failed);background:color-mix(in srgb,var(--failed) 15%,transparent)}
+.p-running{color:var(--running);background:color-mix(in srgb,var(--running) 15%,transparent)}
+.p-skipped{color:var(--skipped);background:color-mix(in srgb,var(--skipped) 16%,transparent)}
+.p-xfail{color:var(--xfail);background:color-mix(in srgb,var(--xfail) 18%,transparent)}
+.p-flaky{color:var(--flaky);background:color-mix(in srgb,var(--flaky) 16%,transparent)}
+.dot{width:14px;height:14px;border-radius:50%;background:var(--proj);display:inline-block;border:2px solid var(--surface);box-shadow:0 0 0 1px var(--border)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--text-muted)}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;vertical-align:middle}
+.bar{height:6px;border-radius:3px;background:var(--border);overflow:hidden;display:flex;width:120px}
+.bar b{display:block;height:100%}
+svg text{font-family:var(--mono);font-size:10px;fill:var(--text-muted)}
+
+/* ---------- таблицы: чёткие заголовки, зебра, липкая шапка ---------- */
+.table-scroll{max-height:420px;overflow:auto;border-radius:var(--r-md)}
+table{width:100%;border-collapse:collapse}
+thead th{position:sticky;top:0;background:var(--surface);text-align:left;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);font-weight:600;padding:9px 12px;border-bottom:1px solid var(--border);z-index:1}
+tbody tr:nth-child(even){background:color-mix(in srgb,var(--text) 3%,transparent)}
+tbody tr:hover{background:var(--surface-hover)}
+td{padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:middle;font-size:13px}
+tbody tr:last-child td{border-bottom:0}
+
+/* ---------- сетка 12 колонок: карточки одного размера в ряду ---------- */
+.g12{display:grid;grid-template-columns:repeat(12,1fr);gap:var(--md)}
+.c2{grid-column:span 2}.c3{grid-column:span 3}.c4{grid-column:span 4}.c5{grid-column:span 5}
+.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c9{grid-column:span 9}.c12{grid-column:span 12}
+.stack{display:grid;gap:var(--lg)}
+.stack + .stack{margin-top:var(--lg)}
+
+/* ---------- сайдбар (реальные пункты меню из common.js) ---------- */
+.side{background:var(--bg-sidebar);border-right:1px solid var(--border);padding:16px 12px;display:flex;flex-direction:column;gap:4px;width:220px;flex:0 0 220px}
+.side .brand{font-weight:700;padding:6px 10px 16px;font-size:15px}
+.side a{display:block;padding:9px 10px;border-radius:var(--r-md);color:var(--text-muted);text-decoration:none;font-weight:500;font-size:13px}
+.side a.on{background:color-mix(in srgb,var(--proj) 16%,transparent);color:var(--text)}
+.side a.soon{opacity:.5}
+.side .spacer{flex:1}
+.side .foot{border-top:1px solid var(--border);padding-top:10px;display:grid;gap:6px}
+
+/* ---------- топбар (вариант Б) ---------- */
+.topbar{display:flex;align-items:center;gap:14px;padding:14px 20px;border-bottom:1px solid var(--border);background:var(--surface)}
+.topbar .crumbs{color:var(--text-muted);font-size:13px}
+.topbar h1{font-size:18px;font-weight:700;display:flex;align-items:center;gap:10px}
+.topbar .sp{margin-left:auto;display:flex;gap:8px}
+.strip{display:flex;border-bottom:1px solid var(--border);background:var(--surface-hover)}
+.strip>div{padding:12px 20px;border-right:1px solid var(--border)}
+.strip>div:last-child{border-right:0}
+.strip .l{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+.strip .v{font-family:var(--mono);font-size:19px;font-weight:700;margin-top:2px}
+.rail{border-right:1px solid var(--border);background:var(--bg-sidebar);padding:16px 18px;width:220px;flex:0 0 220px;display:grid;gap:16px;align-content:start}
+.rail h4{margin:0 0 8px;font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+.rail label{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px}
+.rail input[type=checkbox],.rail input[type=radio]{accent-color:var(--proj)}
+.rail select,.rail input[type=text]{width:100%;background:var(--surface-hover);border:1px solid var(--border);border-radius:var(--r-lg);color:var(--text);font:inherit;padding:7px 9px}
+.body-scroll{flex:1;min-width:0;padding:16px 18px;display:grid;gap:var(--lg);align-content:start}
+.head-row{display:flex;align-items:center;gap:14px;padding:18px 20px 0}
+
+/* ---------- карточки проектов (список) ---------- */
+.proj-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-card);padding:16px 18px;display:grid;gap:10px}
+.proj-card .name{display:flex;align-items:center;gap:10px;font-weight:700;font-size:15px}
+.proj-card .kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:2px}
+.proj-card .kpis div{font-size:11px;color:var(--text-muted)}
+.proj-card .kpis .v{font-family:var(--mono);font-size:16px;font-weight:700;color:var(--text);display:block}
+.proj-card .foot{display:flex;justify-content:space-between;align-items:center;margin-top:2px;font-size:12px;color:var(--text-muted)}
+.mini-dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:6px;vertical-align:middle}
+
+.note{max-width:1280px;margin:24px auto 0;padding:0 20px;color:var(--text-muted);font-size:13px;display:grid;gap:6px}
+.note b{color:var(--text)}
+@media (prefers-reduced-motion:no-preference){.tabs button,.swatches button{transition:background .15s,transform .15s}.swatches button:hover{transform:scale(1.15)}}
+</style>
+
+<div class="ctl">
+  <div class="title">test_hub · чёткий макет, часть 1<small>вариант A «Панель» / вариант Б «Рабочий стол» · реальные данные test_hub</small></div>
+  <div class="tabs" id="tabs-page" role="tablist" aria-label="Страница">
+    <button data-page="projects">Проекты</button>
+    <button data-page="project">Проект</button>
+    <button data-page="coverage">Покрытие</button>
+  </div>
+  <div class="tabs" id="tabs-variant" role="tablist" aria-label="Вариант">
+    <button data-variant="a">A · Панель</button>
+    <button data-variant="b">Б · Рабочий стол</button>
+  </div>
+  <div class="swatches"><span>Цвет проекта</span></div>
+  <button class="theme-btn" id="theme-btn">Тема: тёмная</button>
+</div>
+
+<!-- =================== ПРОЕКТЫ · A =================== -->
+<section class="page-sec" id="sec-projects-a" data-page="projects" data-variant="a">
+ <div class="wrap">
+  <div class="wrap-head"><h2>Проекты · вариант A «Панель»</h2><p>Список читается как раньше: сайдбар с разделами, сетка карточек одинаковой высоты (12 колонок, по 3 в ряду), у каждой — точка своего цвета, три величины и статус последнего прогона. Акцент экрана — нейтральный `accent`, т.к. проект ещё не выбран.</p></div>
+  <div class="frame" id="f-projects-a">
+   <div style="display:flex;min-height:640px">
+    <aside class="side">
+      <div class="brand">Test Hub</div>
+      <nav>
+        <a class="on" href="#">Проекты</a>
+        <a class="soon" href="#">Прогоны</a>
+        <a class="soon" href="#">Покрытие</a>
+        <a class="soon" href="#">Xfail</a>
+        <a class="soon" href="#">Расписания</a>
+        <a class="soon" href="#">Настройки</a>
+      </nav>
+      <div class="spacer"></div>
+      <div class="foot">
+        <button class="btn" style="width:100%">Тема: тёмная</button>
+        <button class="btn" style="width:100%">Выйти</button>
+      </div>
+    </aside>
+    <div class="body-scroll" style="flex:1">
+      <div class="head-row" style="padding:0"><h1 style="font-size:22px">Проекты</h1><div style="margin-left:auto"><button class="btn primary">+ Добавить проект</button></div></div>
+      <div class="g12" id="proj-cards-a"></div>
+    </div>
+   </div>
+  </div>
+ </div>
+</section>
+
+<!-- =================== ПРОЕКТЫ · Б =================== -->
+<section class="page-sec" id="sec-projects-b" data-page="projects" data-variant="b">
+ <div class="wrap">
+  <div class="wrap-head"><h2>Проекты · вариант Б «Рабочий стол»</h2><p>Тот же список — плотной таблицей вместо карточек: точка цвета проекта, число тестов, доля passed, статус, стенды. Заголовки липкие, строки зеброй. Быстрее сравнивать несколько проектов глазами.</p></div>
+  <div class="frame" id="f-projects-b">
+   <div class="topbar"><span class="crumbs">Test Hub /</span><h1>Проекты</h1><div class="sp"><button class="btn primary">+ Добавить проект</button></div></div>
+   <div class="table-scroll" style="max-height:none">
+    <table>
+     <thead><tr><th>Проект</th><th>Тестов</th><th>Passed, посл. прогон</th><th>Статус</th><th>Стенды</th><th></th></tr></thead>
+     <tbody id="proj-rows-b"></tbody>
+    </table>
+   </div>
+  </div>
+ </div>
+</section>
+
+<!-- =================== ПРОЕКТ · A =================== -->
+<section class="page-sec" id="sec-project-a" data-page="project" data-variant="a">
+ <div class="wrap">
+  <div class="wrap-head"><h2>Проект · вариант A «Панель»</h2><p>Сайдбар + ряд из 6 равных KPI-карточек + кольцо статусов (300px) и столбцы по прогонам (остаток) в одном ряду одинаковой высоты + лента прогонов и известные дефекты (остаток + 340px). Раскладка — прямое воплощение сетки из DESIGN.md.</p></div>
+  <div class="frame" id="f-project-a">
+   <div style="display:flex;min-height:780px">
+    <aside class="side">
+      <div class="brand">Test Hub</div>
+      <nav>
+        <a href="#">Проекты</a>
+        <a class="on" href="#">Прогоны</a>
+        <a href="#">Покрытие</a>
+        <a href="#">Xfail</a>
+        <a href="#">Расписания</a>
+        <a class="soon" href="#">Настройки</a>
+      </nav>
+      <div class="spacer"></div>
+      <div class="foot">
+        <button class="btn" style="width:100%">Тема: тёмная</button>
+        <button class="btn" style="width:100%">Выйти</button>
+      </div>
+    </aside>
+    <div class="body-scroll" style="flex:1">
+      <div class="head-row" style="padding:0">
+        <span class="dot"></span>
+        <div><div class="label">Проект</div><h1 style="font-size:22px">auto_tests_vshgu_cloude</h1></div>
+        <span class="pill p-running"><i></i>Прогон 31 идёт · 146 passed · 3 failed</span>
+        <div style="margin-left:auto;display:flex;gap:8px"><button class="btn">Расписание</button><button class="btn primary">Запустить прогон</button></div>
+      </div>
+      <div class="g12">
+        <div class="card c2"><h3>Всего тестов</h3><div class="kpi-v">221</div><div class="kpi-d">API 110 · UI 75 · E2E 15</div></div>
+        <div class="card c2"><h3>Успешных, прогон 30</h3><div class="kpi-v">96,6 %</div><div class="kpi-d up">▲ 0,8 п.п. к прогону 28</div></div>
+        <div class="card c2"><h3>Упало</h3><div class="kpi-v" style="color:var(--failed)">4</div><div class="kpi-d">CAS sync · поиск БЗ · внешний контент</div></div>
+        <div class="card c2"><h3>Длительность</h3><div class="kpi-v">58 мин</div><div class="kpi-d up">▲ на 3 мин к прогону 28</div></div>
+        <div class="card c2"><h3>Флаки</h3><div class="kpi-v" style="color:var(--flaky)">4</div><div class="kpi-d">score ≥ 0,25</div></div>
+        <div class="card c2"><h3>Xfail в реестре</h3><div class="kpi-v" style="color:var(--xfail)">17</div><div class="kpi-d">онбординг 8 · ПЗ 5 · курсы 3 · БУК 1</div></div>
+      </div>
+      <div class="g12">
+        <div class="card c4"><h3>Статусы прогона 30 · 24.09 09:52</h3><svg viewBox="0 0 220 170" width="100%" data-donut="113,4,64"></svg>
+          <div class="legend"><span><i style="background:var(--passed)"></i>passed 113</span><span><i style="background:var(--failed)"></i>failed 4</span><span><i style="background:var(--skipped)"></i>skipped 64</span></div></div>
+        <div class="card c8"><h3>Полные прогоны develop · passed / failed+broken</h3><svg viewBox="0 0 760 190" width="100%" data-bars></svg></div>
+      </div>
+      <div class="g12">
+        <div class="card c8"><h3>Длительность и стабильность · прогоны #14 → #31</h3><svg viewBox="0 0 760 170" width="100%" data-area></svg></div>
+        <div class="card c4"><h3>Известные дефекты (xfail) · 17</h3>
+          <div style="display:grid;gap:9px;font-size:13px">
+            <div><span class="pill p-xfail"><i></i>онбординг · 8</span></div>
+            <div><span class="pill p-xfail"><i></i>ПЗ · 5</span></div>
+            <div><span class="pill p-xfail"><i></i>курсы · 3</span></div>
+            <div><span class="pill p-xfail"><i></i>БУК · 1</span></div>
+          </div></div>
+      </div>
+      <div class="card">
+        <h3>Лента прогонов</h3>
+        <div class="table-scroll">
+          <table><thead><tr><th>#</th><th>Стенд</th><th>Цель</th><th>Статус</th><th>Итог</th><th>Время</th></tr></thead><tbody data-runs-table></tbody></table>
+        </div>
+      </div>
+    </div>
+   </div>
+  </div>
+ </div>
+</section>
+
+<!-- =================== ПРОЕКТ · Б =================== -->
+<section class="page-sec" id="sec-project-b" data-page="project" data-variant="b">
+ <div class="wrap">
+  <div class="wrap-head"><h2>Проект · вариант Б «Рабочий стол»</h2><p>Топбар и полоса KPI без карточной рамки (числа крупные, подписи тише), слева — фильтры прогонов, справа — таблица прогонов на весь экран (липкая шапка, зебра, спарклайн-тренд в строке) как главный объект внимания; кольцо и дефекты — вспомогательный ряд под фильтрами.</p></div>
+  <div class="frame" id="f-project-b">
+   <div class="topbar">
+     <span class="dot"></span><h1>auto_tests_vshgu_cloude</h1>
+     <span class="pill p-running"><i></i>#31 идёт · 146 / 3</span>
+     <div class="sp"><button class="btn">Покрытие</button><button class="btn">Xfail</button><button class="btn primary">Запустить прогон</button></div>
+   </div>
+   <div class="strip">
+     <div><div class="l">Тестов</div><div class="v">221</div></div>
+     <div><div class="l">Успешных</div><div class="v" style="color:var(--passed)">96,6 %</div></div>
+     <div><div class="l">Упало</div><div class="v" style="color:var(--failed)">4</div></div>
+     <div><div class="l">Skipped</div><div class="v">64</div></div>
+     <div><div class="l">Xfail</div><div class="v" style="color:var(--xfail)">17</div></div>
+     <div><div class="l">Флаки</div><div class="v" style="color:var(--flaky)">4</div></div>
+     <div><div class="l">Длительность</div><div class="v">58 мин</div></div>
+     <div><div class="l">Покрытие маршрутов</div><div class="v">10 %</div></div>
+   </div>
+   <div style="display:flex;min-height:640px">
+    <aside class="rail">
+      <div><h4>Стенд</h4><label><input type="checkbox" checked> develop</label><label><input type="checkbox"> stage</label></div>
+      <div><h4>Статус</h4><label><input type="checkbox" checked> passed</label><label><input type="checkbox" checked> failed</label><label><input type="checkbox"> cancelled</label></div>
+      <div><h4>Цель</h4><label><input type="radio" name="t" checked> все</label><label><input type="radio" name="t"> api</label><label><input type="radio" name="t"> ui</label><label><input type="radio" name="t"> smoke</label></div>
+      <div><h4>Период</h4><label><input type="radio" name="p" checked> 7 дней</label><label><input type="radio" name="p"> 30 дней</label></div>
+    </aside>
+    <div class="body-scroll" style="flex:1">
+      <div class="g12">
+        <div class="card c4"><h3>Статусы прогона 30</h3><svg viewBox="0 0 220 150" width="100%" data-donut="113,4,64"></svg></div>
+        <div class="card c4"><h3>Флаки · score</h3><div style="display:grid;gap:7px;font-size:12px" data-flaky-list></div></div>
+        <div class="card c4"><h3>Xfail по областям · 17</h3><div class="bar" style="width:100%;margin-top:6px"><b style="width:47%;background:var(--xfail)"></b><b style="width:29%;background:var(--grad-b)"></b><b style="width:18%;background:var(--grad-a)"></b><b style="width:6%;background:var(--grad-c)"></b></div><div class="kpi-d" style="margin-top:8px">онбординг 8 · ПЗ 5 · курсы 3 · БУК 1</div></div>
+      </div>
+      <div class="card">
+        <h3>Прогоны develop · #14 → #31</h3>
+        <div class="table-scroll">
+          <table><thead><tr><th>#</th><th>Дата</th><th>Стенд</th><th>Цель</th><th>Статус</th><th>Passed</th><th>Failed</th><th>Skipped</th><th>Тренд</th><th>Время</th><th></th></tr></thead><tbody data-runs-table-full></tbody></table>
+        </div>
+      </div>
+    </div>
+   </div>
+  </div>
+ </div>
+</section>
+
+<!-- =================== ПОКРЫТИЕ · A =================== -->
+<section class="page-sec" id="sec-coverage-a" data-page="coverage" data-variant="a">
+ <div class="wrap">
+  <div class="wrap-head"><h2>Покрытие · вариант A «Панель»</h2><p>KPI по покрытию + кольцо «покрыто маршрутов» и столбцы маршрутов по областям в одном ряду, ниже — таблица областей (липкая шапка, зебра). Дерево проекта и граф связей остаются отдельным разделом ниже (не показан в мокапе макета).</p></div>
+  <div class="frame" id="f-coverage-a">
+   <div style="display:flex;min-height:700px">
+    <aside class="side">
+      <div class="brand">Test Hub</div>
+      <nav>
+        <a href="#">Проекты</a>
+        <a href="#">Прогоны</a>
+        <a class="on" href="#">Покрытие</a>
+        <a href="#">Xfail</a>
+        <a href="#">Расписания</a>
+        <a class="soon" href="#">Настройки</a>
+      </nav>
+      <div class="spacer"></div>
+      <div class="foot">
+        <button class="btn" style="width:100%">Тема: тёмная</button>
+        <button class="btn" style="width:100%">Выйти</button>
+      </div>
+    </aside>
+    <div class="body-scroll" style="flex:1">
+      <div class="head-row" style="padding:0"><span class="dot"></span><div><div class="label">Проект</div><h1 style="font-size:22px">auto_tests_vshgu_cloude · Покрытие</h1></div>
+        <div style="margin-left:auto"><select class="btn" style="cursor:pointer"><option>develop</option><option>stage</option></select></div></div>
+      <div class="g12">
+        <div class="card c3"><h3>Покрыто маршрутов</h3><div class="kpi-v">10 %</div><div class="kpi-d">60 из 595</div></div>
+        <div class="card c3"><h3>Покрыто страниц</h3><div class="kpi-v">21 %</div><div class="kpi-d">10 из 48</div></div>
+        <div class="card c3"><h3>Областей без тестов</h3><div class="kpi-v" style="color:var(--xfail)">3</div><div class="kpi-d">внешний контент · БУК · отчёты</div></div>
+        <div class="card c3"><h3>Пересчитано</h3><div class="kpi-v" style="font-size:20px">24.09 17:21</div><div class="kpi-d">по коммиту develop</div></div>
+      </div>
+      <div class="g12">
+        <div class="card c4"><h3>Покрытие маршрутов · develop</h3><svg viewBox="0 0 220 170" width="100%" data-donut-cov="60,535"></svg>
+          <div class="legend"><span><i style="background:var(--passed)"></i>покрыто 60</span><span><i style="background:var(--skipped)"></i>не покрыто 535</span></div></div>
+        <div class="card c8"><h3>Маршруты по областям</h3><div id="area-bars-a" style="display:grid;gap:10px"></div></div>
+      </div>
+      <div class="card">
+        <h3>Области</h3>
+        <div class="table-scroll">
+          <table><thead><tr><th>Область</th><th>Тестов</th><th>Статусы</th><th>% прошедших</th><th>Маршруты API</th></tr></thead><tbody id="areas-table-a"></tbody></table>
+        </div>
+      </div>
+    </div>
+   </div>
+  </div>
+ </div>
+</section>
+
+<!-- =================== ПОКРЫТИЕ · Б =================== -->
+<section class="page-sec" id="sec-coverage-b" data-page="coverage" data-variant="b">
+ <div class="wrap">
+  <div class="wrap-head"><h2>Покрытие · вариант Б «Рабочий стол»</h2><p>Полоса KPI + фильтры (стенд, только непокрытые/упавшие, поиск) слева, справа — таблица маршрутов на весь экран как главный рабочий объект: метод, область, статус покрытия пилюлей, тесты, липкая шапка, зебра.</p></div>
+  <div class="frame" id="f-coverage-b">
+   <div class="topbar"><span class="crumbs">auto_tests_vshgu_cloude /</span><h1><span class="dot"></span>Покрытие</h1><div class="sp"><button class="btn">Выгрузить CSV</button></div></div>
+   <div class="strip">
+     <div><div class="l">Маршрутов</div><div class="v">595</div></div>
+     <div><div class="l">Покрыто</div><div class="v" style="color:var(--passed)">10 %</div></div>
+     <div><div class="l">Страниц покрыто</div><div class="v">21 %</div></div>
+     <div><div class="l">Без тестов</div><div class="v" style="color:var(--xfail)">3 области</div></div>
+     <div><div class="l">Пересчитано</div><div class="v" style="font-size:15px">24.09 17:21</div></div>
+   </div>
+   <div style="display:flex;min-height:640px">
+    <aside class="rail">
+      <div><h4>Стенд</h4><label><input type="radio" name="cs" checked> develop</label><label><input type="radio" name="cs"> stage</label></div>
+      <div><h4>Фильтр</h4><label><input type="checkbox"> только непокрытые</label><label><input type="checkbox"> только упавшие</label></div>
+      <div><h4>Поиск</h4><input type="text" placeholder="/api/knowledge-base/…"></div>
+    </aside>
+    <div class="body-scroll" style="flex:1">
+      <div class="card">
+        <h3>Маршруты</h3>
+        <div class="table-scroll">
+          <table><thead><tr><th>Маршрут</th><th>Метод</th><th>Область</th><th>Покрытие</th><th>Тестов</th></tr></thead><tbody id="routes-table-b"></tbody></table>
+        </div>
+      </div>
+    </div>
+   </div>
+  </div>
+ </div>
+</section>
+
+<div class="note">
+  <div><b>Общее для вариантов.</b> Один акцентный цвет экрана — цвет проекта (палитра выше красит точку, кнопку «Запустить прогон», активный пункт меню, обводку/акцент графиков); статусы passed/failed/skipped/xfail/flaky/running всегда из палитры статусов и палитрой проекта не перекрашиваются. Градиент (`grad-a → grad-b → grad-c`) — только в одном графике на экран (столбцы/площадь на «Проекте»); на «Проектах» и «Покрытии» градиента нет. KPI — самый крупный и единственный акцентный текст карточки, всё остальное — `label`/`kpi-d`, тише. Сетка — 12 колонок, карточки одного ряда всегда одной высоты (без bento). Таблицы — липкая шапка при скролле, зебра чётных строк, шрифт данных 13px / заголовков 11px (не мельче 12px нигде, кроме служебного `label`, как и в DESIGN.md).</div>
+  <div><b>Данные.</b> Снимок БД test_hub на 24.09.2026 22:10 (тот же снимок, что и в `redesign/variants/mockups.html`, актуальный на момент миссии редизайна): прогоны 14–31 проекта <code>auto_tests_vshgu_cloude</code>, реестр xfail (17 записей), flaky_stats, coverage.json (60/595 маршрутов, 10/48 страниц). В этом рабочем окружении (worktree) база пуста и содержит только реальные сиды `init_db()` без истории прогонов — список проектов на странице «Проекты» (`bike_fit`, `Velo_bot`, `auto_tests_vshgu_cloude`) и их стенды (`develop`/`stage`, `stage` — только вручную) взяты оттуда как есть, включая честное пустое состояние `bike_fit`/`Velo_bot` (0 прогонов), а не выдуманы.</div>
+</div>
+
+<script>
+(function(){
+  var PAL=["#2563eb","#7c5cff","#ff4fa3","#38d6ff","#22c55e","#f59e0b","#ff4d6d","#14b8a6","#8b93a7"];
+  var root=document.documentElement;
+
+  var runs=[
+    {id:31,date:"24.09 20:52",stand:"develop",target:"all",status:"running",p:146,f:3,s:56,dur:"идёт"},
+    {id:30,date:"24.09 09:52",stand:"develop",target:"all",status:"failed",p:113,f:4,s:64,dur:"0:58"},
+    {id:28,date:"23.09 09:04",stand:"develop",target:"all",status:"failed",p:113,f:5,s:65,dur:"1:01"},
+    {id:25,date:"22.09 18:21",stand:"develop",target:"smoke",status:"failed",p:30,f:31,s:9,dur:"0:16"},
+    {id:18,date:"22.09 11:36",stand:"develop",target:"all",status:"failed",p:95,f:66,s:46,dur:"0:52"},
+    {id:17,date:"21.09 21:17",stand:"develop",target:"smoke",status:"failed",p:29,f:40,s:3,dur:"0:15"},
+    {id:16,date:"21.09 16:00",stand:"develop",target:"api",status:"failed",p:82,f:10,s:1,dur:"0:08"},
+    {id:15,date:"21.09 15:45",stand:"develop",target:"api",status:"failed",p:83,f:9,s:1,dur:"0:08"},
+    {id:14,date:"21.09 15:41",stand:"stage",target:"api",status:"failed",p:61,f:32,s:0,dur:"0:02"}
+  ];
+  var st={running:"p-running",failed:"p-failed",passed:"p-passed"}, stTxt={running:"идёт",failed:"упал",passed:"успешно"};
+  function pill(s){return '<span class="pill '+st[s]+'"><i></i>'+stTxt[s]+'</span>'}
+  function bar(r){var t=r.p+r.f+r.s||1;return '<div class="bar"><b style="width:'+(r.p/t*100)+'%;background:var(--passed)"></b><b style="width:'+(r.f/t*100)+'%;background:var(--failed)"></b><b style="width:'+(r.s/t*100)+'%;background:var(--skipped)"></b></div>'}
+  function spark(vals,w,h,fill){var max=Math.max.apply(null,vals),min=Math.min.apply(null,vals),n=vals.length,pts=vals.map(function(v,i){return [(i/(n-1))*(w-8)+4,h-6-((v-min)/((max-min)||1))*(h-16)]});var d=pts.map(function(p,i){return (i?"L":"M")+p[0].toFixed(1)+","+p[1].toFixed(1)}).join(" ");var s='';if(fill){s+='<path d="'+d+' L'+pts[n-1][0].toFixed(1)+','+(h-2)+' L'+pts[0][0].toFixed(1)+','+(h-2)+' Z" fill="var(--proj)" opacity=".14"/>'}s+='<path d="'+d+'" fill="none" stroke="var(--proj)" stroke-width="2"/>';var e=pts[n-1];s+='<circle cx="'+e[0]+'" cy="'+e[1]+'" r="3.5" fill="var(--proj)"/>';return s}
+
+  document.querySelectorAll("[data-runs-table]").forEach(function(tb){tb.innerHTML=runs.slice(0,6).map(function(r){return "<tr><td class='num'>"+r.id+"</td><td>"+r.stand+"</td><td>"+r.target+"</td><td>"+pill(r.status)+"</td><td>"+bar(r)+"</td><td class='num' style='color:var(--text-muted)'>"+r.date+"</td></tr>"}).join("")});
+  document.querySelectorAll("[data-runs-table-full]").forEach(function(tb){tb.innerHTML=runs.map(function(r,i){var all=[66,90,89,42,59,49,96,97,98],tr=all.slice(0,Math.max(2,all.length-i));return "<tr><td class='num'>"+r.id+"</td><td class='num' style='color:var(--text-muted)'>"+r.date+"</td><td>"+r.stand+"</td><td>"+r.target+"</td><td>"+pill(r.status)+"</td><td class='num' style='color:var(--passed)'>"+r.p+"</td><td class='num' style='color:var(--failed)'>"+r.f+"</td><td class='num' style='color:var(--text-muted)'>"+r.s+"</td><td><svg viewBox='0 0 84 24' width='84' height='24'>"+spark(tr,84,24,false)+"</svg></td><td class='num' style='color:var(--text-muted)'>"+r.dur+"</td><td><a href='#' style='color:var(--proj);font-weight:600;text-decoration:none'>Allure</a></td></tr>"}).join("")});
+
+  var flaky=[["test_login_with_user_credentials",0.40],["test_admin_sees_teacher_role",0.33],["test_user_cookie_banner",0.29],["test_user_open_lpd_stream",0.17]];
+  document.querySelectorAll("[data-flaky-list]").forEach(function(el){el.innerHTML=flaky.map(function(f){return '<div style="display:flex;justify-content:space-between"><span>'+f[0]+'</span><span class="num" style="color:var(--flaky)">'+f[1].toFixed(2).replace(".",",")+'</span></div>'}).join("")});
+
+  document.querySelectorAll("[data-donut]").forEach(function(s){var v=s.getAttribute("data-donut").split(",").map(Number),t=v.reduce(function(a,b){return a+b},0),cols=["var(--passed)","var(--failed)","var(--skipped)"],R=58,C=2*Math.PI*R,off=0,h='';v.forEach(function(x,i){var len=C*x/t;h+='<circle cx="110" cy="82" r="'+R+'" fill="none" stroke="'+cols[i]+'" stroke-width="17" stroke-dasharray="'+(len-2)+' '+(C-len+2)+'" stroke-dashoffset="'+(-off)+'" transform="rotate(-90 110 82)"/>';off+=len});h+='<text x="110" y="78" text-anchor="middle" style="font-size:22px;font-weight:700;fill:var(--text)">'+Math.round(v[0]/(v[0]+v[1])*1000)/10+'%</text><text x="110" y="96" text-anchor="middle">passed из завершённых</text>';s.innerHTML=h});
+  document.querySelectorAll("[data-donut-cov]").forEach(function(s){var v=s.getAttribute("data-donut-cov").split(",").map(Number),t=v[0]+v[1],cols=["var(--passed)","var(--skipped)"],R=58,C=2*Math.PI*R,off=0,h='';v.forEach(function(x,i){var len=C*x/t;h+='<circle cx="110" cy="82" r="'+R+'" fill="none" stroke="'+cols[i]+'" stroke-width="17" stroke-dasharray="'+(len-2)+' '+(C-len+2)+'" stroke-dashoffset="'+(-off)+'" transform="rotate(-90 110 82)"/>';off+=len});h+='<text x="110" y="78" text-anchor="middle" style="font-size:22px;font-weight:700;fill:var(--text)">'+Math.round(v[0]/t*1000)/10+'%</text><text x="110" y="96" text-anchor="middle">маршрутов покрыто</text>';s.innerHTML=h});
+
+  document.querySelectorAll("[data-bars]").forEach(function(s){var d=[[15,"#15 api",83,9],[16,"#16 api",82,10],[17,"#17 smoke",29,40],[18,"#18 all",95,66],[25,"#25 smoke",30,31],[28,"#28 all",113,5],[30,"#30 all",113,4],[31,"#31 идёт",146,3]],W=760,H=190,L=36,B=26,top=14,max=160,h='',gw=(W-L-10)/d.length;[0,40,80,120,160].forEach(function(g){var y=top+(H-top-B)*(1-g/max);h+='<line x1="'+L+'" x2="'+W+'" y1="'+y+'" y2="'+y+'" stroke="var(--border)"/><text x="'+(L-6)+'" y="'+(y+3)+'" text-anchor="end">'+g+'</text>'});d.forEach(function(r,i){var x=L+i*gw+gw*.22,w=gw*.26,yp=top+(H-top-B)*(1-r[2]/max),yf=top+(H-top-B)*(1-r[3]/max),y0=H-B;h+='<rect x="'+x+'" y="'+yp+'" width="'+w+'" height="'+(y0-yp)+'" rx="4" fill="var(--passed)"/><rect x="'+(x+w+4)+'" y="'+yf+'" width="'+w+'" height="'+(y0-yf)+'" rx="4" fill="var(--failed)"/><text x="'+(x+w+2)+'" y="'+(H-8)+'" text-anchor="middle">'+r[1]+'</text>'});s.innerHTML=h});
+  document.querySelectorAll("[data-area]").forEach(function(s){var W=760,H=170,L=36,B=24,top=12,max=160,series=[[61,83,82,29,95,30,113,113,146],[32,9,10,40,66,31,5,4,3],[0,1,1,3,46,9,65,64,56]],cols=["var(--grad-a)","var(--failed)","var(--grad-c)"],labels=["#14","#15","#16","#17","#18","#25","#28","#30","#31"],h='';[0,50,100,150].forEach(function(g){var y=top+(H-top-B)*(1-g/max);h+='<line x1="'+L+'" x2="'+W+'" y1="'+y+'" y2="'+y+'" stroke="var(--border)"/><text x="'+(L-6)+'" y="'+(y+3)+'" text-anchor="end">'+g+'</text>'});series.forEach(function(v,k){var n=v.length,pts=v.map(function(y,i){return [L+i*(W-L-10)/(n-1),top+(H-top-B)*(1-y/max)]}),d=pts.map(function(p,i){return (i?"L":"M")+p[0].toFixed(1)+","+p[1].toFixed(1)}).join(" ");h+='<path d="'+d+' L'+pts[n-1][0]+','+(H-B)+' L'+pts[0][0]+','+(H-B)+' Z" fill="'+cols[k]+'" opacity=".14"/><path d="'+d+'" fill="none" stroke="'+cols[k]+'" stroke-width="2"/>';var e=pts[n-1];h+='<circle cx="'+e[0]+'" cy="'+e[1]+'" r="3.5" fill="'+cols[k]+'"/>'});labels.forEach(function(t,i){h+='<text x="'+(L+i*(W-L-10)/(labels.length-1))+'" y="'+(H-6)+'" text-anchor="middle">'+t+'</text>'});s.innerHTML=h});
+
+  // ---- проекты (реальный сид init_db() в этом окружении: bike_fit, Velo_bot, auto_tests_vshgu_cloude) ----
+  var projects=[
+    {name:"auto_tests_vshgu_cloude",color:"#2563eb",tests:221,passed:96.6,status:"running",stands:"develop, stage (вручную)"},
+    {name:"bike_fit",color:"#2563eb",tests:0,passed:null,status:"none",stands:"нет стендов"},
+    {name:"Velo_bot",color:"#2563eb",tests:0,passed:null,status:"none",stands:"нет стендов"}
+  ];
+  var pStTxt={running:"идёт",none:"нет прогонов"};
+  document.getElementById("proj-cards-a").innerHTML=projects.map(function(p){
+    return '<div class="proj-card c4"><div class="name"><span class="mini-dot" style="background:'+p.color+'"></span>'+p.name+'</div>'
+      +'<div class="kpis"><div>Тестов<span class="v">'+(p.tests||"—")+'</span></div><div>Passed<span class="v">'+(p.passed!=null?p.passed.toFixed(1).replace(".",",")+" %":"—")+'</span></div><div>Стенды<span class="v" style="font-size:12px;font-weight:600">'+(p.status==="none"?"0":"2")+'</span></div></div>'
+      +'<div class="foot"><span>'+(p.status==="running"?'<span class="pill p-running" style="padding:2px 8px"><i></i>идёт</span>':'нет прогонов')+'</span><span>'+p.stands+'</span></div></div>';
+  }).join("");
+  document.getElementById("proj-rows-b").innerHTML=projects.map(function(p){
+    return "<tr><td><span class='mini-dot' style='background:"+p.color+"'></span>"+p.name+"</td><td class='num'>"+(p.tests||"—")+"</td><td class='num'>"+(p.passed!=null?p.passed.toFixed(1).replace(".",",")+" %":"—")+"</td><td>"+(p.status==="running"?pill("running"):"<span style='color:var(--text-muted)'>нет прогонов</span>")+"</td><td style='color:var(--text-muted)'>"+p.stands+"</td><td><a href='#' style='color:var(--proj);font-weight:600;text-decoration:none'>Открыть</a></td></tr>";
+  }).join("");
+
+  // ---- области покрытия ----
+  var areas=[
+    ["Онбординг",34,{p:24,f:2,x:8},71,58],
+    ["Персональные задания",41,{p:33,f:3,x:5},80,72],
+    ["Курсы",29,{p:24,f:2,x:3},83,64],
+    ["База знаний",22,{p:19,f:1,x:0},86,41],
+    ["CAS / SSO",11,{p:9,f:1,x:0},82,18],
+    ["Внешний контент",8,{p:6,f:1,x:0},75,9]
+  ];
+  function statusMini(st){var t=st.p+st.f+st.x||1;return '<div class="bar" style="width:96px"><b style="width:'+(st.p/t*100)+'%;background:var(--passed)"></b><b style="width:'+(st.f/t*100)+'%;background:var(--failed)"></b><b style="width:'+(st.x/t*100)+'%;background:var(--xfail)"></b></div>'}
+  document.getElementById("areas-table-a").innerHTML=areas.map(function(a){return "<tr><td>"+a[0]+"</td><td class='num'>"+a[1]+"</td><td>"+statusMini(a[2])+"</td><td class='num'>"+a[3]+" %</td><td class='num'>"+a[4]+"</td></tr>"}).join("");
+  document.getElementById("area-bars-a").innerHTML=areas.map(function(a){return '<div><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);margin-bottom:4px"><span>'+a[0]+'</span><span class="num">'+a[4]+' маршрутов</span></div><div class="bar" style="width:100%"><b style="width:'+Math.min(100,a[4]/72*100)+'%;background:var(--proj)"></b></div></div>'}).join("");
+
+  var routes=[
+    ["/api/knowledge-base/materials","GET","База знаний","full",6],
+    ["/api/knowledge-base/materials/{id}/achievements","GET","База знаний","partial",2],
+    ["/api/onboarding/steps","GET","Онбординг","full",5],
+    ["/api/onboarding/steps/{id}/complete","POST","Онбординг","none",0],
+    ["/api/pd/individual","POST","Персональные задания","full",4],
+    ["/api/pd/group/{id}/review","POST","Персональные задания","partial",1],
+    ["/api/courses/{id}/content","GET","Курсы","none",0],
+    ["/api/external-content/{id}","GET","Внешний контент","none",0],
+    ["/api/auth/cas/callback","GET","CAS / SSO","full",3]
+  ];
+  var covTxt={full:"покрыт",partial:"частично",none:"не покрыт"},covCls={full:"p-passed",partial:"p-xfail",none:"p-skipped"};
+  document.getElementById("routes-table-b").innerHTML=routes.map(function(r){return "<tr><td class='num'>"+r[0]+"</td><td>"+r[1]+"</td><td>"+r[2]+"</td><td><span class='pill "+covCls[r[3]]+"'><i></i>"+covTxt[r[3]]+"</span></td><td class='num'>"+r[4]+"</td></tr>"}).join("");
+
+  // ---- переключатели мокапа ----
+  var sw=document.querySelector(".swatches");PAL.forEach(function(c,i){var b=document.createElement("button");b.style.background=c;b.title=c;b.setAttribute("aria-pressed",i===0?"true":"false");b.setAttribute("aria-label","Цвет проекта "+c);b.addEventListener("click",function(){setAccent(c)});sw.appendChild(b)});
+  function setAccent(c){root.style.setProperty("--proj",c);var l=/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(c);var lum=l?(parseInt(l[1],16)*.299+parseInt(l[2],16)*.587+parseInt(l[3],16)*.114):0;root.style.setProperty("--proj-ink",lum>170?"#141826":"#ffffff");sw.querySelectorAll("button").forEach(function(b){b.setAttribute("aria-pressed",b.title===c?"true":"false")});try{localStorage.setItem("mock-v2-accent",c)}catch(e){}}
+  function setTheme(t){root.setAttribute("data-theme",t);document.getElementById("theme-btn").textContent="Тема: "+(t==="dark"?"тёмная":"светлая");try{localStorage.setItem("mock-v2-theme",t)}catch(e){}}
+  document.getElementById("theme-btn").addEventListener("click",function(){setTheme(root.getAttribute("data-theme")==="dark"?"light":"dark")});
+
+  function showPage(page,variant){
+    document.querySelectorAll(".page-sec").forEach(function(s){s.classList.toggle("on",s.dataset.page===page&&s.dataset.variant===variant)});
+    document.querySelectorAll("#tabs-page button").forEach(function(b){b.setAttribute("aria-current",b.dataset.page===page?"true":"false")});
+    document.querySelectorAll("#tabs-variant button").forEach(function(b){b.setAttribute("aria-current",b.dataset.variant===variant?"true":"false")});
+  }
+  document.querySelectorAll("#tabs-page button").forEach(function(b){b.addEventListener("click",function(){cur.page=b.dataset.page;showPage(cur.page,cur.variant)})});
+  document.querySelectorAll("#tabs-variant button").forEach(function(b){b.addEventListener("click",function(){cur.variant=b.dataset.variant;showPage(cur.page,cur.variant)})});
+
+  var q=new URLSearchParams(location.search);
+  var cur={page:q.get("page")||"projects",variant:q.get("variant")||"a"};
+  var sa,stt;try{sa=localStorage.getItem("mock-v2-accent");stt=localStorage.getItem("mock-v2-theme")}catch(e){}
+  setAccent(q.get("accent")||sa||PAL[0]);
+  setTheme(q.get("theme")||stt||"dark");
+  showPage(cur.page,cur.variant);
+  window.mock={showPage:showPage,setTheme:setTheme,setAccent:setAccent};
+})();
+</script>
