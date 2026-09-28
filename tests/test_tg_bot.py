@@ -9,6 +9,7 @@ aiogram.Bot, никаких запросов к api.telegram.org) и замок�
 (httpx.MockTransport вместо реального сервера/сокета)."""
 
 import json
+import re
 import time
 
 import httpx
@@ -29,6 +30,7 @@ from app.tg_bot import (
     ACCESS_DENIED_MESSAGE,
     MENU_TEXT,
     STAGE_USAGE,
+    STATS_USAGE,
     HubClient,
     AccessMiddleware,
     _is_allowed,
@@ -46,6 +48,7 @@ from app.tg_bot import (
     format_projects,
     format_report,
     format_schedules,
+    format_stats,
     format_status,
     format_xfail,
     parse_callback,
@@ -55,6 +58,7 @@ from app.tg_bot import (
     parse_run_command,
     parse_run_id,
     parse_stage_args,
+    parse_stats_args,
     router,
 )
 
@@ -1529,3 +1533,255 @@ async def test_access_middleware_denies_flaky_and_schedules_commands(monkeypatch
     client.list_flaky.assert_not_called()
     client.list_xfail.assert_not_called()
     client.list_schedules.assert_not_called()
+
+
+# ------------------------------------------------------------------ /stats: parse_stats_args/format_stats/cmd_stats
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("bike_fit", ("bike_fit", None)),
+        ("bike_fit stage", ("bike_fit", "stage")),
+    ],
+)
+def test_parse_stats_args_ok(text, expected):
+    assert parse_stats_args(text) == expected
+
+
+def test_parse_stats_args_missing_project_raises():
+    with pytest.raises(ValueError, match=re.escape(STATS_USAGE)):
+        parse_stats_args("")
+
+
+_STATS_DATA = {
+    "sections": [
+        {
+            "section": "api/notifications", "tests_total": 5, "passed_percent": 80.0,
+            "avg_duration": 1.234, "flaky_count": 2, "xfail_count": 1,
+        },
+        {
+            "section": "ui/buk", "tests_total": 3, "passed_percent": None,
+            "avg_duration": None, "flaky_count": 0, "xfail_count": 0,
+        },
+        # раздел без единого теста в последнем прогоне не попадает в текстовую сводку
+        {
+            "section": "api/empty", "tests_total": 0, "passed_percent": None,
+            "avg_duration": None, "flaky_count": 0, "xfail_count": 0,
+        },
+    ],
+    "empty_sections": ["api/empty"],
+}
+
+
+def test_format_stats_lists_sections_with_percent_duration_and_extras():
+    text = format_stats("bike_fit", "stage", _STATS_DATA)
+    lines = text.splitlines()
+    assert lines[0] == "Статистика «bike_fit» / stage:"
+    assert lines[1] == "• api/notifications: 5 тестов, 80.0% passed, 1.2с (флаки 2, xfail 1)"
+    assert lines[2] == "• ui/buk: 3 тестов, — passed, —"
+    assert lines[3] == "Без единого теста: api/empty"
+
+
+def test_format_stats_without_stand_omits_slash_suffix():
+    text = format_stats("bike_fit", None, _STATS_DATA)
+    assert text.splitlines()[0] == "Статистика «bike_fit»:"
+
+
+def test_format_stats_no_sections_with_data_shows_placeholder():
+    text = format_stats("bike_fit", "stage", {"sections": [{"section": "api/empty", "tests_total": 0}], "empty_sections": ["api/empty"]})
+    assert text == "Статистика «bike_fit» / stage:\nПока нет данных — ни один раздел не прогонялся полностью."
+
+
+def test_format_stats_truncates_to_limit_and_shows_remaining_count():
+    many_sections = [
+        {"section": f"api/area{i}", "tests_total": 1, "passed_percent": 100.0, "avg_duration": 0.1,
+         "flaky_count": 0, "xfail_count": 0}
+        for i in range(17)
+    ]
+    text = format_stats("bike_fit", "stage", {"sections": many_sections, "empty_sections": []})
+    lines = text.splitlines()
+    assert len(lines) == 1 + 15 + 1  # заголовок + STATS_SECTIONS_LIMIT + "…и ещё N"
+    assert lines[-1] == "…и ещё 2"
+
+
+async def test_cmd_stats_sends_formatted_summary(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    client.get_stats.return_value = {**_STATS_DATA, "stand": "stage"}
+    dispatcher = _make_dispatcher(client)
+
+    message = _message(bot, text="/stats bike_fit stage")
+    await dispatcher.feed_update(bot, Update(update_id=1, message=message))
+
+    client.get_stats.assert_awaited_once_with("bike_fit", "stage")
+    assert session.calls[0].text == format_stats("bike_fit", "stage", {**_STATS_DATA, "stand": "stage"})
+
+
+async def test_cmd_stats_missing_project_shows_usage(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    dispatcher = _make_dispatcher(client)
+
+    message = _message(bot, text="/stats")
+    await dispatcher.feed_update(bot, Update(update_id=1, message=message))
+
+    client.get_stats.assert_not_called()
+    assert session.calls[0].text == STATS_USAGE
+
+
+async def test_cmd_stats_unknown_project_shows_not_found(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    request = httpx.Request("GET", "http://testserver/api/projects/nope/stats")
+    response = httpx.Response(404, request=request, json={"detail": "Not found"})
+    client.get_stats.side_effect = httpx.HTTPStatusError("404", request=request, response=response)
+    dispatcher = _make_dispatcher(client)
+
+    message = _message(bot, text="/stats nope")
+    await dispatcher.feed_update(bot, Update(update_id=1, message=message))
+
+    assert session.calls[0].text == "Проект «nope» не найден."
+
+
+async def test_access_middleware_denies_stats_command(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    dispatcher = _make_dispatcher(client)
+
+    message = _message(bot, user_id=999, text="/stats bike_fit")
+    await dispatcher.feed_update(bot, Update(update_id=1, message=message))
+
+    client.get_stats.assert_not_called()
+    assert session.calls[0].text == ACCESS_DENIED_MESSAGE
+
+
+# ------------------------------------------------------------------ /run <проект> <раздел>: подтверждение, запуск без стенда
+
+async def test_cmd_run_with_section_arg_shows_confirmation_and_does_not_submit(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    client.list_projects.return_value = [{"name": "bike_fit", "stands": [{"name": "stage"}]}]
+    dispatcher = _make_dispatcher(client)
+
+    message = _message(bot, text="/run bike_fit api/notifications")
+    await dispatcher.feed_update(bot, Update(update_id=1, message=message))
+
+    client.submit_run.assert_not_called()
+    sent = [c for c in session.calls if isinstance(c, SendMessage)]
+    assert sent[0].text == "Запустить тесты раздела «api/notifications» в проекте «bike_fit»?"
+    buttons = {btn.text: btn.callback_data for row in sent[0].reply_markup.inline_keyboard for btn in row}
+    assert buttons["Да, запустить"] == "run_section_confirm:bike_fit:api/notifications"
+
+
+async def test_cmd_run_with_e2e_section_arg_matches_pseudo_section(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    client.list_projects.return_value = [{"name": "bike_fit", "stands": [{"name": "stage"}]}]
+    dispatcher = _make_dispatcher(client)
+
+    message = _message(bot, text="/run bike_fit e2e")
+    await dispatcher.feed_update(bot, Update(update_id=1, message=message))
+
+    client.submit_run.assert_not_called()
+    sent = [c for c in session.calls if isinstance(c, SendMessage)]
+    assert "«e2e»" in sent[0].text
+
+
+async def test_cmd_run_section_arg_with_marker_is_rejected_as_unknown_stand(monkeypatch):
+    """Раздел уже сам сужает выборку — маркер вместе с ним не поддержан (см.
+    app/tg_bot.py::cmd_run), поэтому такой ввод не попадает в ветку подтверждения
+    по разделу, а трактуется как обычный (несуществующий) стенд."""
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    client.list_projects.return_value = [{"name": "bike_fit", "stands": [{"name": "stage"}]}]
+    dispatcher = _make_dispatcher(client)
+
+    message = _message(bot, text="/run bike_fit api/notifications smoke")
+    await dispatcher.feed_update(bot, Update(update_id=1, message=message))
+
+    client.submit_run.assert_not_called()
+    sent = [c for c in session.calls if isinstance(c, SendMessage)]
+    assert "не найден в проекте" in sent[0].text
+
+
+async def test_cmd_run_known_stand_named_stage_does_not_use_section_confirmation(monkeypatch):
+    """Реальный стенд с именем 'stage' идёт обычным путём submit_run(project, stand,
+    marker) — никогда через ветку раздела: только явная команда /stage запускает
+    прогон на stage (см. миссию manual_only и cmd_stage выше)."""
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    client.list_projects.return_value = [{"name": "bike_fit", "stands": [{"name": "stage"}]}]
+    client.submit_run.return_value = {"id": 7}
+    dispatcher = _make_dispatcher(client)
+
+    message = _message(bot, text="/run bike_fit stage")
+    await dispatcher.feed_update(bot, Update(update_id=1, message=message))
+
+    client.submit_run.assert_awaited_once_with("bike_fit", "stage", None)
+    sent = [c for c in session.calls if isinstance(c, SendMessage)]
+    assert sent[0].text == "Прогон #7 поставлен в очередь."
+
+
+async def test_cb_run_section_confirm_submits_without_stand_or_marker(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    monkeypatch.setattr(tg_bot, "_watch_run", AsyncMock())
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    client.submit_run.return_value = {"id": 99}
+    dispatcher = _make_dispatcher(client)
+
+    flow_message = _message(bot, text="Запустить тесты раздела «api/notifications» в проекте «bike_fit»?")
+    await dispatcher.feed_update(
+        bot,
+        Update(
+            update_id=1,
+            callback_query=_callback(bot, flow_message, "run_section_confirm:bike_fit:api/notifications", cb_id="c1"),
+        ),
+    )
+
+    client.submit_run.assert_awaited_once_with("bike_fit", None, None, target="tests/api/notifications")
+    edited = [c for c in session.calls if isinstance(c, EditMessageText)]
+    assert "Прогон #99 поставлен в очередь." in edited[0].text
+
+
+async def test_cb_run_section_confirm_http_error_shows_generic_message(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    client.submit_run.side_effect = httpx.ConnectError("boom")
+    dispatcher = _make_dispatcher(client)
+
+    flow_message = _message(bot, text="Запустить тесты раздела «e2e» в проекте «bike_fit»?")
+    await dispatcher.feed_update(
+        bot,
+        Update(update_id=1, callback_query=_callback(bot, flow_message, "run_section_confirm:bike_fit:e2e", cb_id="c1")),
+    )
+
+    edited = [c for c in session.calls if isinstance(c, EditMessageText)]
+    assert edited[0].text == "Не удалось поставить прогон."
+
+
+async def test_access_middleware_denies_run_section_confirm_callback(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    dispatcher = _make_dispatcher(client)
+
+    flow_message = _message(bot, user_id=999, text="Запустить тесты раздела «e2e» в проекте «bike_fit»?")
+    await dispatcher.feed_update(
+        bot,
+        Update(
+            update_id=1,
+            callback_query=_callback(bot, flow_message, "run_section_confirm:bike_fit:e2e", cb_id="c1", user_id=999),
+        ),
+    )
+
+    client.submit_run.assert_not_called()
