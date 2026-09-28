@@ -131,6 +131,107 @@ function renderColorPicker(container, { color, editable = false, onPick } = {}) 
   }
 }
 
+// ---------- Chart.js: общие хелперы для площадных/столбчатых графиков ----------
+// Используются project.js (дашборд проекта) и stats.js (динамика по разделам) —
+// единый внешний вид графиков без дублирования кода построения.
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+function hexWithAlpha(hex, alpha) {
+  const h = String(hex).replace("#", "").trim();
+  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+  const n = parseInt(full, 16);
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function tooltipStyle() {
+  return {
+    backgroundColor: cssVar("--surface"),
+    titleColor: cssVar("--text"),
+    bodyColor: cssVar("--text"),
+    borderColor: cssVar("--border"),
+    borderWidth: 1,
+    padding: 8,
+    cornerRadius: 6,
+    displayColors: false,
+  };
+}
+
+function chartScales() {
+  return {
+    x: { ticks: { color: cssVar("--text-muted"), font: { size: 11 } }, grid: { display: false } },
+    y: { ticks: { color: cssVar("--text-muted"), font: { size: 11 } }, grid: { color: cssVar("--border") }, beginAtZero: true },
+  };
+}
+
+// Подпись оси X по прогону: дата+время, если есть, иначе #id — единый формат
+// для столбчатой и площадной диаграммы везде, где ось X — это ряд прогонов.
+function runAxisLabel(m) {
+  if (!m.started) return `#${m.id ?? m.run_id}`;
+  const [datePart, timePart] = String(m.started).replace("T", " ").split(" ");
+  if (!datePart) return `#${m.id ?? m.run_id}`;
+  const [, mo, d] = datePart.split("-");
+  const hm = (timePart || "").slice(0, 5);
+  return `${d}.${mo}${hm ? " " + hm : ""}`;
+}
+
+// Столбчатая диаграмма (passed/failed по прогонам на дашборде проекта, длительность
+// по прогонам на странице статистики) — датасеты уже полностью собраны вызывающим кодом.
+function buildBarChart(canvas, { labels, datasets, legend = true }) {
+  if (!window.Chart) return null;
+  return new Chart(canvas, {
+    type: "bar",
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 600, easing: "easeOutQuart" },
+      plugins: {
+        legend: { display: legend, position: "bottom", labels: { color: cssVar("--text-muted"), boxWidth: 10, font: { size: 11 } } },
+        tooltip: tooltipStyle(),
+      },
+      scales: chartScales(),
+    },
+  });
+}
+
+// Площадной график с одной серией (длительность прогонов на дашборде проекта,
+// доля passed по прогонам на странице статистики) — заливка градиентом проекта.
+function buildAreaChart(canvas, { labels, values, label }) {
+  if (!window.Chart) return null;
+  const ctx = canvas.getContext("2d");
+  const gradient = ctx.createLinearGradient(0, 0, 0, canvas.clientHeight || 220);
+  gradient.addColorStop(0, hexWithAlpha(cssVar("--gradient-start"), 0.55));
+  gradient.addColorStop(0.5, hexWithAlpha(cssVar("--gradient-mid"), 0.35));
+  gradient.addColorStop(1, hexWithAlpha(cssVar("--gradient-end"), 0.05));
+  return new Chart(canvas, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [{
+        label,
+        data: values,
+        borderColor: cssVar("--gradient-mid"),
+        backgroundColor: gradient,
+        fill: true,
+        tension: 0.35,
+        pointRadius: 3,
+        pointBackgroundColor: cssVar("--gradient-end"),
+        spanGaps: true,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 600, easing: "easeOutQuart" },
+      plugins: { legend: { display: false }, tooltip: tooltipStyle() },
+      scales: chartScales(),
+    },
+  });
+}
+
 // ---------- тема: localStorage + prefers-color-scheme, дефолт — светлая ----------
 const THEME_STORAGE_KEY = "testhub-theme";
 
@@ -164,6 +265,7 @@ const APP_NAV_ITEMS = [
   { href: "projects.html", label: "Проекты" },
   { label: "Прогоны" },
   { href: "coverage.html", label: "Покрытие", needsProject: true },
+  { href: "stats.html", label: "Статистика", needsProject: true },
   { href: "xfail.html", label: "Xfail", needsProject: true },
   { href: "project.html", hash: "#schedules-card", label: "Расписания", needsProject: true },
   { label: "Настройки" },

@@ -817,48 +817,10 @@
   let barChart = null;
   let areaChart = null;
 
-  function cssVar(name) {
-    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-  }
-
-  function hexWithAlpha(hex, alpha) {
-    const h = String(hex).replace("#", "").trim();
-    const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
-    const n = parseInt(full, 16);
-    const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-  }
-
-  function tooltipStyle() {
-    return {
-      backgroundColor: cssVar("--surface"),
-      titleColor: cssVar("--text"),
-      bodyColor: cssVar("--text"),
-      borderColor: cssVar("--border"),
-      borderWidth: 1,
-      padding: 8,
-      cornerRadius: 6,
-      displayColors: false,
-    };
-  }
-
-  function chartScales() {
-    return {
-      x: { ticks: { color: cssVar("--text-muted"), font: { size: 11 } }, grid: { display: false } },
-      y: { ticks: { color: cssVar("--text-muted"), font: { size: 11 } }, grid: { color: cssVar("--border") }, beginAtZero: true },
-    };
-  }
-
-  // Подпись оси X по прогону: дата+время, если есть, иначе #id — единый формат
-  // для столбчатой и площадной диаграммы.
-  function shortRunLabel(m) {
-    if (!m.started) return `#${m.id}`;
-    const [datePart, timePart] = String(m.started).replace("T", " ").split(" ");
-    if (!datePart) return `#${m.id}`;
-    const [, mo, d] = datePart.split("-");
-    const hm = (timePart || "").slice(0, 5);
-    return `${d}.${mo}${hm ? " " + hm : ""}`;
-  }
+  // cssVar/hexWithAlpha/tooltipStyle/chartScales/buildBarChart/buildAreaChart —
+  // общие хелперы Chart.js в common.js (используются и на странице статистики,
+  // ui/stats.js); shortRunLabel — локальный алиас на общий runAxisLabel.
+  const shortRunLabel = runAxisLabel;
 
   // failed объединяет failed+broken (оба — «упало» на дашборде, badges на карточке
   // прогона ниже по-прежнему показывают их раздельно).
@@ -1032,61 +994,24 @@
   function renderBarChart(chronoMetrics) {
     const canvas = document.getElementById("passfail-bar-chart");
     if (barChart) { barChart.destroy(); barChart = null; }
-    if (!chronoMetrics.length || !window.Chart) return;
-    barChart = new Chart(canvas, {
-      type: "bar",
-      data: {
-        labels: chronoMetrics.map(shortRunLabel),
-        datasets: [
-          { label: "passed", data: chronoMetrics.map((m) => m.passed), backgroundColor: cssVar("--passed"), borderRadius: 4, maxBarThickness: 22 },
-          { label: "failed", data: chronoMetrics.map((m) => m.failed), backgroundColor: cssVar("--failed"), borderRadius: 4, maxBarThickness: 22 },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: { duration: 600, easing: "easeOutQuart" },
-        plugins: {
-          legend: { display: true, position: "bottom", labels: { color: cssVar("--text-muted"), boxWidth: 10, font: { size: 11 } } },
-          tooltip: tooltipStyle(),
-        },
-        scales: chartScales(),
-      },
+    if (!chronoMetrics.length) return;
+    barChart = buildBarChart(canvas, {
+      labels: chronoMetrics.map(shortRunLabel),
+      datasets: [
+        { label: "passed", data: chronoMetrics.map((m) => m.passed), backgroundColor: cssVar("--passed"), borderRadius: 4, maxBarThickness: 22 },
+        { label: "failed", data: chronoMetrics.map((m) => m.failed), backgroundColor: cssVar("--failed"), borderRadius: 4, maxBarThickness: 22 },
+      ],
     });
   }
 
   function renderAreaChart(chronoMetrics) {
     const canvas = document.getElementById("duration-area-chart");
     if (areaChart) { areaChart.destroy(); areaChart = null; }
-    if (!chronoMetrics.length || !window.Chart) return;
-    const ctx = canvas.getContext("2d");
-    const gradient = ctx.createLinearGradient(0, 0, 0, canvas.clientHeight || 220);
-    gradient.addColorStop(0, hexWithAlpha(cssVar("--gradient-start"), 0.55));
-    gradient.addColorStop(0.5, hexWithAlpha(cssVar("--gradient-mid"), 0.35));
-    gradient.addColorStop(1, hexWithAlpha(cssVar("--gradient-end"), 0.05));
-    areaChart = new Chart(canvas, {
-      type: "line",
-      data: {
-        labels: chronoMetrics.map(shortRunLabel),
-        datasets: [{
-          label: "длительность, с",
-          data: chronoMetrics.map((m) => m.duration ?? null),
-          borderColor: cssVar("--gradient-mid"),
-          backgroundColor: gradient,
-          fill: true,
-          tension: 0.35,
-          pointRadius: 3,
-          pointBackgroundColor: cssVar("--gradient-end"),
-          spanGaps: true,
-        }],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: { duration: 600, easing: "easeOutQuart" },
-        plugins: { legend: { display: false }, tooltip: tooltipStyle() },
-        scales: chartScales(),
-      },
+    if (!chronoMetrics.length) return;
+    areaChart = buildAreaChart(canvas, {
+      labels: chronoMetrics.map(shortRunLabel),
+      values: chronoMetrics.map((m) => m.duration ?? null),
+      label: "длительность, с",
     });
   }
 
