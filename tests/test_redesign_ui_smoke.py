@@ -59,7 +59,7 @@ async def test_project_html_has_kpi_row_and_dashboard_charts(client):
     assert 'id="area-rings-box"' in html
     assert 'id="passfail-bar-box"' in html
     assert 'id="duration-area-box"' in html
-    assert 'id="tests-tree"' in html
+    assert 'id="sections-tree"' in html
     assert 'id="run-buttons-row"' in html
 
 

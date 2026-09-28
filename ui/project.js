@@ -48,7 +48,10 @@
   const standSelect = document.getElementById("stand-select");
   const markerSelect = document.getElementById("marker-select");
   const testsError = document.getElementById("tests-error");
-  const treeBox = document.getElementById("tests-tree");
+  const sectionsTreeBox = document.getElementById("sections-tree");
+  const sectionsSearchInput = document.getElementById("sections-search-input");
+  const sectionsPresetsRow = document.getElementById("sections-presets-row");
+  const manualTargetInput = document.getElementById("manual-target-input");
   const runAllBtn = document.getElementById("run-all-btn");
   const runSelectedBtn = document.getElementById("run-selected-btn");
   const manualRunBlock = document.getElementById("manual-run-block");
@@ -104,6 +107,9 @@
   const schedStandSelect = document.getElementById("sched-stand-select");
   const schedMarkerSelect = document.getElementById("sched-marker-select");
   const schedTargetInput = document.getElementById("sched-target-input");
+  const schedSectionsTreeBox = document.getElementById("sched-sections-tree");
+  const schedSectionsSearchInput = document.getElementById("sched-sections-search-input");
+  const schedSectionsPresetsRow = document.getElementById("sched-sections-presets-row");
   const schedTimeInput = document.getElementById("sched-time-input");
   const schedChatsInput = document.getElementById("sched-chats-input");
   const schedCreateBtn = document.getElementById("sched-create-btn");
@@ -250,7 +256,7 @@
         json: {
           stand: schedStandSelect.value || null,
           marker: schedMarkerSelect.value || null,
-          target: schedTargetInput.value.trim() || "all",
+          target: schedTargetInput.value.trim() || schedSectionsPicker.targets().join("\n") || "all",
           cron,
           enabled: true,
           notify_chat_ids: notifyChatIds,
@@ -349,15 +355,15 @@
   });
 
   manualRunSelectedBtn.addEventListener("click", () => {
-    const ids = selectedNodeIds();
-    if (!ids.length) {
-      alert("Отметьте хотя бы один тест.");
+    const target = selectedTarget();
+    if (!target) {
+      alert("Отметьте хотя бы один раздел/файл или заполните ручное поле.");
       return;
     }
     openManualRunModal({
-      label: `выбранные тесты (${ids.length})`,
+      label: "выбранные тесты",
       stand: standSelect.value,
-      target: ids.join("\n"),
+      target,
       marker: markerSelect.value || null,
     });
   });
@@ -463,36 +469,41 @@
     }
   });
 
-  // ---------------- test tree ----------------
-  function nodeIdOf(file, cls, test) {
-    return cls ? `${file}::${cls}::${test}` : `${file}::${test}`;
+  // ---------------- дерево разделов (api/ui/e2e -> области -> файлы) ----------------
+  // Чистая логика (поиск/пресеты/сборка target) — в sections-tree-logic.js
+  // (window.SectionsTreeLogic), подключённом раньше этого файла; здесь только DOM.
+  const KIND_LABELS = { api: "tests/api", ui: "tests/ui", e2e: "tests/e2e" };
+
+  function sectionMetaText(area) {
+    const base = `${area.tests_count} тест.`;
+    if (!area.status) return base;
+    const pct = area.status.passed_percent;
+    return `${base} · последний прогон: ${pct === null || pct === undefined ? "—" : pct + "% passed"}`;
   }
 
-  function buildTreeHtml(tree) {
-    const files = Object.keys(tree).sort();
-    if (!files.length) return `<p class="muted">Тесты не найдены.</p>`;
-    return files.map((file) => {
-      const classes = tree[file];
-      const clsNames = Object.keys(classes).sort();
-      const classesHtml = clsNames.map((cls) => {
-        const tests = classes[cls];
-        const testsHtml = tests.map((test) => `
-          <label><input type="checkbox" class="tree-check tree-leaf" data-nodeid="${escapeHtml(nodeIdOf(file, cls, test))}"> ${escapeHtml(test)}</label>
+  function buildSectionsTreeHtml(filtered, checkedTargets) {
+    if (!filtered.kinds.length) return `<p class="muted">Разделы не найдены.</p>`;
+    return filtered.kinds.map((kindNode) => {
+      const areasHtml = kindNode.areas.map((area) => {
+        const filesHtml = area.files.map((file) => `
+          <label><input type="checkbox" class="tree-check tree-leaf" data-target="${escapeHtml(file.target)}" ${checkedTargets.has(file.target) ? "checked" : ""}> ${escapeHtml(file.name)}</label>
         `).join("");
-        if (!cls) {
-          return `<div class="tree-tests">${testsHtml}</div>`;
+        if (area.area == null) {
+          // e2e: один псевдо-раздел без промежуточного узла области, файлы сразу.
+          return `<div class="tree-tests">${filesHtml}</div>`;
         }
         return `
           <div class="tree-class">
-            <label><input type="checkbox" class="tree-check tree-parent"> ${escapeHtml(cls)}</label>
-            <div class="tree-tests">${testsHtml}</div>
+            <label><input type="checkbox" class="tree-check tree-parent"> ${escapeHtml(area.area)}</label>
+            <span class="tree-meta muted">${escapeHtml(sectionMetaText(area))}</span>
+            <div class="tree-tests">${filesHtml}</div>
           </div>
         `;
       }).join("");
       return `
         <details class="tree-file" open>
-          <summary><label><input type="checkbox" class="tree-check tree-parent"> ${escapeHtml(file)}</label></summary>
-          <div class="tree-classes">${classesHtml}</div>
+          <summary><label><input type="checkbox" class="tree-check tree-parent"> ${escapeHtml(KIND_LABELS[kindNode.kind] || kindNode.kind)}</label></summary>
+          <div class="tree-classes">${areasHtml}</div>
         </details>
       `;
     }).join("");
@@ -522,11 +533,32 @@
     }
   }
 
-  function setupTreeEvents() {
-    treeBox.addEventListener("click", (ev) => {
+  // После полной пересборки innerHTML (рендер дерева заново — поиск/пресет)
+  // родительские чекбоксы (область/раздел) рендерятся как ни на что не похожие
+  // на состояние листьев — buildSectionsTreeHtml знает только про checked-атрибут
+  // самих файлов. Эта функция досчитывает checked/indeterminate у всех
+  // .tree-class/.tree-file по уже отрисованным листьям, как updateAncestors
+  // делает для одного изменения.
+  function syncAllAncestors(box) {
+    box.querySelectorAll("div.tree-class").forEach((classScope) => {
+      setParentState(
+        classScope.querySelector(":scope > label > input.tree-check"),
+        classScope.querySelectorAll(".tree-tests input.tree-leaf")
+      );
+    });
+    box.querySelectorAll("details.tree-file").forEach((fileScope) => {
+      setParentState(
+        fileScope.querySelector(":scope > summary input.tree-check"),
+        fileScope.querySelectorAll(".tree-leaf")
+      );
+    });
+  }
+
+  function setupTreeEvents(box) {
+    box.addEventListener("click", (ev) => {
       if (ev.target.matches("input.tree-check")) ev.stopPropagation();
     });
-    treeBox.addEventListener("change", (ev) => {
+    box.addEventListener("change", (ev) => {
       const checkbox = ev.target;
       if (!checkbox.matches("input.tree-check")) return;
       if (checkbox.classList.contains("tree-parent")) {
@@ -539,23 +571,89 @@
     });
   }
 
-  async function loadTests() {
+  function checkedFileTargets(box) {
+    return Array.from(box.querySelectorAll(".tree-leaf:checked")).map((cb) => cb.dataset.target);
+  }
+
+  // Пикер дерева разделов используется дважды (форма запуска и форма расписания) —
+  // общий стейт (данные с бэкенда + текущий поиск + отмеченные файлы) и рендер под
+  // конкретную группу DOM-элементов.
+  function createSectionsPicker(box, searchInput, presetsRow, markerSelectEl) {
+    let data = { kinds: [] };
+    let query = "";
+    let checked = new Set();
+
+    // Перед любым пересбором innerHTML (поиск/пресет) сначала снимаем текущее
+    // состояние чекбоксов из DOM — иначе оно потеряется при замене разметки.
+    function snapshotChecked() {
+      checked = new Set(checkedFileTargets(box));
+    }
+
+    function render() {
+      const filtered = SectionsTreeLogic.filterSectionsTree(data, query);
+      box.innerHTML = buildSectionsTreeHtml(filtered, checked);
+      syncAllAncestors(box);
+    }
+
+    setupTreeEvents(box);
+    if (searchInput) {
+      searchInput.addEventListener("input", () => {
+        snapshotChecked();
+        query = searchInput.value;
+        render();
+      });
+    }
+    if (presetsRow) {
+      presetsRow.addEventListener("click", (ev) => {
+        const btn = ev.target.closest(".sections-preset-btn");
+        if (!btn) return;
+        const preset = btn.dataset.preset;
+        if (preset === "smoke") {
+          if (markerSelectEl) markerSelectEl.value = "smoke";
+          checked = new Set(SectionsTreeLogic.allLeafTargets(data));
+        } else {
+          checked = new Set(SectionsTreeLogic.presetLeafTargets(data, preset));
+        }
+        render();
+      });
+    }
+
+    return {
+      setData(newData) {
+        data = newData;
+        checked = new Set();
+        render();
+      },
+      targets() {
+        return SectionsTreeLogic.collectTargets(data, new Set(checkedFileTargets(box)));
+      },
+    };
+  }
+
+  const sectionsPicker = createSectionsPicker(sectionsTreeBox, sectionsSearchInput, sectionsPresetsRow, markerSelect);
+  const schedSectionsPicker = createSectionsPicker(
+    schedSectionsTreeBox, schedSectionsSearchInput, schedSectionsPresetsRow, schedMarkerSelect
+  );
+
+  async function loadSections() {
     try {
-      const data = await api(`/api/projects/${encodeURIComponent(projectName)}/tests`);
-      if (data.error) {
-        testsError.textContent = data.error;
-        testsError.hidden = false;
-      }
-      treeBox.innerHTML = buildTreeHtml(data.tree || {});
+      const data = await api(`/api/projects/${encodeURIComponent(projectName)}/sections`);
+      sectionsPicker.setData(data);
+      schedSectionsPicker.setData(data);
     } catch (err) {
-      treeBox.innerHTML = "";
-      testsError.textContent = `Не удалось загрузить дерево тестов: ${err.message}`;
+      sectionsTreeBox.innerHTML = "";
+      schedSectionsTreeBox.innerHTML = "";
+      testsError.textContent = `Не удалось загрузить дерево разделов: ${err.message}`;
       testsError.hidden = false;
     }
   }
 
-  function selectedNodeIds() {
-    return Array.from(treeBox.querySelectorAll(".tree-leaf:checked")).map((cb) => cb.dataset.nodeid);
+  // Ручное поле (под спойлером) заменяет собой выбор в дереве, когда заполнено —
+  // см. подсказку в разметке (ui/project.html).
+  function selectedTarget() {
+    const manual = manualTargetInput.value.trim();
+    if (manual) return manual;
+    return sectionsPicker.targets().join("\n");
   }
 
   // ---------------- run + live log ----------------
@@ -715,12 +813,12 @@
 
   runAllBtn.addEventListener("click", () => submitRun("all"));
   runSelectedBtn.addEventListener("click", () => {
-    const ids = selectedNodeIds();
-    if (!ids.length) {
-      alert("Отметьте хотя бы один тест.");
+    const target = selectedTarget();
+    if (!target) {
+      alert("Отметьте хотя бы один раздел/файл или заполните ручное поле.");
       return;
     }
-    submitRun(ids.join("\n"));
+    submitRun(target);
   });
 
   // ---------------- шаринг отчёта ----------------
@@ -1213,9 +1311,8 @@
 
   schedulesCard.hidden = !canManageSchedules;
 
-  setupTreeEvents();
   await loadStands();
-  await Promise.all([loadTests(), loadHistory(), loadFlaky(), loadSchedules()]);
+  await Promise.all([loadSections(), loadHistory(), loadFlaky(), loadSchedules()]);
 
   // Глубокая ссылка из суперадминки (admin_all.html): project.html?name=...&run=<id>
   // сразу открывает отчёт конкретного прогона.

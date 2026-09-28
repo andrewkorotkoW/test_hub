@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from .config import settings
 from .core import runner, schedule
 from .db import init_db
-from .routers import admin, auth, coverage, flaky, projects, runs, schedules, share, stats, users, xfail
+from .routers import admin, auth, coverage, flaky, projects, runs, schedules, sections, share, stats, users, xfail
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +64,7 @@ app.include_router(coverage.router)
 app.include_router(flaky.router)
 app.include_router(xfail.router)
 app.include_router(stats.router)
+app.include_router(sections.router)
 app.include_router(runs.router)
 app.include_router(runs.ws_router)
 app.include_router(users.router)

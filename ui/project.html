@@ -79,7 +79,22 @@
           </select>
         </div>
         <div id="tests-error" class="error-box" hidden></div>
-        <div id="tests-tree" class="test-tree"><p class="muted">Загрузка…</p></div>
+        <div class="field sections-search-field">
+          <label for="sections-search-input">Поиск по разделам</label>
+          <input type="search" id="sections-search-input" placeholder="например notifications">
+        </div>
+        <div class="run-buttons" id="sections-presets-row">
+          <button type="button" class="sections-preset-btn" data-preset="api">API</button>
+          <button type="button" class="sections-preset-btn" data-preset="ui">UI</button>
+          <button type="button" class="sections-preset-btn" data-preset="smoke">Smoke</button>
+          <button type="button" class="sections-preset-btn" data-preset="all">Всё</button>
+        </div>
+        <div id="sections-tree" class="test-tree"><p class="muted">Загрузка…</p></div>
+        <details class="manual-target-spoiler">
+          <summary>Ручной ввод (путь/nodeid, по одному на строке)</summary>
+          <textarea id="manual-target-input" rows="3" placeholder="например tests/api/notifications/test_x.py::test_y"></textarea>
+          <p class="muted">Если поле заполнено, запуск использует его вместо дерева разделов выше.</p>
+        </details>
         <div class="run-buttons" id="run-buttons-row">
           <button id="run-all-btn" class="primary">Запустить всё</button>
           <button id="run-selected-btn">Запустить выбранное</button>
@@ -144,6 +159,20 @@
       </div>
 
       <h3>Новое расписание</h3>
+      <div class="field sections-search-field">
+        <label for="sched-sections-search-input">Поиск по разделам</label>
+        <input type="search" id="sched-sections-search-input" placeholder="например notifications">
+      </div>
+      <div class="run-buttons" id="sched-sections-presets-row">
+        <button type="button" class="sections-preset-btn" data-preset="api">API</button>
+        <button type="button" class="sections-preset-btn" data-preset="ui">UI</button>
+        <button type="button" class="sections-preset-btn" data-preset="all">Всё</button>
+      </div>
+      <div id="sched-sections-tree" class="test-tree"><p class="muted">Загрузка…</p></div>
+      <details class="manual-target-spoiler">
+        <summary>Ручной ввод (путь/nodeid, по одному на строке; пусто — все тесты)</summary>
+        <textarea id="sched-target-input" rows="2" placeholder="пусто = все тесты"></textarea>
+      </details>
       <div class="schedule-form">
         <div class="field">
           <label for="sched-stand-select">Стенд</label>
@@ -157,10 +186,6 @@
             <option value="api">api</option>
             <option value="ui">ui</option>
           </select>
-        </div>
-        <div class="field">
-          <label for="sched-target-input">Тесты (nodeid по одному на строке; пусто — все тесты)</label>
-          <textarea id="sched-target-input" rows="2" placeholder="пусто = все тесты"></textarea>
         </div>
         <div class="field">
           <label for="sched-time-input">Время</label>
@@ -257,6 +282,7 @@
   <!-- Chart.js UMD, закреплённая версия с cdnjs (только столбцы/донат/площадь; спарклайны
        и кольца по областям — чистый inline SVG без библиотек, см. project.js). -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="sections-tree-logic.js"></script>
   <script src="project.js"></script>
 </body>
 </html>
