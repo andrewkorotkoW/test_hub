@@ -327,10 +327,15 @@ button.color-dot:hover { transform: scale(1.15); border-color: var(--text-muted)
 .color-dot-active { border-color: var(--text); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .15), 0 0 0 2px var(--surface); }
 .project-card .color-picker { justify-content: center; margin: 8px 0 0; gap: 5px; }
 .project-card .color-dot { width: 12px; height: 12px; }
+/* вариант A «Панель» (DESIGN.md Layout): 12 колонок, карточки одной высоты в ряду —
+   на проектах это 3 в ряд (см. docs/missions/redesign/v2/mockups.html #sec-projects-a) */
 .project-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+@media (max-width: 1024px) {
+  .project-grid { grid-template-columns: repeat(2, 1fr); }
 }
 .project-card {
   background: var(--surface);
@@ -442,8 +447,17 @@ table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .table-wrap { overflow-x: auto; }
 th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
 th { color: var(--text-muted); font-weight: 600; font-size: 12px; text-transform: uppercase; }
+/* DESIGN.md «Таблицы»: зебра чётных строк — везде, где есть tbody/tr (низкая
+   специфичность нарочно ниже статусных подсветок tbody tr.flaky-high/.xpass-row
+   ниже по файлу, чтобы те не терялись на чётных строках). */
+tbody tr:nth-child(even) { background: color-mix(in srgb, var(--text) 3%, transparent); }
 tbody tr.clickable { cursor: pointer; }
 tbody tr.clickable:hover { background: var(--surface-hover); }
+/* вариант A «Панель»: длинные таблицы (история, флаки, расписание, отчёт прогона,
+   области покрытия) получают фиксированную липкую шапку при прокрутке, см.
+   docs/missions/redesign/v2/mockups.html .table-scroll */
+.table-wrap.table-scroll { max-height: 420px; overflow-y: auto; border-radius: var(--radius); }
+.table-wrap.table-scroll thead th { position: sticky; top: 0; background: var(--surface); z-index: 1; }
 .status-text.passed { color: var(--passed); font-weight: 600; }
 .status-text.failed { color: var(--failed); font-weight: 600; }
 .status-text.broken { color: var(--broken); font-weight: 600; }
@@ -473,14 +487,16 @@ tbody tr.clickable:hover { background: var(--surface-hover); }
 .flaky-dot.broken { background: var(--broken); }
 .flaky-dot.skipped { background: var(--skipped); }
 .flaky-dot.unknown { background: var(--text-muted); }
-tr.flaky-high { background: rgba(220, 38, 38, 0.08); }
+/* tbody-префикс поднимает специфичность до уровня зебры tbody tr:nth-child(even)
+   выше — иначе чётная строка флаки-теста теряла бы подсветку падений */
+tbody tr.flaky-high { background: rgba(220, 38, 38, 0.08); }
 
 /* ---------- реестр xfail ---------- */
 .badge.xfail-state { background: var(--xfail); }
 .badge.xpass-state { background: var(--passed); }
 .xfail-hint { font-size: 11px; color: var(--text-muted); display: block; margin-top: 2px; }
 .xfail-issue-input { width: 100%; min-width: 160px; }
-tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
+tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 
 /* ---------- superadmin tabs / inline confirm / json cell ---------- */
 .tabs { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -725,7 +741,8 @@ tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
    каждой пары своя узкая/широкая колонка, поэтому .charts-grid здесь стек
    строк .chart-row, а не общая 2-колоночная сетка (как в coverage.html). */
 #dashboard-charts-card .charts-grid { grid-template-columns: 1fr; }
-.chart-row { display: grid; grid-template-columns: minmax(260px, 320px) minmax(0, 1fr); gap: 16px; }
+/* вариант A «Панель» (DESIGN.md Layout: «кольцо + столбцы» — 300px + остаток) */
+.chart-row { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; }
 @media (max-width: 900px) {
   .chart-row { grid-template-columns: 1fr; }
 }
@@ -909,7 +926,16 @@ tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 /* ---------------- дашборд проекта: KPI/графики/лента прогонов ---------------- */
 @keyframes dash-fade-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 
-.kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+/* вариант A «Панель» (DESIGN.md Layout: «KPI — 6 колонок») */
+.kpi-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 16px; }
+@media (max-width: 1024px) {
+  .kpi-row { grid-template-columns: repeat(3, 1fr); }
+}
+/* сводка покрытия (coverage.html) — 4 общепроектных величины, не 6 прогонных KPI */
+.kpi-row.kpi-row-4 { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 900px) {
+  .kpi-row.kpi-row-4 { grid-template-columns: repeat(2, 1fr); }
+}
 .kpi-tile {
   background: var(--surface);
   border: 1px solid var(--border);

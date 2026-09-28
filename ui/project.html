@@ -118,7 +118,7 @@
             </select>
             <input id="report-name-filter" placeholder="Фильтр по имени теста">
           </div>
-          <div class="table-wrap">
+          <div class="table-wrap table-scroll">
             <table>
               <thead><tr><th>Тест</th><th>Статус</th><th>Длительность</th></tr></thead>
               <tbody id="report-rows"></tbody>
@@ -131,7 +131,7 @@
     <div class="card" id="schedules-card" hidden>
       <h2>Расписание</h2>
       <div id="schedules-error" class="error-box" hidden></div>
-      <div class="table-wrap">
+      <div class="table-wrap table-scroll">
         <table>
           <thead>
             <tr>
@@ -188,7 +188,7 @@
 
     <div class="card">
       <h2>История прогонов</h2>
-      <div class="table-wrap">
+      <div class="table-wrap table-scroll">
         <table>
           <thead>
             <tr><th>ID</th><th>Статус</th><th>Стенд</th><th>Цель</th><th>Начат</th><th>Длительность</th><th>Кем запущен</th></tr>
@@ -205,7 +205,7 @@
         <select id="flaky-stand-select"><option value="">— все стенды —</option></select>
       </div>
       <div id="flaky-error" class="error-box" hidden></div>
-      <div class="table-wrap">
+      <div class="table-wrap table-scroll">
         <table>
           <thead>
             <tr>

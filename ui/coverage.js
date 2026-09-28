@@ -12,6 +12,7 @@
   document.getElementById("project-link").href = `project.html?name=${encodeURIComponent(projectName)}`;
 
   const pageError = document.getElementById("page-error");
+  const summaryKpiRow = document.getElementById("summary-kpi-row");
   const summaryStands = document.getElementById("summary-stands");
   const summaryPages = document.getElementById("summary-pages");
   const summaryZero = document.getElementById("summary-zero");
@@ -116,7 +117,43 @@
   }
 
   // ---------------- summary ----------------
+  // вариант A «Панель» (DESIGN.md: KPI-карточка) — общие по проекту величины из
+  // CoverageSummary (routes_total/covered, pages_total/covered, zero_coverage_areas,
+  // generated_at), не зависящие от стенда — переиспользует .kpi-tile из project.js/
+  // style.css, только без спарклайна (нет истории пересчётов).
+  function kpiTile(label, valueText, footText, valueFontSize) {
+    const style = valueFontSize ? ` style="font-size: ${valueFontSize}"` : "";
+    return `
+      <div class="kpi-tile">
+        <div class="kpi-tile-label">${escapeHtml(label)}</div>
+        <div class="kpi-tile-value"${style}>${valueText}</div>
+        ${footText ? `<div class="kpi-tile-foot"><span class="muted">${escapeHtml(footText)}</span></div>` : ""}
+      </div>
+    `;
+  }
+
+  function renderSummaryKpiRow() {
+    const routesPercent = summary.routes_total ? Math.round((summary.routes_covered / summary.routes_total) * 1000) / 10 : 0;
+    const pagesPercent = summary.pages_total ? Math.round((summary.pages_covered / summary.pages_total) * 1000) / 10 : 0;
+    const tiles = [
+      kpiTile("Покрыто маршрутов", `${routesPercent}%`, `${summary.routes_covered} из ${summary.routes_total}`),
+      kpiTile("Покрыто страниц", summary.pages_total ? `${pagesPercent}%` : "—", summary.pages_total ? `${summary.pages_covered} из ${summary.pages_total}` : "страниц нет в инвентаре"),
+      // цвет var(--xfail) недостаточно контрастен как цвет текста на светлой теме
+      // (см. ui/style.css — тот же токен уже используется только для пилюль/точек с
+      // белым текстом поверх, не как цвет текста на var(--surface)) — значение KPI
+      // остаётся обычным text, статус виден по самому числу и подписи.
+      kpiTile(
+        "Областей без тестов",
+        String(summary.zero_coverage_areas.length),
+        summary.zero_coverage_areas.length ? summary.zero_coverage_areas.join(" · ") : "все области покрыты",
+      ),
+      kpiTile("Пересчитано", fmtDate(summary.generated_at), "по данным проекта", "18px"),
+    ];
+    summaryKpiRow.innerHTML = tiles.join("");
+  }
+
   function renderSummary() {
+    renderSummaryKpiRow();
     summaryStands.innerHTML = summary.stands.map((s) => `
       <span class="badge stand-summary">${escapeHtml(s.stand)}: ${s.routes_covered}/${s.routes_total} (${s.percent}%)</span>
     `).join("") || `<span class="muted">Стенды не настроены.</span>`;
