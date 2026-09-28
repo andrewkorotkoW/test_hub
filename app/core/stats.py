@@ -64,7 +64,7 @@ def discover_section_dirs(project_path: str) -> list[str]:
         if not kind_dir.is_dir():
             continue
         for sub in sorted(kind_dir.iterdir()):
-            if sub.is_dir() and not sub.name.startswith("__"):
+            if sub.is_dir() and not sub.name.startswith(("__", ".")) and sub.name != "allure-results":
                 sections.append(f"{kind}/{sub.name}")
     if (root / "e2e").is_dir():
         sections.append("e2e")
