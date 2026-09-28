@@ -22,6 +22,15 @@
     <div id="page-error" class="error-box" hidden></div>
     <div id="dashboard-error" class="error-box" hidden></div>
 
+    <nav class="project-tabs" id="project-tabs">
+      <a href="#dashboard" data-tab="dashboard">Дашборд</a>
+      <a href="#run" data-tab="run">Запуск</a>
+      <a href="#schedules" data-tab="schedules">Расписания</a>
+      <a href="#history" data-tab="history">История</a>
+      <a href="#flaky" data-tab="flaky">Флаки</a>
+    </nav>
+
+    <div class="tab-panel" data-tab-panel="dashboard">
     <div class="kpi-row" id="kpi-row"><p class="muted">Загрузка панели…</p></div>
 
     <div class="card" id="dashboard-charts-card">
@@ -30,10 +39,11 @@
         <div class="chart-row">
           <div class="chart-box" id="status-donut-box">
             <h3>Статусы последнего прогона</h3>
-            <div class="chart-donut-wrap">
+            <div class="chart-donut-wrap chart-donut-wrap-lg">
               <canvas id="status-donut-chart"></canvas>
               <div class="chart-donut-center" id="status-donut-center"></div>
             </div>
+            <div class="chart-legend" id="status-donut-legend"></div>
           </div>
           <div class="chart-box" id="passfail-bar-box">
             <h3>Passed / failed по прогонам</h3>
@@ -53,17 +63,24 @@
       </div>
     </div>
 
-    <div class="dashboard-lists-grid">
-      <div class="card" id="longest-tests-card">
-        <h2>Самые долгие тесты</h2>
-        <ol id="longest-tests-list" class="detail-list"><li class="muted">Загрузка…</li></ol>
-      </div>
+    <div class="dashboard-feed-grid">
       <div class="card" id="runs-feed-card">
         <h2>Лента прогонов</h2>
         <div id="runs-feed" class="runs-feed"><p class="muted">Загрузка…</p></div>
       </div>
+      <div class="card" id="xfail-card">
+        <h2>Известные дефекты (xfail) <span id="xfail-card-count" class="muted"></span></h2>
+        <div id="xfail-pills" class="xfail-pills"><p class="muted">Загрузка…</p></div>
+      </div>
     </div>
 
+    <details class="card longest-tests-spoiler" id="longest-tests-card">
+      <summary><h2>Самые долгие тесты</h2></summary>
+      <ol id="longest-tests-list" class="detail-list"><li class="muted">Загрузка…</li></ol>
+    </details>
+    </div>
+
+    <div class="tab-panel" data-tab-panel="run" hidden>
     <div class="project-layout">
       <div class="card" id="tests-card">
         <h2>Тесты</h2>
@@ -142,7 +159,9 @@
         </div>
       </div>
     </div>
+    </div>
 
+    <div class="tab-panel" data-tab-panel="schedules" hidden>
     <div class="card" id="schedules-card" hidden>
       <h2>Расписание</h2>
       <div id="schedules-error" class="error-box" hidden></div>
@@ -210,7 +229,9 @@
         <button id="sched-create-btn" class="primary">Создать расписание</button>
       </div>
     </div>
+    </div>
 
+    <div class="tab-panel" data-tab-panel="history" hidden>
     <div class="card">
       <h2>История прогонов</h2>
       <div class="table-wrap table-scroll">
@@ -222,7 +243,9 @@
         </table>
       </div>
     </div>
+    </div>
 
+    <div class="tab-panel" data-tab-panel="flaky" hidden>
     <div class="card">
       <h2>Нестабильные тесты</h2>
       <div class="stand-row">
@@ -241,6 +264,7 @@
           <tbody id="flaky-rows"></tbody>
         </table>
       </div>
+    </div>
     </div>
   </main>
     </div>
