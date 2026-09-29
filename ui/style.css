@@ -40,6 +40,8 @@
   --gradient-mid: #ec4899;
   --gradient-end: #38bdf8;
   --gradient-neon: linear-gradient(135deg, var(--gradient-start), var(--gradient-mid), var(--gradient-end));
+  /* elevation.glow из DESIGN.md — свечение состояний «требует внимания» (тур по разделам) */
+  --glow-shadow: 0 0 0 1px var(--accent), 0 0 16px var(--accent);
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
@@ -553,7 +555,7 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 .inline-actions { display: flex; gap: 6px; }
 .inline-actions button { padding: 4px 10px; font-size: 12px; }
 
-/* ---------- onboarding modal ---------- */
+/* ---------- модальные окна (шаринг отчёта, добавление проекта, ручной прогон) ---------- */
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -576,12 +578,48 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 .modal-box h2 { margin-bottom: 4px; }
 .modal-box .field { margin-bottom: 12px; }
 .modal-box .field:first-of-type { margin-top: 14px; }
-.modal-step { display: none; }
-.modal-step.active { display: block; }
-.modal-dots { display: flex; gap: 6px; margin: 14px 0; }
-.modal-dots span { width: 8px; height: 8px; border-radius: 50%; background: var(--border); }
-.modal-dots span.active { background: var(--accent); }
 .modal-actions { display: flex; justify-content: space-between; margin-top: 18px; gap: 10px; }
+
+/* ---------- тур по разделам (ui/tour.js) ---------- */
+/* подсветка целевого элемента — рамка + свечение elevation.glow, без затемнения
+   остальной страницы (тур — не модалка, страницей можно пользоваться) */
+.tour-highlight {
+  position: fixed;
+  z-index: 200;
+  border-radius: var(--radius);
+  box-shadow: var(--glow-shadow);
+  pointer-events: none;
+  animation: tour-pulse 2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tour-highlight { animation: none; }
+}
+@keyframes tour-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .65; }
+}
+.tour-tooltip {
+  position: fixed;
+  z-index: 201;
+  width: 100%;
+  max-width: 300px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--shadow-card);
+  padding: 16px 18px;
+}
+.tour-tooltip-progress {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.tour-tooltip-title { margin: 0 0 6px; font-size: 16px; color: var(--text); }
+.tour-tooltip-text { margin: 0 0 14px; font-size: 13px; line-height: 1.45; color: var(--text); }
+.tour-tooltip-actions { display: flex; justify-content: space-between; gap: 10px; }
 
 /* ---------- шаринг отчёта ---------- */
 .share-links-list { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; }
