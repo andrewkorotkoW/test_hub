@@ -92,6 +92,16 @@
   const shareBtn = document.getElementById("share-run-btn");
   const cancelBtn = document.getElementById("cancel-run-btn");
   const logBox = document.getElementById("run-log");
+  const runViewToggle = document.getElementById("run-view-toggle");
+  const runSplit = document.getElementById("run-split");
+  const runTestsRail = document.getElementById("run-tests-rail");
+  const runTestsCount = document.getElementById("run-tests-count");
+  const runWindowPlaceholder = document.getElementById("run-window-placeholder");
+  const runWindowContent = document.getElementById("run-window-content");
+  const runWindowTitle = document.getElementById("run-window-title");
+  const runWindowPill = document.getElementById("run-window-pill");
+  const runWindowTabsBox = document.getElementById("run-window-tabs");
+  const runWindowBody = document.getElementById("run-window-body");
   const reportChart = document.getElementById("report-chart");
   const reportSection = document.getElementById("report-section");
   const badgesBox = document.getElementById("summary-badges");
@@ -299,6 +309,19 @@
   let currentTests = [];
   let currentWs = null;
   let sawLine = false;
+
+  // ---------------- карточка прогона · вариант «Сплит» (docs/missions/redesign/run_window) ----------------
+  // Слева список тестов прогона (GET/WS test_start/test_end), справа окно выбранного теста
+  // с вкладками Кадры/Консоль/Запросы; старые прогоны без разметки по nodeid показывают
+  // только «Весь лог» — см. applyViewMode().
+  let splitTests = [];
+  let splitTestsByNodeid = {};
+  let selectedNodeid = null;
+  let selectedTestLog = [];
+  let selectedTestFrames = [];
+  let activeWindowTab = "console";
+  let hasMarkup = false;
+  let viewMode = "split";
 
   function showPageError(message) {
     pageError.textContent = message;
@@ -691,6 +714,268 @@
     logBox.scrollTop = logBox.scrollHeight;
   }
 
+  // ---------------- карточка прогона · сплит (тесты слева, окно теста справа) ----------------
+  const TEST_STATUS_CLASSES = ["passed", "failed", "broken", "skipped", "xfail", "flaky", "running", "queued", "cancelled"];
+  function normalizeTestStatus(status) {
+    const s = String(status || "unknown").toLowerCase().replace(/^xfailed$/, "xfail");
+    return TEST_STATUS_CLASSES.includes(s) ? s : "unknown";
+  }
+
+  // HTTP-строка консоли — как предложено в задаче: метод, путь, код ответа.
+  const HTTP_LINE_RE = /\b(GET|POST|PUT|PATCH|DELETE)\s+\S+\s+(\d{3})\b/;
+
+  function filterRequestLines(lines) {
+    return lines.filter((line) => HTTP_LINE_RE.test(line));
+  }
+
+  function highlightConsoleLine(line) {
+    let html = escapeHtml(line);
+    const m = line.match(HTTP_LINE_RE);
+    if (m) {
+      const method = m[1];
+      const code = m[2];
+      html = html.replace(method, `<span class="method-${method.toLowerCase()}">${method}</span>`);
+      html = html.replace(new RegExp(`\\b${code}\\b`), `<span class="http-code-${code[0]}">${code}</span>`);
+    }
+    let cls = "";
+    if (/^E\s|AssertionError|Traceback|^FAILED\b/.test(line)) cls = "err";
+    else if (/\bPASSED\b/.test(line)) cls = "ok";
+    else if (/^_{3,}|^={3,}|^-{3,}/.test(line)) cls = "dim";
+    return `<span class="console-line ${cls}">${html || "&nbsp;"}</span>`;
+  }
+
+  function renderConsoleBox(lines) {
+    if (!lines || !lines.length) {
+      return `<div class="console-box"><span class="console-line dim">нет вывода для этого теста</span></div>`;
+    }
+    return `<div class="console-box">${lines.map(highlightConsoleLine).join("")}</div>`;
+  }
+
+  function testRowHtml(t) {
+    const status = normalizeTestStatus(t.status);
+    const shortName = t.nodeid.includes("::") ? t.nodeid.split("::").slice(1).join("::") : t.nodeid;
+    return `
+      <div class="test-row${t.nodeid === selectedNodeid ? " active" : ""}" data-nodeid="${encodeURIComponent(t.nodeid)}">
+        <span class="dot-status ${status}" title="${escapeHtml(status)}"></span>
+        <span class="nm" title="${escapeHtml(t.nodeid)}">${escapeHtml(shortName)}</span>
+      </div>`;
+  }
+
+  function renderTestsRail() {
+    runTestsCount.textContent = splitTests.length ? String(splitTests.length) : "";
+    runTestsRail.innerHTML = splitTests.length
+      ? splitTests.map(testRowHtml).join("")
+      : `<p class="muted" style="padding:10px">Тестов пока нет.</p>`;
+  }
+
+  function updateWindowPill() {
+    const t = selectedNodeid ? splitTestsByNodeid[selectedNodeid] : null;
+    if (!t) { runWindowPill.hidden = true; return; }
+    const status = normalizeTestStatus(t.status);
+    runWindowPill.hidden = false;
+    runWindowPill.textContent = status;
+    runWindowPill.className = `status-pill ${status}`;
+  }
+
+  function renderFramesTab() {
+    if (!selectedTestFrames.length) {
+      return `<div class="frame-shot"><b>Кадров нет</b><span>У этого теста нет кадров — либо это API-тест, либо плагин ещё не прислал ни одного.</span></div>`;
+    }
+    const activeIdx = selectedTestFrames.length - 1;
+    const cur = selectedTestFrames[activeIdx];
+    return `
+      <div class="frame-shot"><img src="${escapeHtml(cur.url)}" alt="Кадр шага ${cur.step}"></div>
+      <div class="filmstrip">${selectedTestFrames.map((f, i) => `
+        <button type="button" class="film-thumb${i === activeIdx ? " active" : ""}" data-idx="${i}" title="Шаг ${f.step}">
+          <img src="${escapeHtml(f.url)}" alt="">
+        </button>`).join("")}</div>`;
+  }
+
+  function attachFrameThumbHandlers() {
+    const big = runWindowBody.querySelector(".frame-shot img");
+    runWindowBody.querySelectorAll(".film-thumb").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const f = selectedTestFrames[Number(btn.dataset.idx)];
+        if (big && f) big.src = f.url;
+        runWindowBody.querySelectorAll(".film-thumb").forEach((x) => x.classList.remove("active"));
+        btn.classList.add("active");
+      });
+    });
+  }
+
+  function renderWindowBody() {
+    if (activeWindowTab === "frame") {
+      runWindowBody.innerHTML = renderFramesTab();
+      attachFrameThumbHandlers();
+    } else if (activeWindowTab === "console") {
+      runWindowBody.innerHTML = renderConsoleBox(selectedTestLog);
+    } else {
+      const reqLines = filterRequestLines(selectedTestLog);
+      runWindowBody.innerHTML = reqLines.length
+        ? renderConsoleBox(reqLines)
+        : `<p class="muted">HTTP-строк в выводе этого теста нет.</p>`;
+    }
+  }
+
+  function renderWindowTabs() {
+    const reqCount = filterRequestLines(selectedTestLog).length;
+    runWindowTabsBox.innerHTML = `
+      <button type="button" data-tab="frame" aria-current="${activeWindowTab === "frame"}">Кадры${selectedTestFrames.length ? ` (${selectedTestFrames.length})` : ""}</button>
+      <button type="button" data-tab="console" aria-current="${activeWindowTab === "console"}">Консоль</button>
+      <button type="button" data-tab="req" aria-current="${activeWindowTab === "req"}">Запросы${reqCount ? ` (${reqCount})` : ""}</button>
+    `;
+  }
+
+  runWindowTabsBox.addEventListener("click", (ev) => {
+    const btn = ev.target.closest("button[data-tab]");
+    if (!btn) return;
+    activeWindowTab = btn.dataset.tab;
+    renderWindowTabs();
+    renderWindowBody();
+  });
+
+  async function selectTest(nodeid) {
+    selectedNodeid = nodeid;
+    runTestsRail.querySelectorAll(".test-row").forEach((row) => {
+      row.classList.toggle("active", decodeURIComponent(row.dataset.nodeid) === nodeid);
+    });
+    runWindowPlaceholder.hidden = true;
+    runWindowContent.hidden = false;
+    runWindowTitle.textContent = nodeid;
+    updateWindowPill();
+    selectedTestLog = [];
+    selectedTestFrames = [];
+    const runId = runIdLabel.textContent;
+    try {
+      const [log, frames] = await Promise.all([
+        api(`/api/runs/${runId}/tests/${encodeURIComponent(nodeid)}/log`),
+        api(`/api/runs/${runId}/tests/${encodeURIComponent(nodeid)}/frames`),
+      ]);
+      if (selectedNodeid !== nodeid) return; // выбор сменился, пока грузили
+      selectedTestLog = log;
+      selectedTestFrames = frames;
+    } catch { /* оставляем пустыми — покажем «нет вывода»/«кадров нет» */ }
+    activeWindowTab = selectedTestFrames.length ? "frame" : "console";
+    renderWindowTabs();
+    renderWindowBody();
+  }
+
+  runTestsRail.addEventListener("click", (ev) => {
+    const row = ev.target.closest(".test-row[data-nodeid]");
+    if (!row) return;
+    selectTest(decodeURIComponent(row.dataset.nodeid));
+  });
+
+  // showSplit — вычисляется каждый раз заново, а не хранится отдельным флагом:
+  // hasMarkup остаётся ложным для старых прогонов без разметки по nodeid, тогда
+  // «Весь лог» — единственный вид, переключатель и список тестов скрыты.
+  function applyViewMode() {
+    const showSplit = hasMarkup && viewMode === "split";
+    runSplit.hidden = !showSplit;
+    logBox.hidden = showSplit;
+    runViewToggle.hidden = !hasMarkup;
+    runViewToggle.querySelectorAll("button[data-view]").forEach((b) => {
+      b.setAttribute("aria-current", String(b.dataset.view === viewMode));
+    });
+  }
+
+  runViewToggle.addEventListener("click", (ev) => {
+    const btn = ev.target.closest("button[data-view]");
+    if (!btn) return;
+    viewMode = btn.dataset.view;
+    applyViewMode();
+  });
+
+  async function detectMarkup(runId) {
+    if (!splitTests.length) return false;
+    if (splitTests.some((t) => t.has_frames)) return true;
+    try {
+      const log = await api(`/api/runs/${runId}/tests/${encodeURIComponent(splitTests[0].nodeid)}/log`);
+      return log.length > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  async function refreshSplitTests(runId) {
+    try {
+      const tests = await api(`/api/runs/${runId}/tests`);
+      splitTests = tests;
+      splitTestsByNodeid = Object.fromEntries(tests.map((t) => [t.nodeid, t]));
+      renderTestsRail();
+      if (selectedNodeid) updateWindowPill();
+      if (!hasMarkup) hasMarkup = await detectMarkup(runId);
+      applyViewMode();
+    } catch { /* тесты по разметке недоступны — остаётся только «Весь лог» */ }
+  }
+
+  const END_STATUS_RE = /\[TH\] end .+ (\S+)$/;
+
+  function upsertSplitTest(nodeid, patch) {
+    const existing = splitTestsByNodeid[nodeid];
+    if (existing) {
+      Object.assign(existing, patch);
+    } else {
+      const t = { nodeid, status: "running", has_frames: false, ...patch };
+      splitTestsByNodeid[nodeid] = t;
+      splitTests = [...splitTests, t];
+    }
+  }
+
+  function handleTestStart(msg) {
+    if (!msg.nodeid) return;
+    hasMarkup = true;
+    upsertSplitTest(msg.nodeid, { status: "running" });
+    renderTestsRail();
+    applyViewMode();
+    if (selectedNodeid === msg.nodeid) updateWindowPill();
+  }
+
+  function handleTestEnd(msg) {
+    if (!msg.nodeid) return;
+    hasMarkup = true;
+    const m = String(msg.line || "").match(END_STATUS_RE);
+    upsertSplitTest(msg.nodeid, { status: m ? m[1] : "unknown" });
+    renderTestsRail();
+    applyViewMode();
+    if (selectedNodeid === msg.nodeid) updateWindowPill();
+  }
+
+  function handleSplitLineEvent(msg) {
+    if (!msg.nodeid) return;
+    if (msg.type === "step") hasMarkup = true;
+    if (selectedNodeid !== msg.nodeid) return;
+    selectedTestLog = [...selectedTestLog, msg.line];
+    renderWindowTabs();
+    if (activeWindowTab === "console" || activeWindowTab === "req") renderWindowBody();
+  }
+
+  function handleFrameEvent(msg) {
+    if (!msg.nodeid) return;
+    hasMarkup = true;
+    upsertSplitTest(msg.nodeid, { has_frames: true });
+    applyViewMode();
+    if (selectedNodeid !== msg.nodeid) return;
+    selectedTestFrames = [...selectedTestFrames, { step: msg.step, url: msg.url }];
+    renderWindowTabs();
+    if (activeWindowTab === "frame") renderWindowBody();
+  }
+
+  function resetSplitState() {
+    splitTests = [];
+    splitTestsByNodeid = {};
+    selectedNodeid = null;
+    selectedTestLog = [];
+    selectedTestFrames = [];
+    hasMarkup = false;
+    viewMode = "split";
+    runTestsRail.innerHTML = "";
+    runTestsCount.textContent = "";
+    runWindowPlaceholder.hidden = false;
+    runWindowContent.hidden = true;
+    applyViewMode();
+  }
+
   function closeWs() {
     if (currentWs) {
       try { currentWs.close(); } catch { /* ignore */ }
@@ -788,8 +1073,10 @@
     reportChart.hidden = true;
     reportChart.removeAttribute("src");
     setPill("queued");
+    resetSplitState();
 
     await refreshReport(runId);
+    await refreshSplitTests(runId);
 
     const ws = new WebSocket(wsUrl(runId));
     currentWs = ws;
@@ -802,8 +1089,18 @@
           sawLine = true;
           if (pill.dataset.status === "queued") setPill("running");
         }
+        handleSplitLineEvent(msg);
+      } else if (msg.type === "step") {
+        handleSplitLineEvent(msg);
+      } else if (msg.type === "test_start") {
+        handleTestStart(msg);
+      } else if (msg.type === "test_end") {
+        handleTestEnd(msg);
+      } else if (msg.type === "frame") {
+        handleFrameEvent(msg);
       } else if (msg.type === "status") {
         refreshReport(runId);
+        refreshSplitTests(runId);
       }
     });
   }
