@@ -131,9 +131,32 @@
         <h2>Прогон #<span id="run-id-label"></span></h2>
         <div class="run-status-bar">
           <span id="run-status-pill" class="status-pill queued" data-status="queued">queued</span>
+          <div class="run-view-toggle" id="run-view-toggle" hidden>
+            <button type="button" data-view="split" aria-current="true">Сплит</button>
+            <button type="button" data-view="log" aria-current="false">Весь лог</button>
+          </div>
           <button id="share-run-btn" hidden>Поделиться</button>
           <button id="cancel-run-btn" class="danger" hidden>Отменить</button>
         </div>
+
+        <div id="run-split" class="run-split" hidden>
+          <div class="run-split-rail">
+            <h3>Тесты <span id="run-tests-count" class="muted"></span></h3>
+            <div id="run-tests-rail" class="test-rail"></div>
+          </div>
+          <div class="run-split-window">
+            <p id="run-window-placeholder" class="muted">Выберите тест слева.</p>
+            <div id="run-window-content" hidden>
+              <div class="run-window-head">
+                <b id="run-window-title"></b>
+                <span id="run-window-pill" class="status-pill" hidden></span>
+              </div>
+              <div class="run-window-tabs" id="run-window-tabs"></div>
+              <div id="run-window-body"></div>
+            </div>
+          </div>
+        </div>
+
         <div id="run-log" class="run-log"></div>
 
         <img id="report-chart" class="report-chart" alt="График отчёта прогона" hidden>
