@@ -75,8 +75,9 @@ def test_seed_is_idempotent(db_path):
 
     # qa, manager, customer, admin (SUPERADMIN) + tg_bot (Telegram-бот, app/tg_bot.py)
     assert after_users == before_users == 5
-    # bike_fit, Velo_bot (SEED_PROJECTS) + VSHGU (всегда обеспечиваемый init_db)
-    assert after_projects == before_projects == 3
+    # bike_fit, Velo_bot (SEED_PROJECTS) + VSHGU (всегда обеспечиваемый init_db) + Demo
+    # (app.db._seed_demo_project, сидируется на пустой БД независимо от путей владельца)
+    assert after_projects == before_projects == 4
 
 
 async def test_seed_projects_visible_via_api(qa_client):
