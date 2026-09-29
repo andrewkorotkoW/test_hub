@@ -129,6 +129,16 @@
   const flakyError = document.getElementById("flaky-error");
   const FLAKY_THRESHOLD = 0.3;
 
+  // ---------------- ошибки продукта (Sentry) ----------------
+  // Роутер app/routers/sentry.py требует роль qa на все методы (см. миссию
+  // 2026-09-29_sentry.md), поэтому карточка на дашборде и вкладка в окне прогона
+  // не рендерятся остальным ролям — как schedulesCard/canManageTestcases ниже.
+  const canSeeSentry = user.role === "qa" || user.role === "superadmin";
+  const sentryCard = document.getElementById("sentry-card");
+  const sentryStandSelect = document.getElementById("sentry-stand-select");
+  const sentryCardBody = document.getElementById("sentry-card-body");
+  sentryCard.hidden = !canSeeSentry;
+
   // ---------------- расписание ----------------
   // Роутер app/routers/schedules.py требует роль qa на все методы (см. задачу),
   // поэтому остальным ролям карточку просто не показываем, а не даём кликать
@@ -322,6 +332,7 @@
   let activeWindowTab = "console";
   let hasMarkup = false;
   let viewMode = "split";
+  let runSentryData = null;
 
   function showPageError(message) {
     pageError.textContent = message;
@@ -343,6 +354,11 @@
         stands.map((s) => `<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)}</option>`).join("");
       schedStandSelect.innerHTML = `<option value="">— без стенда —</option>` +
         stands.map((s) => `<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)}</option>`).join("");
+      if (canSeeSentry) {
+        sentryStandSelect.innerHTML = `<option value="">— выберите стенд —</option>` +
+          stands.map((s) => `<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)}</option>`).join("");
+        if (stands.length) sentryStandSelect.value = stands[0].name;
+      }
       await updateRunControlsForStand();
     } catch (err) {
       showPageError(`Не удалось загрузить стенды: ${err.message}`);
@@ -803,12 +819,26 @@
     });
   }
 
+  // Sentry-вкладка не зависит от выбранного слева теста — issues за всё окно
+  // прогона (GET /api/runs/{id}/sentry, грузится один раз в openRun), поэтому
+  // рендер не трогает selectedTestLog/selectedTestFrames.
+  function renderSentryTab() {
+    if (!runSentryData || !runSentryData.connected) {
+      return `<p class="muted">Sentry не подключён</p>`;
+    }
+    const issues = runSentryData.issues || [];
+    if (!issues.length) return `<p class="muted">Issues за окно прогона не найдено.</p>`;
+    return `<div class="sentry-rows">${issues.map((i) => sentryIssueRowHtml(i, { withNewBadge: true })).join("")}</div>`;
+  }
+
   function renderWindowBody() {
     if (activeWindowTab === "frame") {
       runWindowBody.innerHTML = renderFramesTab();
       attachFrameThumbHandlers();
     } else if (activeWindowTab === "console") {
       runWindowBody.innerHTML = renderConsoleBox(selectedTestLog);
+    } else if (activeWindowTab === "sentry") {
+      runWindowBody.innerHTML = renderSentryTab();
     } else {
       const reqLines = filterRequestLines(selectedTestLog);
       runWindowBody.innerHTML = reqLines.length
@@ -819,10 +849,12 @@
 
   function renderWindowTabs() {
     const reqCount = filterRequestLines(selectedTestLog).length;
+    const sentryCount = runSentryData && runSentryData.connected ? (runSentryData.issues || []).length : 0;
     runWindowTabsBox.innerHTML = `
       <button type="button" data-tab="frame" aria-current="${activeWindowTab === "frame"}">Кадры${selectedTestFrames.length ? ` (${selectedTestFrames.length})` : ""}</button>
       <button type="button" data-tab="console" aria-current="${activeWindowTab === "console"}">Консоль</button>
       <button type="button" data-tab="req" aria-current="${activeWindowTab === "req"}">Запросы${reqCount ? ` (${reqCount})` : ""}</button>
+      ${canSeeSentry ? `<button type="button" data-tab="sentry" aria-current="${activeWindowTab === "sentry"}">Sentry${sentryCount ? ` (${sentryCount})` : ""}</button>` : ""}
     `;
   }
 
@@ -969,6 +1001,7 @@
     selectedTestFrames = [];
     hasMarkup = false;
     viewMode = "split";
+    runSentryData = null;
     runTestsRail.innerHTML = "";
     runTestsCount.textContent = "";
     runWindowPlaceholder.hidden = false;
@@ -1077,6 +1110,9 @@
 
     await refreshReport(runId);
     await refreshSplitTests(runId);
+    if (canSeeSentry) {
+      try { runSentryData = await api(`/api/runs/${runId}/sentry`); } catch { runSentryData = { connected: false }; }
+    }
 
     const ws = new WebSocket(wsUrl(runId));
     currentWs = ws;
@@ -1604,6 +1640,76 @@
       <span class="xfail-pill"><span class="xfail-pill-dot"></span>${escapeHtml(area)} · ${count}</span>
     `).join("");
   }
+
+  // ---------------- ошибки продукта (Sentry) ----------------
+  // Светофор простой пороговой логикой, как договорено в миссии: 0 — зелёный,
+  // 1–4 — жёлтый, 5+ — красный (цвета только из токенов DESIGN.md).
+  function sentrySignalClass(count) {
+    if (count <= 0) return "sentry-signal-green";
+    if (count <= 4) return "sentry-signal-yellow";
+    return "sentry-signal-red";
+  }
+
+  // Общий рендер строки issue для карточки на дашборде и вкладки в окне прогона:
+  // withNewBadge — только там, где есть is_new (окно прогона, GET /api/runs/{id}/sentry).
+  function sentryIssueRowHtml(issue, { withNewBadge = false } = {}) {
+    const level = String(issue.level || "unknown").toLowerCase();
+    const isNew = withNewBadge && issue.is_new;
+    const inner = `
+      <span class="sentry-level sentry-level-${escapeHtml(level)}">${escapeHtml(level)}</span>
+      <span class="sentry-row-title" title="${escapeHtml(issue.title)}">${escapeHtml(issue.title)}</span>
+      ${isNew ? `<span class="sentry-new-badge">новое</span>` : ""}
+      <span class="sentry-row-count">×${issue.count}</span>
+    `;
+    const cls = `sentry-row${isNew ? " is-new" : ""}`;
+    return issue.permalink
+      ? `<a class="${cls}" href="${escapeHtml(issue.permalink)}" target="_blank" rel="noopener">${inner}</a>`
+      : `<div class="${cls}">${inner}</div>`;
+  }
+
+  const SENTRY_CARD_ROWS = 5;
+
+  function renderSentryCard(data) {
+    if (!data || !data.connected) {
+      sentryCardBody.innerHTML = `<p class="muted">Sentry не подключён</p>`;
+      return;
+    }
+    const issues = data.issues || [];
+    sentryCardBody.innerHTML = `
+      <div class="sentry-summary">
+        <span class="sentry-signal-dot ${sentrySignalClass(issues.length)}"></span>
+        <span class="kpi-tile-value">${issues.length}</span>
+        <span class="muted">новых issues за 24&nbsp;ч</span>
+      </div>
+      <div class="sentry-rows">
+        ${issues.length
+          ? issues.slice(0, SENTRY_CARD_ROWS).map((i) => sentryIssueRowHtml(i)).join("")
+          : `<p class="muted">Issues за последние сутки нет.</p>`}
+      </div>
+    `;
+  }
+
+  async function loadSentryCard() {
+    if (!canSeeSentry) return;
+    const stand = sentryStandSelect.value;
+    if (!stand) {
+      sentryCardBody.innerHTML = `<p class="muted">Выберите стенд.</p>`;
+      return;
+    }
+    sentryCardBody.innerHTML = `<p class="muted">Загрузка…</p>`;
+    try {
+      // "-24h" — относительный формат, который понимает сам Sentry
+      // (app/core/sentry.py::list_issues), без пересчёта дат на клиенте.
+      const data = await api(
+        `/api/projects/${encodeURIComponent(projectName)}/stands/${encodeURIComponent(stand)}/sentry/issues?since=-24h`
+      );
+      renderSentryCard(data);
+    } catch {
+      renderSentryCard({ connected: false });
+    }
+  }
+
+  if (canSeeSentry) sentryStandSelect.addEventListener("change", loadSentryCard);
 
   async function renderDashboard(runs) {
     dashboardError.hidden = true;
@@ -2171,7 +2277,7 @@
   applyTcView(tcInitialView);
 
   await loadStands();
-  await Promise.all([loadSections(), loadHistory(), loadFlaky(), loadSchedules(), loadTestcases()]);
+  await Promise.all([loadSections(), loadHistory(), loadFlaky(), loadSchedules(), loadTestcases(), loadSentryCard()]);
 
   // Глубокая ссылка из суперадминки (admin_all.html): project.html?name=...&run=<id>
   // сразу открывает отчёт конкретного прогона.
