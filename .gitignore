@@ -13,4 +13,5 @@ workspace/*.log
 workspace/coverage/
 workspace/stats/
 workspace/sections/
+workspace/product_map/
 demo/.state/
