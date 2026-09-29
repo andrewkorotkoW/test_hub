@@ -1,5 +1,6 @@
 import json
 import sqlite3
+from pathlib import Path
 
 from .config import settings
 from .security import hash_password
@@ -133,6 +134,20 @@ VSHGU_PROJECT_VENV = ".venv"
 VSHGU_STANDS = ("develop", "stage")
 VSHGU_MANUAL_ONLY_STAND = "stage"
 
+# Демо-проект: единственный seed-проект, чей путь гарантированно существует у
+# любого, кто склонировал test_hub (в отличие от SEED_PROJECTS/VSHGU_PROJECT_PATH
+# выше — это личные абсолютные пути владельца на его машине). Путь вычисляется
+# от расположения этого файла, а не хардкодится строкой, чтобы работать после
+# клонирования в произвольную директорию.
+DEMO_PROJECT_NAME = "Demo"
+DEMO_PROJECT_PATH = str(Path(__file__).resolve().parent.parent / "demo")
+# Пустая строка — раннер (app/core/runner.py::_venv_python) резолвит её в
+# интерпретатор самого test_hub, у демо-проекта нет собственного venv.
+DEMO_PROJECT_VENV = ""
+DEMO_STAND_NAME = "local"
+DEMO_PROJECT_COLOR = "#22c55e"  # зелёный из PROJECT_COLOR_PALETTE, не занят SEED_PROJECTS/VSHGU
+DEMO_SCHEDULE_CRON = "0 4 * * 1-5"
+
 # Пресеты запуска для стенда stage: сидируются один раз, сразу при первом создании
 # этого стенда (см. _seed_vshgu_project) — target='all' там, где в задаче указан
 # только marker, чтобы поле оставалось NOT NULL и совместимым с submit_run/RunCreate.
@@ -174,11 +189,39 @@ def _seed_if_empty(conn: sqlite3.Connection) -> None:
             (login, hash_password(password), role, onboarded),
         )
     for name, path, venv in SEED_PROJECTS:
+        # На чужой машине эти абсолютные пути (личные проекты владельца) не
+        # существуют — сидировать нечего, и раннер всё равно не найдёт venv/bin/python.
+        if not Path(path).exists():
+            continue
         conn.execute(
             "INSERT OR IGNORE INTO projects (name, path, venv, stands) VALUES (?, ?, ?, '[]')",
             (name, path, venv),
         )
+    _seed_demo_project(conn)
     conn.commit()
+
+
+def _seed_demo_project(conn: sqlite3.Connection) -> None:
+    """Проект Demo (см. DEMO_PROJECT_* выше) — единственный seed-проект без
+    зависимости от машины владельца: путь внутри репозитория, venv — сам
+    test_hub. Вызывается только из _seed_if_empty (только на пустой БД), как и
+    остальные seed-пользователи/проекты — в отличие от VSHGU он не переcидируется
+    на каждом старте (см. _seed_vshgu_project)."""
+    conn.execute(
+        "INSERT OR IGNORE INTO projects (name, path, venv, stands, color) VALUES (?, ?, ?, '[]', ?)",
+        (DEMO_PROJECT_NAME, DEMO_PROJECT_PATH, DEMO_PROJECT_VENV, DEMO_PROJECT_COLOR),
+    )
+    conn.execute(
+        "INSERT OR IGNORE INTO stands (project, name, url) VALUES (?, ?, ?)",
+        (DEMO_PROJECT_NAME, DEMO_STAND_NAME, f"http://127.0.0.1:{settings.TH_DEMO_PORT}"),
+    )
+    # Расписание выключено (enabled=0) — как и у VSHGU (_seed_vshgu_schedules),
+    # просто пример настройки, а не боевой ночной прогон.
+    conn.execute(
+        "INSERT INTO schedules (project, stand, target, marker, cron, enabled, notify_chat_ids, next_run_at) "
+        "VALUES (?, ?, 'all', NULL, ?, 0, '[]', NULL)",
+        (DEMO_PROJECT_NAME, DEMO_STAND_NAME, DEMO_SCHEDULE_CRON),
+    )
 
 
 def _users_role_check_outdated(conn: sqlite3.Connection) -> bool:
@@ -223,7 +266,12 @@ def _seed_vshgu_project(conn: sqlite3.Connection) -> None:
     """Гарантирует наличие проекта VSHGU и его стендов develop/stage.
     Идемпотентно и вызывается на каждом старте (не только _seed_if_empty — боевая БД
     непустая): вставляет только отсутствующие записи, не трогая поля, изменённые
-    пользователем вручную (например, use_env_flag, выключенный через API)."""
+    пользователем вручную (например, use_env_flag, выключенный через API).
+
+    На чужой машине VSHGU_PROJECT_PATH (личный путь владельца) не существует —
+    сидировать нечего, раннер всё равно не найдёт venv/bin/python по этому пути."""
+    if not Path(VSHGU_PROJECT_PATH).exists():
+        return
     exists = conn.execute(
         "SELECT 1 FROM projects WHERE name = ?", (VSHGU_PROJECT_NAME,)
     ).fetchone()
@@ -274,7 +322,13 @@ def _seed_vshgu_schedules(conn: sqlite3.Connection) -> None:
     через PUT /api/projects/{name}/schedules/{id} (schedule.update_schedule
     пересчитывает next_run_at при переходе enabled 0 -> 1), так что здесь не нужно
     импортировать app.core.schedule и считать cron самим (db.py и так не тянет
-    зависимостей на app.core.*, см. остальной модуль)."""
+    зависимостей на app.core.*, см. остальной модуль).
+
+    На чужой машине _seed_vshgu_project вообще не создаёт проект VSHGU (путь не
+    существует) — тогда INSERT ниже упал бы на внешнем ключе schedules.project,
+    поэтому сначала проверяем, что проект реально есть."""
+    if not conn.execute("SELECT 1 FROM projects WHERE name = ?", (VSHGU_PROJECT_NAME,)).fetchone():
+        return
     cron = "0 3 * * 1-5"
     exists = conn.execute(
         "SELECT 1 FROM schedules WHERE project = ? AND stand = ? AND cron = ?",
