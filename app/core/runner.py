@@ -286,6 +286,15 @@ async def cancel_run(run_id: int) -> str:
     return "not_cancellable"
 
 
+def end_status_from_line(line: str) -> str | None:
+    """Статус теста из строки "[TH] end <nodeid> <status>" — используется
+    GET /api/runs/{id}/tests, пока прогон ещё running/queued и allure-results
+    для него неполны/недоступны (после завершения статус берётся из
+    allure_report.parse_results, как в get_report)."""
+    m = _TH_END_RE.match(line)
+    return m.group("test_status") if m else None
+
+
 def _parse_th_line(run_id: int, line: str) -> tuple[str, str | None]:
     """Распознаёт служебную строку плагина ("[TH] start/end/step ...") и обновляет
     _current_nodeid этого прогона. Возвращает (kind, nodeid) для записи в run_events —
