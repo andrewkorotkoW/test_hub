@@ -235,7 +235,7 @@ async def test_hub_client_logs_in_and_lists_seeded_projects(db_path):
     finally:
         await client.aclose()
     names = {p["name"] for p in projects}
-    assert {"bike_fit", "Velo_bot", "auto_tests_vshgu_cloude"} <= names
+    assert {"bike_fit", "Velo_bot", "VSHGU"} <= names
 
 
 async def test_hub_client_relogs_in_after_session_lost(db_path):

@@ -2,11 +2,11 @@
 app/core/runner.py::submit_run, app/routers/runs.py, app/routers/projects.py —
 CRUD /stands/{stand}/presets, app/schemas.py::RunCreate.confirm_manual).
 
-Реальный auto_tests_vshgu_cloude/stage НИКОГДА не гоняется здесь по-настоящему
+Реальный VSHGU/stage НИКОГДА не гоняется здесь по-настоящему
 (VSHGU_PROJECT_PATH указывает на боевой репозиторий на диске автора) — для success-
 кейсов submit_run используется свой фикстурный мини-проект (runnable_project_dir,
 как в test_run_queue.py/test_run_cancel.py) с ВРУЧНУЮ выставленным через API
-manual_only=1 на одном из его стендов. Сид auto_tests_vshgu_cloude проверяется
+manual_only=1 на одном из его стендов. Сид VSHGU проверяется
 только чтением состояния (стенды/пресеты), без единого POST /runs на него.
 """
 import json
@@ -243,7 +243,7 @@ async def test_run_on_regular_stand_without_confirm_unaffected(
     qa_client, isolated_allure_dir, runnable_project_dir
 ):
     # Регрессия обратной совместимости: manual_only=0 (значение по умолчанию для
-    # стенда, созданного через API, как и develop у auto_tests_vshgu_cloude) не
+    # стенда, созданного через API, как и develop у VSHGU) не
     # требует confirm_manual — поведение не изменилось задачей.
     await register_project(qa_client, "regular_proj", runnable_project_dir)
     stand = await _create_stand(qa_client, "regular_proj", "develop")

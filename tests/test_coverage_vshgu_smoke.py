@@ -1,17 +1,17 @@
-"""Smoke-тест покрытия на РЕАЛЬНОМ проекте auto_tests_vshgu_cloude — только чтение:
+"""Smoke-тест покрытия на РЕАЛЬНОМ проекте VSHGU — только чтение:
 app/core/coverage.analyze_project() исполняет исключительно ast.parse по файлам
 проекта (api/endpoints/*.py, tests/**/test_*.py, conftest.py) и ничего в них не
 пишет, поэтому recalc() безопасен для реального чек-аута на диске.
 
 По аналогии с runnable_project_dir (tests/conftest.py) тест пропускается, если
-в этой среде нет реального чек-аута auto_tests_vshgu_cloude с .venv — тогда
+в этой среде нет реального чек-аута VSHGU с .venv — тогда
 пропуск логичнее xfail, т.к. сам факт отсутствия проекта на диске не является
 дефектом test_hub.
 
-routes.tsv для auto_tests_vshgu_cloude уже скопирован в репозиторий test_hub
-(workspace/coverage/auto_tests_vshgu_cloude/routes.tsv, см. задачу t1) — тест
+routes.tsv для VSHGU уже скопирован в репозиторий test_hub
+(workspace/coverage/VSHGU/routes.tsv, см. задачу t1) — тест
 копирует его в изолированный COVERAGE_DIR, не трогая ни реальный кэш test_hub,
-ни сам проект auto_tests_vshgu_cloude.
+ни сам проект VSHGU.
 """
 
 import shutil

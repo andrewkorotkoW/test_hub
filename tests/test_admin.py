@@ -51,8 +51,8 @@ async def test_overview_counts_match_fixture_data(superadmin_client):
     body = resp.json()
     # seed: qa, manager, customer, admin, tg_bot
     assert body["counts"]["users"] == 5
-    assert body["counts"]["projects"] == 3  # bike_fit, Velo_bot, auto_tests_vshgu_cloude
-    assert body["counts"]["stands"] == 2  # develop, stage у auto_tests_vshgu_cloude
+    assert body["counts"]["projects"] == 3  # bike_fit, Velo_bot, VSHGU
+    assert body["counts"]["stands"] == 2  # develop, stage у VSHGU
     assert body["counts"]["runs"] == 0
     assert body["counts"]["run_events"] == 0
     assert body["runs_by_status"] == {}

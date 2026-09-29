@@ -6,11 +6,11 @@ ui/pages/*.py, tests/**/test_*.py и все conftest.py). Единственно
 исполняется — чтение уже готовых allure-results прошлых прогонов (через
 app.core.allure_report) для определения статуса последнего прогона на каждом стенде.
 
-Рассчитан в первую очередь на auto_tests_vshgu_cloude (см. workspace/coverage/
-auto_tests_vshgu_cloude/routes.tsv), но не завязан на конкретный проект: recalc()
+Рассчитан в первую очередь на VSHGU (см. workspace/coverage/
+VSHGU/routes.tsv), но не завязан на конкретный проект: recalc()
 берёт path/venv/стенды зарегистрированного проекта из app.db, а вся AST-эвристика
 работает с произвольным project_path, у которого есть api/endpoints, ui/pages и tests
-в том же виде, что и у auto_tests_vshgu_cloude.
+в том же виде, что и у VSHGU.
 """
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ COVERAGE_DIR = settings.WORKSPACE_DIR / "coverage"
 HTTP_VERBS = {"get", "post", "put", "patch", "delete"}
 # Имена параметров/переменных, через которые тесты и фикстуры дёргают API напрямую,
 # без промежуточного объекта *Endpoint (см. api_client/api_client_global/... в
-# corretest.py auto_tests_vshgu_cloude).
+# corretest.py VSHGU).
 RAW_CLIENT_NAMES = {"api_client", "api_client_global", "stage_api_client", "external_system_client"}
 
 _PARAM_RE = re.compile(r"\{[^{}]*\}")
@@ -170,7 +170,7 @@ class RouteCall:
 
 def _with_base_prefix(path: str, prefix: str = "/api/v1") -> str:
     """Базовый префикс добавляется только к относительным путям без своего префикса —
-    self.client.*/api_client.* в auto_tests_vshgu_cloude всегда шлют запрос через
+    self.client.*/api_client.* в VSHGU всегда шлют запрос через
     base_url, который уже заканчивается на /api/v1 (см. config/environments.py), но
     если путь уже начинается с /api/ (другой префикс, например /api/v1-public),
     менять его не нужно."""

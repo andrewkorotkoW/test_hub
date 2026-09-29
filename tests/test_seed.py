@@ -75,7 +75,7 @@ def test_seed_is_idempotent(db_path):
 
     # qa, manager, customer, admin (SUPERADMIN) + tg_bot (Telegram-бот, app/tg_bot.py)
     assert after_users == before_users == 5
-    # bike_fit, Velo_bot (SEED_PROJECTS) + auto_tests_vshgu_cloude (всегда обеспечиваемый init_db)
+    # bike_fit, Velo_bot (SEED_PROJECTS) + VSHGU (всегда обеспечиваемый init_db)
     assert after_projects == before_projects == 3
 
 

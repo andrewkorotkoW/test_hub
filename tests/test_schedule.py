@@ -102,7 +102,7 @@ def test_compare_runs_without_previous_run_treats_all_failures_as_new(isolated_a
     assert result["newly_fixed"] == []
 
 
-# ------------------------------------------------------------------ сидинг auto_tests_vshgu_cloude
+# ------------------------------------------------------------------ сидинг VSHGU
 
 def test_seed_creates_single_disabled_develop_schedule(db_path):
     from app.config import settings

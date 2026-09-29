@@ -54,7 +54,7 @@ _cancelled: set[int] = set()
 
 class ManualRunNotConfirmed(Exception):
     """Стенд помечен manual_only=1 (см. app.db.stands.manual_only, флаг стенда stage
-    у auto_tests_vshgu_cloude) — прогон на нём требует явного подтверждения человеком
+    у VSHGU) — прогон на нём требует явного подтверждения человеком
     (confirm_manual=True) и никогда не проходит от имени сервисной учётки
     Telegram-бота (settings.TH_TG_SERVICE_LOGIN), даже если та передаст
     confirm_manual=True. Проверка живёт внутри submit_run (не в роутере) — это
@@ -103,7 +103,7 @@ async def discover(project_path: str, venv: str) -> dict:
     python = _venv_python(project_path, venv)
     if not python.exists():
         return {"error": f".venv/bin/python не найден: {python}", "tree": {}}
-    # -o addopts= : у проекта в pytest.ini может стоять -v (как у auto_tests_vshgu_cloude) —
+    # -o addopts= : у проекта в pytest.ini может стоять -v (как у VSHGU) —
     # он гасит наш -q, и pytest печатает <Module …> вместо nodeid'ов, дерево выходит пустым
     proc = await asyncio.create_subprocess_exec(
         str(python), "-m", "pytest", "--collect-only", "-o", "addopts=", "-q", "-p", "no:cacheprovider",

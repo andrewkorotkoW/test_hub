@@ -127,8 +127,8 @@ SEED_PROJECTS = [
 SUPERADMIN_LOGIN = "admin"
 SUPERADMIN_PASSWORD = "admin"
 
-VSHGU_PROJECT_NAME = "auto_tests_vshgu_cloude"
-VSHGU_PROJECT_PATH = "/Users/andreykorotkow/PycharmProjects/auto_tests_vshgu_cloude"
+VSHGU_PROJECT_NAME = "VSHGU"
+VSHGU_PROJECT_PATH = "/Users/andreykorotkow/PycharmProjects/auto_tests_vshgu"
 VSHGU_PROJECT_VENV = ".venv"
 VSHGU_STANDS = ("develop", "stage")
 VSHGU_MANUAL_ONLY_STAND = "stage"
@@ -220,7 +220,7 @@ def _migrate_add_column(conn: sqlite3.Connection, table: str, column: str, ddl: 
 
 
 def _seed_vshgu_project(conn: sqlite3.Connection) -> None:
-    """Гарантирует наличие проекта auto_tests_vshgu_cloude и его стендов develop/stage.
+    """Гарантирует наличие проекта VSHGU и его стендов develop/stage.
     Идемпотентно и вызывается на каждом старте (не только _seed_if_empty — боевая БД
     непустая): вставляет только отсутствующие записи, не трогая поля, изменённые
     пользователем вручную (например, use_env_flag, выключенный через API)."""
@@ -262,7 +262,7 @@ def _seed_vshgu_stage_presets(conn: sqlite3.Connection) -> None:
 
 
 def _seed_vshgu_schedules(conn: sqlite3.Connection) -> None:
-    """Выключенное расписание ночного прогона для auto_tests_vshgu_cloude: develop,
+    """Выключенное расписание ночного прогона для VSHGU: develop,
     все тесты, 03:00 по будням (пн-пт). Идемпотентно и вызывается на каждом старте,
     как и _seed_vshgu_project — вставляет запись, только если расписания с такими
     project/stand/cron ещё нет, не трогая изменённые вручную через API.

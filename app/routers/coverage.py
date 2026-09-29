@@ -2,7 +2,7 @@
 
 Область (area) маршрута — первый сегмент его dotted-имени из routes.tsv
 (например "knowledge_base" для "knowledge_base.home.bundles.index"): в
-auto_tests_vshgu_cloude (Laravel-именование роутов) это естественная и уже
+VSHGU (Laravel-именование роутов) это естественная и уже
 готовая группировка, без необходимости парсить path.
 """
 import sqlite3
