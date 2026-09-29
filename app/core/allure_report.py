@@ -7,17 +7,59 @@
 from __future__ import annotations
 
 import json
+import logging
+import os
 import shutil
 import subprocess
 from pathlib import Path
+
+from ..config import settings
 
 STATUSES = ("passed", "failed", "broken", "skipped")
 
 GENERATE_TIMEOUT_SECONDS = 60
 
+logger = logging.getLogger(__name__)
+
+# Каталоги, где allure CLI обычно оказывается после ручной установки (homebrew,
+# распакованный zip-релиз в домашнюю папку) — их часто нет в PATH процесса, запущенного
+# не из интерактивного терминала (launchd/systemd режут PATH до /usr/bin:/bin:...).
+EXTRA_SEARCH_DIRS = ("/usr/local/bin", "/opt/homebrew/bin", str(Path.home() / ".local" / "bin"))
+
+
+def _find_in_extra_dirs() -> str | None:
+    for directory in EXTRA_SEARCH_DIRS:
+        candidate = Path(directory) / "allure"
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return None
+
+
+def resolve_allure_bin() -> str | None:
+    """Путь к исполняемому файлу allure CLI: явный TH_ALLURE_BIN (если задан и указывает
+    на реальный исполняемый файл) > PATH (shutil.which) > типичные каталоги установки
+    (см. EXTRA_SEARCH_DIRS). Ничего не найдено — пишет в лог, где искали, и возвращает None."""
+    configured = settings.TH_ALLURE_BIN
+    if configured:
+        if Path(configured).is_file() and os.access(configured, os.X_OK):
+            return configured
+        logger.warning("allure: TH_ALLURE_BIN=%s указывает не на исполняемый файл", configured)
+        return None
+    found = shutil.which("allure")
+    if found:
+        return found
+    found = _find_in_extra_dirs()
+    if found:
+        return found
+    logger.warning(
+        "allure CLI не найден: PATH=%s, доп. каталоги=%s, TH_ALLURE_BIN не задан",
+        os.environ.get("PATH", ""), ", ".join(EXTRA_SEARCH_DIRS),
+    )
+    return None
+
 
 def allure_cli_available() -> bool:
-    return shutil.which("allure") is not None
+    return resolve_allure_bin() is not None
 
 
 def ensure_static_report(results_dir: Path, report_dir: Path) -> bool:
@@ -27,14 +69,18 @@ def ensure_static_report(results_dir: Path, report_dir: Path) -> bool:
     генерация не удалась (тогда вызывающий код показывает встроенный отчёт test_hub)."""
     if (report_dir / "index.html").exists():
         return True
-    if not results_dir.is_dir() or not allure_cli_available():
+    if not results_dir.is_dir():
+        return False
+    allure_bin = resolve_allure_bin()
+    if allure_bin is None:
         return False
     try:
         subprocess.run(
-            ["allure", "generate", str(results_dir), "-o", str(report_dir), "--clean"],
+            [allure_bin, "generate", str(results_dir), "-o", str(report_dir), "--clean"],
             capture_output=True, timeout=GENERATE_TIMEOUT_SECONDS, check=True,
         )
-    except (subprocess.SubprocessError, OSError):
+    except (subprocess.SubprocessError, OSError) as exc:
+        logger.warning("allure generate (%s) завершился с ошибкой: %s", allure_bin, exc)
         return False
     return (report_dir / "index.html").exists()
 

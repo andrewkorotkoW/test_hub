@@ -252,7 +252,7 @@ async def test_public_share_report_png_is_valid(qa_client, isolated_allure_dir, 
 async def test_public_share_allure_without_cli_reports_unavailable(qa_client, isolated_allure_dir, runnable_project_dir, monkeypatch):
     from app.core import allure_report
 
-    monkeypatch.setattr(allure_report, "allure_cli_available", lambda: False)
+    monkeypatch.setattr(allure_report, "resolve_allure_bin", lambda: None)
     run_id, _ = await _run_fixture_project(qa_client, "share_allure_proj", runnable_project_dir)
     token = (await qa_client.post(f"/api/runs/{run_id}/share", json={"expires": "30d"})).json()["token"]
 
@@ -261,8 +261,11 @@ async def test_public_share_allure_without_cli_reports_unavailable(qa_client, is
         assert data["allure_available"] is False
         assert data["allure_url"] is None
 
+        # не 404 — понятная страница-заглушка вместо "битой" ссылки (см. TH_ALLURE_BIN)
         resp = await anon.get(f"/share/{token}/allure/index.html")
-    assert resp.status_code == 404
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers["content-type"]
+    assert "TH_ALLURE_BIN" in resp.text
 
 
 async def test_public_share_unknown_token_is_404(db_path):

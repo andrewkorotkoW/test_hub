@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, Response
 
 from ..config import settings
 from ..core import allure_report, charts, runner
@@ -136,12 +136,40 @@ def _safe_report_path(report_dir: Path, rel_path: str) -> Path | None:
     return candidate
 
 
-def _allure_asset_response(conn: sqlite3.Connection, token: str, rel_path: str) -> FileResponse:
+_ALLURE_UNAVAILABLE_HTML = """<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Test Hub — Allure-отчёт недоступен</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-left">
+      <span class="brand">Test Hub</span>
+      <span class="muted">публичный отчёт — только чтение</span>
+    </div>
+  </header>
+  <main class="page">
+    <div class="card">
+      <h1>Allure не сгенерирован</h1>
+      <p class="muted">allure CLI не найден (см. настройку <code>TH_ALLURE_BIN</code>).</p>
+    </div>
+  </main>
+</body>
+</html>
+"""
+
+
+def _allure_asset_response(conn: sqlite3.Connection, token: str, rel_path: str) -> Response:
     share = _get_active_share_or_404(conn, token)
     run = _get_run_or_404(conn, share["run_id"])
     report_dir = settings.ALLURE_REPORTS_DIR / str(run["id"])
     if not allure_report.ensure_static_report(runner.allure_dir(run["id"]), report_dir):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Allure report is not available")
+        # Не 404 — иначе выглядит как битая ссылка, а не как "отчёт ещё не готов" (allure_report
+        # уже записал в лог, где именно искали бинарник).
+        return HTMLResponse(_ALLURE_UNAVAILABLE_HTML)
     target = _safe_report_path(report_dir, rel_path or "index.html")
     if target is None or not target.is_file():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
@@ -201,10 +229,10 @@ def public_share_report_png(token: str, conn: sqlite3.Connection = Depends(get_d
 
 
 @public_router.get("/{token}/allure")
-def public_share_allure_index(token: str, conn: sqlite3.Connection = Depends(get_db)) -> FileResponse:
+def public_share_allure_index(token: str, conn: sqlite3.Connection = Depends(get_db)) -> Response:
     return _allure_asset_response(conn, token, "index.html")
 
 
 @public_router.get("/{token}/allure/{path:path}")
-def public_share_allure_asset(token: str, path: str, conn: sqlite3.Connection = Depends(get_db)) -> FileResponse:
+def public_share_allure_asset(token: str, path: str, conn: sqlite3.Connection = Depends(get_db)) -> Response:
     return _allure_asset_response(conn, token, path)

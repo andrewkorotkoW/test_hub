@@ -68,5 +68,11 @@ class Settings:
     TH_SENTRY_TOKEN: str = os.getenv("TH_SENTRY_TOKEN", "")
     TH_SENTRY_ORG: str = os.getenv("TH_SENTRY_ORG", "")
 
+    # Явный путь к бинарнику allure CLI (см. app/core/allure_report.py), нужен генерация
+    # Allure-отчёта для публичных ссылок (app/routers/share.py). Пусто = искать через
+    # shutil.which("allure") и типичные каталоги установки — этого достаточно в обычном
+    # терминале, но не для процесса под launchd/systemd с урезанным PATH (см. README).
+    TH_ALLURE_BIN: str = os.getenv("TH_ALLURE_BIN", "")
+
 
 settings = Settings()
