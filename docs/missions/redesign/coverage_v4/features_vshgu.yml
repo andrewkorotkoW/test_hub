@@ -1,22 +1,25 @@
 # Функциональная карта продукта ВШГУ (портал + админка + интеграции) — черновик владельца/супервизора.
 # Каждая функция привязана к тестам по префиксам путей в проекте auto_tests_vshgu (tests/api|ui/<раздел>/...).
 # Статус функции считается по последнему прогону тестов, чьи nodeid начинаются с любого из префиксов.
+#
+# Префиксы сверены с реальным деревом tests/ проекта auto_tests_vshgu (только чтение) и поправлены —
+# см. docs/missions/redesign/coverage_v4/mockups.html и отчёт задачи для списка правок и обоснования.
 project: VSHGU
 areas:
   - name: Слушатель (внешка)
     features:
-      - {name: Вход и онбординг, tests: [tests/ui/onboarding, tests/ui/users/test_user_login, tests/api/auth]}
-      - {name: Моё обучение (программы, потоки, модули), tests: [tests/ui/programs, tests/api/programs, tests/ui/practical_tasks/test_add_listener_to_stream]}
-      - {name: Курсы TinCan/SCORM, tests: [tests/ui/courses, tests/api/courses]}
+      - {name: Вход и онбординг, tests: [tests/ui/onboarding, tests/ui/users/test_user_login_navigation, tests/api/onboarding]}
+      - {name: "Моё обучение (программы, потоки, модули)", tests: [tests/api/programs, tests/ui/practical_tasks/test_add_listener_to_stream]}
+      - {name: Курсы TinCan/SCORM, tests: [tests/ui/courses, tests/api/create_activity/courses]}
       - {name: Практические задания — прохождение, tests: [tests/ui/practical_tasks/test_complete_practical_task, tests/ui/practical_tasks/personal_assignment]}
       - {name: Тесты и конструктор тестов, tests: [tests/ui/test_constructor, tests/api/tests]}
       - {name: Опросы, tests: [tests/ui/polls, tests/api/polls]}
       - {name: База знаний — материалы, tests: [tests/ui/knowledge_base, tests/api/knowledge_base]}
-      - {name: Достижения, tests: [tests/ui/knowledge_base/user_achievements, tests/api/achievements]}
+      - {name: Достижения, tests: [tests/ui/knowledge_base/user_achievements]}
       - {name: Уведомления, tests: [tests/ui/notifications, tests/api/notifications]}
       - {name: Техподдержка (тикеты), tests: [tests/ui/tickets, tests/api/tickets]}
-      - {name: Профиль и сертификаты, tests: [tests/api/certificates, tests/ui/users/test_user_profile]}
-      - {name: Игровые сессии, tests: [tests/ui/game_session, tests/api/game_session]}
+      - {name: Профиль и сертификаты, tests: [tests/api/certificates]}
+      - {name: Игровые сессии, tests: [tests/ui/game_session]}
       - {name: Дашборд слушателя, tests: [tests/ui/dashboards]}
   - name: Проверяющий / преподаватель
     features:
@@ -26,13 +29,13 @@ areas:
   - name: Администратор
     features:
       - {name: Пользователи и роли, tests: [tests/api/users, tests/ui/users]}
-      - {name: Фильтры и поиск пользователей, tests: [tests/ui/users/filters, tests/api/users/filters]}
-      - {name: База программ и потоки, tests: [tests/api/programs, tests/api/streams, tests/ui/streams]}
+      - {name: Фильтры и поиск пользователей, tests: []}
+      - {name: База программ и потоки, tests: [tests/api/programs, tests/api/streams]}
       - {name: Создание активностей (контент), tests: [tests/api/create_activity]}
       - {name: Расписание и AOS, tests: [tests/api/aos, tests/ui/aos]}
-      - {name: Практические задания — админка, tests: [tests/ui/practical_tasks/test_create_practical_task, tests/ui/practical_tasks/test_add_practical_task_to_schedule, tests/api/homework]}
+      - {name: Практические задания — админка, tests: [tests/ui/practical_tasks/test_create_practical_task, tests/ui/practical_tasks/test_add_practical_task_to_schedule, tests/api/create_activity/homeworks]}
       - {name: Справочники, tests: [tests/api/dictionaries, tests/ui/dictionaries]}
-      - {name: Статистика обучения, tests: [tests/ui/learning_statistics, tests/api/statistics]}
+      - {name: Статистика обучения, tests: [tests/ui/learning_statistics, tests/api/learning_statistics]}
       - {name: Сертификаты — шаблоны и выдача, tests: [tests/api/certificates]}
       - {name: База знаний — админка, tests: [tests/ui/knowledge_base/test_create_article_and_verify_in_user_ui, tests/api/knowledge_base]}
       - {name: Инфо-баннер, tests: [tests/api/banner, tests/ui/banner]}
@@ -44,9 +47,9 @@ areas:
       - {name: БУК (внешние пользователи), tests: [tests/api/buk, tests/ui/buk]}
       - {name: CAS (единый вход), tests: [tests/api/cas, tests/ui/cas]}
       - {name: Альпина и МИФ (ЭБС), tests: [tests/api/alpina_and_mif, tests/ui/alpina_and_mif]}
-      - {name: LRS / xAPI, tests: [tests/api/courses/tincan]}
+      - {name: LRS / xAPI, tests: [tests/api/create_activity/courses/tincan]}
       - {name: Helpdesk, tests: []}
   - name: Сквозные сценарии
     features:
-      - {name: E2E: программа → поток → слушатель → прохождение, tests: [tests/e2e]}
+      - {name: "E2E: программа → поток → слушатель → прохождение", tests: [tests/e2e, tests/api/e2e]}
       - {name: Smoke прод, tests: []}
