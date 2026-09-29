@@ -1,7 +1,10 @@
+import hashlib
 import json
+import re
 import sqlite3
+from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile, WebSocket, WebSocketDisconnect, status
 from fastapi.responses import Response
 
 from ..config import settings
@@ -13,6 +16,18 @@ from ..schemas import RunCreate
 
 router = APIRouter(prefix="/api", tags=["runs"])
 ws_router = APIRouter(tags=["runs-ws"])
+
+_FRAME_HASH_RE = re.compile(r"^[0-9a-f]{16}$")
+
+
+def _nodeid_hash(nodeid: str) -> str:
+    return hashlib.sha1(nodeid.encode("utf-8")).hexdigest()[:16]
+
+
+def _frame_step_and_url(run_id: int, rel_path: str) -> tuple[int, str]:
+    """rel_path — "<hash>/<step>.png", как его пишет upload_frame в run_events.line."""
+    step = int(rel_path.rsplit("/", 1)[-1].removesuffix(".png"))
+    return step, f"/api/runs/{run_id}/frames/{rel_path}"
 
 
 def _get_project_or_404(conn: sqlite3.Connection, name: str) -> sqlite3.Row:
@@ -109,6 +124,88 @@ def get_report(
     return payload
 
 
+@router.get("/runs/{run_id}/tests")
+def list_run_tests(
+    run_id: int,
+    conn: sqlite3.Connection = Depends(get_db),
+    _user: sqlite3.Row = Depends(get_current_user),
+) -> list[dict]:
+    """Тесты прогона со статусами: пока прогон running/queued — по живым
+    test_start/test_end событиям run_events (статус теста в это время известен
+    только из "[TH] end <nodeid> <status>"-строки), после завершения — из
+    allure_report.parse_results, как get_report. allure отдаёт fullName (см.
+    allure_report._parse_result), а не pytest nodeid — используем его как
+    nodeid в ответе за неимением лучшего источника после завершения прогона."""
+    row = _get_run_or_404(conn, run_id)
+    frame_nodeids = {
+        r["nodeid"]
+        for r in conn.execute(
+            "SELECT DISTINCT nodeid FROM run_events WHERE run_id = ? AND kind = 'frame'", (run_id,)
+        ).fetchall()
+    }
+
+    if row["status"] in ("running", "queued"):
+        events = conn.execute(
+            "SELECT nodeid, kind, line FROM run_events WHERE run_id = ? "
+            "AND kind IN ('test_start', 'test_end') ORDER BY id",
+            (run_id,),
+        ).fetchall()
+        statuses: dict[str, str] = {}
+        for ev in events:
+            nodeid = ev["nodeid"]
+            if not nodeid:
+                continue
+            if ev["kind"] == "test_start":
+                statuses.setdefault(nodeid, "running")
+            else:
+                statuses[nodeid] = runner.end_status_from_line(ev["line"]) or "unknown"
+        return [
+            {"nodeid": nodeid, "status": test_status, "has_frames": nodeid in frame_nodeids}
+            for nodeid, test_status in statuses.items()
+        ]
+
+    results = allure_report.parse_results(runner.allure_dir(run_id))
+    return [
+        {"nodeid": t["name"], "status": t["status"], "has_frames": t["name"] in frame_nodeids}
+        for t in results
+    ]
+
+
+@router.get("/runs/{run_id}/tests/{nodeid:path}/log")
+def get_run_test_log(
+    run_id: int,
+    nodeid: str,
+    conn: sqlite3.Connection = Depends(get_db),
+    _user: sqlite3.Row = Depends(get_current_user),
+) -> list[str]:
+    _get_run_or_404(conn, run_id)
+    rows = conn.execute(
+        "SELECT line FROM run_events WHERE run_id = ? AND nodeid = ? AND kind IN ('line', 'step') "
+        "ORDER BY id",
+        (run_id, nodeid),
+    ).fetchall()
+    return [row["line"] for row in rows]
+
+
+@router.get("/runs/{run_id}/tests/{nodeid:path}/frames")
+def get_run_test_frames(
+    run_id: int,
+    nodeid: str,
+    conn: sqlite3.Connection = Depends(get_db),
+    _user: sqlite3.Row = Depends(get_current_user),
+) -> list[dict]:
+    _get_run_or_404(conn, run_id)
+    rows = conn.execute(
+        "SELECT line FROM run_events WHERE run_id = ? AND nodeid = ? AND kind = 'frame' ORDER BY id",
+        (run_id, nodeid),
+    ).fetchall()
+    frames = []
+    for r in rows:
+        step, url = _frame_step_and_url(run_id, r["line"])
+        frames.append({"step": step, "url": url})
+    return frames
+
+
 def _run_history(conn: sqlite3.Connection, row: sqlite3.Row, limit: int) -> list[dict]:
     rows = conn.execute(
         "SELECT * FROM runs WHERE project = ? AND stand IS ? ORDER BY id DESC LIMIT ?",
@@ -159,6 +256,90 @@ async def cancel_run(
     return _run_payload(row)
 
 
+def _bearer_token(authorization: str | None) -> str | None:
+    if not authorization:
+        return None
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        return None
+    return token
+
+
+@router.post("/runs/{run_id}/frames", status_code=status.HTTP_201_CREATED)
+async def upload_frame(
+    run_id: int,
+    nodeid: str = Form(...),
+    step: int = Form(...),
+    file: UploadFile = File(...),
+    authorization: str | None = Header(default=None),
+    conn: sqlite3.Connection = Depends(get_db),
+) -> dict:
+    """Приём кадра UI-теста от плагина проекта тестов (отдельная миссия в
+    auto_tests_vshgu/demo) во время прогона. Авторизация — токеном прогона, а
+    не пользовательской сессией: заголовок `Authorization: Bearer <TH_RUN_TOKEN>`
+    с тем же токеном, что раннер передал pytest в env (см. app/core/runner.py::
+    _execute, check_run_token). 401 — токен не совпал или прогон уже не running
+    (токен раннер вычищает в _finalize, поэтому это одна и та же проверка)."""
+    row = conn.execute("SELECT status FROM runs WHERE id = ?", (run_id,)).fetchone()
+    if row is None or row["status"] != "running":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Run is not running")
+    if not runner.check_run_token(run_id, _bearer_token(authorization)):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid run token")
+
+    raw = await file.read()
+    if len(raw) > settings.TH_FRAME_MAX_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Frame exceeds TH_FRAME_MAX_BYTES ({settings.TH_FRAME_MAX_BYTES} bytes)",
+        )
+
+    frame_count = conn.execute(
+        "SELECT COUNT(*) FROM run_events WHERE run_id = ? AND kind = 'frame'", (run_id,)
+    ).fetchone()[0]
+    if frame_count >= settings.TH_FRAME_MAX_PER_RUN:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Run already has TH_FRAME_MAX_PER_RUN frames ({settings.TH_FRAME_MAX_PER_RUN})",
+        )
+
+    nodeid_hash = _nodeid_hash(nodeid)
+    rel_path = f"{nodeid_hash}/{step}.png"
+    dest = runner.frames_dir(run_id) / rel_path
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(raw)
+
+    conn.execute(
+        "INSERT INTO run_events (run_id, ts, line, nodeid, kind) VALUES (?, ?, ?, ?, 'frame')",
+        (run_id, datetime.now().isoformat(timespec="seconds"), rel_path, nodeid),
+    )
+    conn.commit()
+
+    url = f"/api/runs/{run_id}/frames/{rel_path}"
+    await hub.broadcast(
+        run_id, {"type": "frame", "run_id": run_id, "nodeid": nodeid, "step": step, "url": url}
+    )
+    return {"url": url}
+
+
+@router.get("/runs/{run_id}/frames/{nodeid_hash}/{step}.png")
+def get_frame_file(
+    run_id: int,
+    nodeid_hash: str,
+    step: int,
+    conn: sqlite3.Connection = Depends(get_db),
+    _user: sqlite3.Row = Depends(get_current_user),
+) -> Response:
+    """Сама картинка кадра — авторизация обычной пользовательской сессией (не
+    токеном прогона, тот только для приёма от pytest в upload_frame выше)."""
+    _get_run_or_404(conn, run_id)
+    if not _FRAME_HASH_RE.match(nodeid_hash):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Frame not found")
+    path = runner.frames_dir(run_id) / nodeid_hash / f"{step}.png"
+    if not path.is_file():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Frame not found")
+    return Response(content=path.read_bytes(), media_type="image/png")
+
+
 def _ws_user(websocket: WebSocket) -> sqlite3.Row | None:
     from ..security import verify_session_token
 
@@ -190,14 +371,25 @@ async def run_events_ws(websocket: WebSocket, run_id: int) -> None:
             await websocket.close(code=4404)
             return
         history = conn.execute(
-            "SELECT line FROM run_events WHERE run_id = ? ORDER BY id", (run_id,)
+            "SELECT line, nodeid, kind FROM run_events WHERE run_id = ? ORDER BY id", (run_id,)
         ).fetchall()
     finally:
         conn.close()
 
     await websocket.accept()
     for row in history:
-        await websocket.send_json({"type": "line", "run_id": run_id, "line": row["line"]})
+        # Старые прогоны без разметки (kind=NULL до миграции — но DEFAULT 'line'
+        # у самой колонки покрывает и их) шлются как раньше: type='line'.
+        kind = row["kind"] or "line"
+        if kind == "frame":
+            step, url = _frame_step_and_url(run_id, row["line"])
+            await websocket.send_json(
+                {"type": "frame", "run_id": run_id, "nodeid": row["nodeid"], "step": step, "url": url}
+            )
+        else:
+            await websocket.send_json(
+                {"type": kind, "run_id": run_id, "line": row["line"], "nodeid": row["nodeid"]}
+            )
     hub.connect(run_id, websocket)
     try:
         while True:

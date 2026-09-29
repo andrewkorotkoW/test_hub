@@ -61,7 +61,9 @@ CREATE TABLE IF NOT EXISTS run_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     run_id INTEGER NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
     ts TEXT NOT NULL,
-    line TEXT NOT NULL
+    line TEXT NOT NULL,
+    nodeid TEXT,
+    kind TEXT NOT NULL DEFAULT 'line'
 );
 
 CREATE TABLE IF NOT EXISTS share_links (
@@ -392,6 +394,8 @@ def init_db() -> None:
         _migrate_add_column(conn, "runs", "repeat", "repeat INTEGER NOT NULL DEFAULT 1")
         _migrate_add_column(conn, "stands", "manual_only", "manual_only INTEGER NOT NULL DEFAULT 0")
         _migrate_add_column(conn, "projects", "color", "color TEXT")
+        _migrate_add_column(conn, "run_events", "nodeid", "nodeid TEXT")
+        _migrate_add_column(conn, "run_events", "kind", "kind TEXT NOT NULL DEFAULT 'line'")
         # flaky_stats, xfail_registry, schedules и stand_presets сами по себе — новые
         # таблицы (не существующие с другой схемой в старых БД), поэтому их создание
         # уже покрыто CREATE TABLE IF NOT EXISTS в SCHEMA выше и отдельной ALTER-
