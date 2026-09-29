@@ -38,6 +38,10 @@ class Settings:
     TH_FRAME_MAX_BYTES: int = int(os.getenv("TH_FRAME_MAX_BYTES", "2000000"))
     TH_FRAME_MAX_PER_RUN: int = int(os.getenv("TH_FRAME_MAX_PER_RUN", "500"))
 
+    # Ручная загрузка скриншота к шагу тест-кейса (POST .../testcases/{id}/steps/{n}/
+    # attachments, см. app/routers/test_cases.py) — лимит размера одного PNG/JPG.
+    TH_TESTCASE_ATTACHMENT_MAX_BYTES: int = int(os.getenv("TH_TESTCASE_ATTACHMENT_MAX_BYTES", "5000000"))
+
     # Базовый URL, по которому публичные ссылки на отчёты (см. app/routers/share.py)
     # видны снаружи процесса test_hub — не обязательно совпадает с TH_PORT/127.0.0.1
     # (за прокси/туннелем). Значение по умолчанию годится только для локальной разработки.

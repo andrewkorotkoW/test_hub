@@ -287,11 +287,19 @@ class XfailCheckResult(BaseModel):
     count: int
 
 
+class TestCaseAttachment(BaseModel):
+    id: int
+    step_n: int
+    url: str
+    source: Literal["allure", "manual"]
+    created_at: str
+
+
 class TestCaseStep(BaseModel):
     n: int
     action: str
     expected: str
-    attachments: list[str] = Field(default_factory=list)
+    attachments: list[TestCaseAttachment] = Field(default_factory=list)
 
 
 class TestCaseStepInput(BaseModel):
@@ -312,7 +320,7 @@ class TestCase(BaseModel):
     updated_at: Optional[str] = None
     updated_by: Optional[str] = None
     status: Optional[str] = None
-    attachments: list[str] = Field(default_factory=list)
+    attachments: list[TestCaseAttachment] = Field(default_factory=list)
 
 
 class TestCaseCreate(BaseModel):
