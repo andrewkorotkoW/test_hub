@@ -429,6 +429,10 @@ button.color-dot:hover { transform: scale(1.15); border-color: var(--text-muted)
 .status-pill.xfail { background: var(--xfail); }
 .status-pill.flaky { background: var(--flaky); }
 .status-pill.unknown { background: var(--unknown); }
+/* тест-кейс без ни одного прогона (nodeid не встречается в последнем прогоне
+   стенда по умолчанию, либо кейс без автотеста вовсе) — серая пилюля, как у
+   queued/cancelled, не путать с skipped (реальный skip в прогоне) */
+.status-pill.none { background: var(--text-muted); }
 
 .run-status-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
 
@@ -675,6 +679,10 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 .modal-box .field { margin-bottom: 12px; }
 .modal-box .field:first-of-type { margin-top: 14px; }
 .modal-actions { display: flex; justify-content: space-between; margin-top: 18px; gap: 10px; }
+/* форма кейса (название/шаги/скриншоты) не помещается в стандартные 420px */
+.modal-box-lg { max-width: 720px; max-height: 88vh; overflow-y: auto; }
+.tc-attachment-modal { max-width: min(90vw, 900px); text-align: center; }
+.tc-attachment-modal img { max-width: 100%; max-height: 76vh; border-radius: var(--radius); }
 
 /* ---------- тур по разделам (ui/tour.js) ---------- */
 /* подсветка целевого элемента — рамка + свечение elevation.glow, без затемнения
@@ -1232,4 +1240,148 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
   .project-card .logo-box { height: 90px; }
   .project-card .project-logo-big { max-height: 90px; }
   .project-card .logo-placeholder { width: 72px; height: 72px; font-size: 26px; }
+}
+
+/* ---------- вкладка «Тест-кейсы» (docs/missions/testcases/mockups.html — оба
+   вида, дерево+карточка по умолчанию и таблица-аккордеон; переключатель вида
+   хранится в localStorage по образцу cov-tree-collapsed, см. project.js) ---------- */
+.tc-toolbar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+.tc-toolbar h2 { margin: 0; }
+/* тот же сегментный переключатель, что .run-view-toggle у окна прогона, без
+   margin-left:auto — здесь его роль играет .toolbar-spacer следом */
+.tc-view-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.tc-view-toggle button { border: none; border-radius: 0; margin: 0; padding: 6px 12px; font-size: 12px; }
+.tc-view-toggle button + button { border-left: 1px solid var(--border); }
+.tc-view-toggle button[aria-current="true"] { background: var(--accent); color: var(--accent-text); }
+
+.tc-filters-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.tc-filters-bar .tc-search { flex: 1 1 240px; max-width: 360px; }
+.tc-filters-bar select { flex: 0 0 auto; }
+.tc-filters-bar .muted { margin-left: auto; font-size: 12px; }
+
+/* мелкая пилюля-тег (приоритет, источник generated/manual) — по образцу .role-badge,
+   но нейтральная (не акцентный цвет — это не ссылка/действие) */
+.tc-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+/* вид 1 — дерево разделов + карточка кейса */
+.tc-layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 14px; align-items: start; }
+.tc-layout[hidden] { display: none; }
+.tc-tree-pane, .tc-card-pane { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); min-width: 0; }
+.tc-tree-pane { max-height: 620px; overflow: auto; padding: 8px 6px; }
+.tc-card-pane { padding: 16px 18px; max-height: 620px; overflow: auto; }
+.tc-tree-section-label { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 8px; font-weight: 700; font-size: 13px; }
+.tc-tree-section-label .count { font-size: 11px; font-weight: 600; color: var(--text-muted); }
+.tc-tree-area-label { padding: 5px 8px 5px 16px; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted); font-weight: 600; }
+.tc-tree-case {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 8px 6px 24px;
+  border-radius: 6px;
+}
+.tc-tree-case:hover { background: var(--surface-hover); color: var(--text); border-color: transparent; }
+/* тот же приём подсветки активного пункта, что sidebar-item-active в DESIGN.md */
+.tc-tree-case.active { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.tc-tree-case .tc-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; background: var(--text-muted); }
+.tc-tree-case .tc-dot.passed { background: var(--passed); }
+.tc-tree-case .tc-dot.failed { background: var(--failed); }
+.tc-tree-case .tc-dot.xfail { background: var(--xfail); }
+.tc-tree-case .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.tc-case-title { font-size: 17px; font-weight: 700; margin: 0 0 4px; }
+.tc-case-crumbs { color: var(--text-muted); font-size: 12px; margin-bottom: 8px; }
+.tc-case-meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+.tc-case-nodeid { display: flex; align-items: center; gap: 8px; margin: 10px 0; font-size: 13px; flex-wrap: wrap; }
+.tc-case-nodeid code { background: var(--surface-hover); border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; font-size: 12px; word-break: break-all; }
+.tc-precondition {
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-hover);
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.tc-precondition b { color: var(--text); }
+.tc-steps-table { margin-top: 12px; }
+.tc-steps-table td:first-child { width: 32px; color: var(--text-muted); font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.tc-steps-table td:nth-child(2) { width: 42%; }
+.tc-step-attachments { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.tc-thumb {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  padding: 0;
+  background: var(--surface-hover);
+}
+.tc-thumb:hover { border-color: var(--accent); }
+.tc-case-actions { display: flex; gap: 8px; margin-top: 16px; }
+
+/* вид 2 — таблица с раскрывающимися шагами (аккордеон) */
+.tc-table-wrap { overflow-x: auto; }
+.tc-table-wrap[hidden] { display: none; }
+.tc-section-row td { background: var(--surface-hover); font-weight: 700; font-size: 12px; letter-spacing: .03em; color: var(--text-muted); text-transform: uppercase; padding: 8px 10px; }
+.tc-case-row { cursor: pointer; }
+.tc-case-row:hover { background: var(--surface-hover); }
+.tc-case-row .tc-chev { display: inline-block; width: 14px; color: var(--text-muted); transition: transform .12s; }
+.tc-case-row.open .tc-chev { transform: rotate(90deg); }
+.tc-case-row .title-cell { display: flex; align-items: center; gap: 8px; }
+.tc-detail-row td { padding: 0; }
+.tc-detail-row[hidden] { display: none; }
+.tc-detail-row .inner { padding: 14px 20px 18px 34px; background: color-mix(in srgb, var(--surface-hover) 55%, transparent); }
+/* длинный nodeid без пробелов иначе раздвигает таблицу и обрезает колонку
+   «Правка» за пределы .card — тот же приём, что у #xfail-rows/.route-cell */
+.tc-table-wrap td code { word-break: break-all; }
+
+/* модалка создания/правки кейса */
+.tc-edit-steps { display: flex; flex-direction: column; gap: 10px; }
+.tc-edit-step-row { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+.tc-edit-step-row .row-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--text-muted); font-weight: 600; }
+.tc-edit-step-row textarea { width: 100%; }
+.tc-edit-step-attachments { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+.tc-edit-step-attachments .tc-thumb-wrap { position: relative; }
+.tc-edit-step-attachments .tc-thumb-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  line-height: 1;
+  border-radius: 50%;
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+  font-size: 11px;
+}
+.tc-edit-step-attachments input[type="file"] { font-size: 12px; max-width: 180px; }
+
+@media (max-width: 900px) {
+  .tc-layout { grid-template-columns: 1fr; }
+  .tc-tree-pane { max-height: 280px; }
+}
+@media (max-width: 640px) {
+  .tc-toolbar { gap: 8px; }
+  .tc-filters-bar .muted { margin-left: 0; }
 }

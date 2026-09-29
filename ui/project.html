@@ -29,6 +29,7 @@
       <a href="#schedules" data-tab="schedules">Расписания</a>
       <a href="#history" data-tab="history">История</a>
       <a href="#flaky" data-tab="flaky">Флаки</a>
+      <a href="#testcases" data-tab="testcases">Тест-кейсы</a>
     </nav>
 
     <div class="tab-panel" data-tab-panel="dashboard">
@@ -290,7 +291,106 @@
       </div>
     </div>
     </div>
+
+    <div class="tab-panel" data-tab-panel="testcases" hidden>
+    <div class="card" id="testcases-card">
+      <div class="tc-toolbar">
+        <h2>Тест-кейсы</h2>
+        <div class="tc-view-toggle" id="tc-view-toggle">
+          <button type="button" data-view="tree" aria-current="true">Дерево</button>
+          <button type="button" data-view="table" aria-current="false">Таблица</button>
+        </div>
+        <div class="toolbar-spacer"></div>
+        <button id="tc-import-btn" hidden>Импортировать черновики</button>
+        <button id="tc-new-btn" class="primary" hidden>Новый кейс</button>
+      </div>
+      <div id="tc-toolbar-msg" class="hint-box" hidden></div>
+      <div id="tc-error" class="error-box" hidden></div>
+
+      <div class="tc-filters-bar">
+        <input type="search" id="tc-search-input" class="tc-search" placeholder="Поиск по названию, шагам, nodeid…">
+        <select id="tc-filter-section"><option value="">Все разделы</option></select>
+        <select id="tc-filter-status">
+          <option value="">Любой статус</option>
+          <option value="passed">Успешно</option>
+          <option value="failed">Упал</option>
+          <option value="xfail">Xfail</option>
+          <option value="none">Нет прогона</option>
+        </select>
+        <select id="tc-filter-hastest">
+          <option value="">Есть/нет автотест</option>
+          <option value="yes">Есть автотест</option>
+          <option value="no">Нет автотеста</option>
+        </select>
+        <span class="muted" id="tc-count"></span>
+      </div>
+
+      <div id="tc-view-tree" class="tc-layout">
+        <div class="tc-tree-pane" id="tc-tree-pane"><p class="muted">Загрузка…</p></div>
+        <div class="tc-card-pane" id="tc-card-pane"><p class="muted">Выберите кейс слева.</p></div>
+      </div>
+
+      <div id="tc-view-table" class="tc-table-wrap" hidden>
+        <table>
+          <thead>
+            <tr><th>Название</th><th>Раздел</th><th>Приоритет</th><th>Автотест</th><th>Статус</th><th></th></tr>
+          </thead>
+          <tbody id="tc-table-rows"></tbody>
+        </table>
+      </div>
+    </div>
+    </div>
   </main>
+    </div>
+  </div>
+
+  <div id="tc-edit-modal-overlay" class="modal-overlay" hidden>
+    <div class="modal-box modal-box-lg">
+      <h2 id="tc-edit-modal-title">Новый кейс</h2>
+      <div class="field">
+        <label for="tc-edit-section">Раздел</label>
+        <input id="tc-edit-section" placeholder="например api/notifications">
+      </div>
+      <div class="field">
+        <label for="tc-edit-title">Название</label>
+        <input id="tc-edit-title">
+      </div>
+      <div class="field">
+        <label for="tc-edit-precondition">Предусловия</label>
+        <textarea id="tc-edit-precondition" rows="2"></textarea>
+      </div>
+      <div class="field">
+        <label for="tc-edit-priority">Приоритет</label>
+        <select id="tc-edit-priority">
+          <option value="high">высокий</option>
+          <option value="medium" selected>средний</option>
+          <option value="low">низкий</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="tc-edit-nodeid">Nodeid автотеста (необязательно)</label>
+        <input id="tc-edit-nodeid" placeholder="tests/api/.../test_x.py::test_y">
+      </div>
+      <div class="field">
+        <label>Шаги</label>
+        <div id="tc-edit-steps" class="tc-edit-steps"></div>
+        <button type="button" id="tc-edit-add-step-btn">+ Шаг</button>
+      </div>
+      <div id="tc-edit-error" class="error-box" hidden></div>
+      <div class="modal-actions">
+        <button id="tc-edit-cancel-btn">Отмена</button>
+        <button id="tc-edit-save-btn" class="primary">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="tc-attachment-modal-overlay" class="modal-overlay" hidden>
+    <div class="modal-box tc-attachment-modal">
+      <img id="tc-attachment-modal-img" alt="Скриншот шага">
+      <div class="modal-actions">
+        <span></span>
+        <button id="tc-attachment-modal-close-btn">Закрыть</button>
+      </div>
     </div>
   </div>
 
@@ -331,6 +431,7 @@
        и кольца по областям — чистый inline SVG без библиотек, см. project.js). -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="sections-tree-logic.js"></script>
+  <script src="testcases-logic.js"></script>
   <script src="project.js"></script>
 </body>
 </html>
