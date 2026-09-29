@@ -114,6 +114,30 @@ CREATE TABLE IF NOT EXISTS xfail_registry (
     note TEXT,
     UNIQUE (project, stand, test)
 );
+
+CREATE TABLE IF NOT EXISTS test_cases (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project TEXT NOT NULL REFERENCES projects(name) ON DELETE CASCADE,
+    section TEXT NOT NULL,
+    title TEXT NOT NULL,
+    steps TEXT NOT NULL DEFAULT '[]',
+    precondition TEXT,
+    priority TEXT NOT NULL DEFAULT 'medium',
+    nodeid TEXT,
+    source TEXT NOT NULL DEFAULT 'generated' CHECK (source IN ('generated', 'manual')),
+    updated_at TEXT,
+    updated_by TEXT,
+    UNIQUE (project, nodeid)
+);
+
+CREATE TABLE IF NOT EXISTS test_case_attachments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    case_id INTEGER NOT NULL REFERENCES test_cases(id) ON DELETE CASCADE,
+    step_n INTEGER NOT NULL,
+    path TEXT NOT NULL,
+    source TEXT NOT NULL CHECK (source IN ('allure', 'manual')),
+    created_at TEXT NOT NULL
+);
 """
 
 SEED_USERS = [
