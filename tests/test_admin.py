@@ -179,8 +179,10 @@ async def test_admin_delete_unknown_user_is_404(superadmin_client):
 
 
 async def test_delete_run_cascades_run_events(
-    superadmin_client, qa_client, isolated_allure_dir, runnable_project_dir
+    superadmin_client, qa_client, isolated_allure_dir, isolated_frames_dir, runnable_project_dir
 ):
+    from app.core import runner
+
     await register_project(qa_client, "cascade_proj", runnable_project_dir)
     create_resp = await qa_client.post(
         "/api/projects/cascade_proj/runs", json={"target": "tests/test_sample.py"}
@@ -203,6 +205,13 @@ async def test_delete_run_cascades_run_events(
         conn.close()
     assert events_before > 0
 
+    # Кадр прогона (этап 2 окна прогона) — тоже должен исчезнуть при удалении, а
+    # не остаться сиротой на диске (см. shutil.rmtree(runner.frames_dir(...)) в
+    # app/routers/admin.py рядом с allure_dir).
+    frame_path = runner.frames_dir(run_id) / "abc0123456789def" / "1.png"
+    frame_path.parent.mkdir(parents=True)
+    frame_path.write_bytes(b"fake-png")
+
     resp = await superadmin_client.delete(f"/api/admin/runs/{run_id}")
     assert resp.status_code == 204
 
@@ -216,6 +225,7 @@ async def test_delete_run_cascades_run_events(
         conn.close()
     assert run_row is None
     assert events_after == 0
+    assert not runner.frames_dir(run_id).exists()
 
 
 async def test_cannot_delete_running_run(superadmin_client, qa_client, isolated_allure_dir, slow_project_dir):
