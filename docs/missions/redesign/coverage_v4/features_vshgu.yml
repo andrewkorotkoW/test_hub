@@ -1,0 +1,52 @@
+# Функциональная карта продукта ВШГУ (портал + админка + интеграции) — черновик владельца/супервизора.
+# Каждая функция привязана к тестам по префиксам путей в проекте auto_tests_vshgu (tests/api|ui/<раздел>/...).
+# Статус функции считается по последнему прогону тестов, чьи nodeid начинаются с любого из префиксов.
+project: VSHGU
+areas:
+  - name: Слушатель (внешка)
+    features:
+      - {name: Вход и онбординг, tests: [tests/ui/onboarding, tests/ui/users/test_user_login, tests/api/auth]}
+      - {name: Моё обучение (программы, потоки, модули), tests: [tests/ui/programs, tests/api/programs, tests/ui/practical_tasks/test_add_listener_to_stream]}
+      - {name: Курсы TinCan/SCORM, tests: [tests/ui/courses, tests/api/courses]}
+      - {name: Практические задания — прохождение, tests: [tests/ui/practical_tasks/test_complete_practical_task, tests/ui/practical_tasks/personal_assignment]}
+      - {name: Тесты и конструктор тестов, tests: [tests/ui/test_constructor, tests/api/tests]}
+      - {name: Опросы, tests: [tests/ui/polls, tests/api/polls]}
+      - {name: База знаний — материалы, tests: [tests/ui/knowledge_base, tests/api/knowledge_base]}
+      - {name: Достижения, tests: [tests/ui/knowledge_base/user_achievements, tests/api/achievements]}
+      - {name: Уведомления, tests: [tests/ui/notifications, tests/api/notifications]}
+      - {name: Техподдержка (тикеты), tests: [tests/ui/tickets, tests/api/tickets]}
+      - {name: Профиль и сертификаты, tests: [tests/api/certificates, tests/ui/users/test_user_profile]}
+      - {name: Игровые сессии, tests: [tests/ui/game_session, tests/api/game_session]}
+      - {name: Дашборд слушателя, tests: [tests/ui/dashboards]}
+  - name: Проверяющий / преподаватель
+    features:
+      - {name: Проверка ПЗ, tests: [tests/ui/practical_tasks/test_review_practical_task, tests/ui/practical_tasks/test_reviewer_sees_additional_materials, tests/api/users/teacher]}
+      - {name: Групповые ПЗ, tests: [tests/ui/practical_tasks/groups]}
+      - {name: Прокторинг, tests: [tests/ui/proctoring, tests/api/proctoring]}
+  - name: Администратор
+    features:
+      - {name: Пользователи и роли, tests: [tests/api/users, tests/ui/users]}
+      - {name: Фильтры и поиск пользователей, tests: [tests/ui/users/filters, tests/api/users/filters]}
+      - {name: База программ и потоки, tests: [tests/api/programs, tests/api/streams, tests/ui/streams]}
+      - {name: Создание активностей (контент), tests: [tests/api/create_activity]}
+      - {name: Расписание и AOS, tests: [tests/api/aos, tests/ui/aos]}
+      - {name: Практические задания — админка, tests: [tests/ui/practical_tasks/test_create_practical_task, tests/ui/practical_tasks/test_add_practical_task_to_schedule, tests/api/homework]}
+      - {name: Справочники, tests: [tests/api/dictionaries, tests/ui/dictionaries]}
+      - {name: Статистика обучения, tests: [tests/ui/learning_statistics, tests/api/statistics]}
+      - {name: Сертификаты — шаблоны и выдача, tests: [tests/api/certificates]}
+      - {name: База знаний — админка, tests: [tests/ui/knowledge_base/test_create_article_and_verify_in_user_ui, tests/api/knowledge_base]}
+      - {name: Инфо-баннер, tests: [tests/api/banner, tests/ui/banner]}
+      - {name: Тикеты — обработка, tests: [tests/api/tickets, tests/ui/tickets]}
+      - {name: Суперадминка / тенанты, tests: []}
+      - {name: Эксперты, tests: []}
+  - name: Интеграции
+    features:
+      - {name: БУК (внешние пользователи), tests: [tests/api/buk, tests/ui/buk]}
+      - {name: CAS (единый вход), tests: [tests/api/cas, tests/ui/cas]}
+      - {name: Альпина и МИФ (ЭБС), tests: [tests/api/alpina_and_mif, tests/ui/alpina_and_mif]}
+      - {name: LRS / xAPI, tests: [tests/api/courses/tincan]}
+      - {name: Helpdesk, tests: []}
+  - name: Сквозные сценарии
+    features:
+      - {name: E2E: программа → поток → слушатель → прохождение, tests: [tests/e2e]}
+      - {name: Smoke прод, tests: []}
