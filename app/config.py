@@ -28,8 +28,15 @@ class Settings:
     DB_PATH: Path = BASE_DIR / "workspace" / "test_hub.db"
     ALLURE_RESULTS_DIR: Path = BASE_DIR / "workspace" / "allure-results"
     ALLURE_REPORTS_DIR: Path = BASE_DIR / "workspace" / "allure-reports"
+    FRAMES_DIR: Path = BASE_DIR / "workspace" / "frames"
     SESSION_COOKIE: str = "th_session"
     SESSION_MAX_AGE: int = 7 * 24 * 3600
+
+    # Кадры UI-теста, присылаемые плагином проекта тестов (POST /api/runs/{id}/frames,
+    # см. app/routers/runs.py) — лимит размера одного PNG и общего числа кадров на
+    # прогон, чтобы случайно огромный/бесконечный поток скриншотов не забил диск.
+    TH_FRAME_MAX_BYTES: int = int(os.getenv("TH_FRAME_MAX_BYTES", "2000000"))
+    TH_FRAME_MAX_PER_RUN: int = int(os.getenv("TH_FRAME_MAX_PER_RUN", "500"))
 
     # Базовый URL, по которому публичные ссылки на отчёты (см. app/routers/share.py)
     # видны снаружи процесса test_hub — не обязательно совпадает с TH_PORT/127.0.0.1

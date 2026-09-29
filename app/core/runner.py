@@ -22,6 +22,7 @@ import asyncio
 import json
 import os
 import re
+import secrets
 import sqlite3
 import sys
 import time
@@ -34,6 +35,16 @@ from . import allure_report, flaky, xfail_registry
 from .ws import hub
 
 _COLLECT_RE = re.compile(r"^(?P<file>[\w./-]+\.py)::(?P<rest>.+)$")
+
+# Служебные строки плагина проекта тестов (test_hub_plugin, отдельная миссия в
+# auto_tests_vshgu/demo) — размечают вывод pytest по nodeid и типу строки. Формат:
+# "[TH] start <nodeid>", "[TH] end <nodeid> <status>", "[TH] step <nodeid> <n> <название>".
+# nodeid может содержать пробелы (параметризованные тесты, "test[a b]") — поэтому
+# у "end"/"step" nodeid распознаётся жадным `.+` с бэктрекингом до статуса/номера
+# шага в конце строки, а не split() по пробелу.
+_TH_START_RE = re.compile(r"^\[TH\] start (?P<nodeid>.+)$")
+_TH_END_RE = re.compile(r"^\[TH\] end (?P<nodeid>.+) (?P<test_status>\S+)$")
+_TH_STEP_RE = re.compile(r"^\[TH\] step (?P<nodeid>.+) (?P<step>\d+) (?P<name>.+)$")
 
 # Маскирование секретов в строках вывода pytest перед записью в run_events/трансляцией
 # по WebSocket (см. задачу шаринга отчёта — публичная ссылка на прогон не должна
@@ -51,6 +62,37 @@ def mask_secrets(line: str) -> str:
 _project_locks: dict[str, asyncio.Lock] = {}
 _active_procs: dict[int, "asyncio.subprocess.Process"] = {}
 _cancelled: set[int] = set()
+
+# nodeid текущего теста внутри прогона (между "[TH] start"/"[TH] end" строками от
+# плагина проекта тестов) — None вне такого блока или пока плагина в проекте нет
+# (тогда все строки, как и раньше, летят с nodeid=None). Ключ — run_id.
+_current_nodeid: dict[int, str | None] = {}
+
+# Токен прогона (см. POST /api/runs/{id}/frames): раннер генерирует его на каждый
+# запуск pytest и передаёт в env как TH_RUN_TOKEN — плагин проекта тестов
+# прикладывает его при отправке кадров, чтобы эндпоинт мог отличить свой pytest
+# от произвольного клиента. Живёт только пока прогон не завершён (см. _finalize).
+_run_tokens: dict[int, str] = {}
+
+
+def check_run_token(run_id: int, token: str | None) -> bool:
+    """Timing-safe сверка токена запроса с токеном, выданным этому прогону.
+    False и для несуществующего/уже завершённого прогона (токен уже вычищен
+    _finalize), и для пустого токена в запросе."""
+    expected = _run_tokens.get(run_id)
+    if not expected or not token:
+        return False
+    return secrets.compare_digest(token, expected)
+
+
+def th_public_url() -> str:
+    """Базовый URL test_hub, который раннер передаёт pytest как TH_URL — тот же
+    settings.TH_PUBLIC_URL, что и у публичных ссылок на отчёт (app/routers/share.py),
+    а если он не задан — локальный адрес по TH_PORT, годный для pytest, запущенного
+    на этой же машине."""
+    if settings.TH_PUBLIC_URL:
+        return settings.TH_PUBLIC_URL
+    return f"http://127.0.0.1:{settings.TH_PORT}"
 
 
 class ManualRunNotConfirmed(Exception):
@@ -100,6 +142,10 @@ def _venv_python(project_path: str, venv: str) -> Path:
 
 def allure_dir(run_id: int) -> Path:
     return settings.ALLURE_RESULTS_DIR / str(run_id)
+
+
+def frames_dir(run_id: int) -> Path:
+    return settings.FRAMES_DIR / str(run_id)
 
 
 # ------------------------------------------------------------------ обнаружение
@@ -240,21 +286,46 @@ async def cancel_run(run_id: int) -> str:
     return "not_cancellable"
 
 
+def _parse_th_line(run_id: int, line: str) -> tuple[str, str | None]:
+    """Распознаёт служебную строку плагина ("[TH] start/end/step ...") и обновляет
+    _current_nodeid этого прогона. Возвращает (kind, nodeid) для записи в run_events —
+    для обычной строки nodeid берётся из текущего контекста (или None вне него)."""
+    m = _TH_START_RE.match(line)
+    if m:
+        nodeid = m.group("nodeid").strip()
+        _current_nodeid[run_id] = nodeid
+        return "test_start", nodeid
+
+    m = _TH_END_RE.match(line)
+    if m:
+        _current_nodeid[run_id] = None
+        return "test_end", m.group("nodeid").strip()
+
+    m = _TH_STEP_RE.match(line)
+    if m:
+        return "step", m.group("nodeid").strip()
+
+    return "line", _current_nodeid.get(run_id)
+
+
 async def _log_line(run_id: int, line: str) -> None:
     line = mask_secrets(line)
+    kind, nodeid = _parse_th_line(run_id, line)
     conn = get_connection()
     try:
         conn.execute(
-            "INSERT INTO run_events (run_id, ts, line) VALUES (?, ?, ?)",
-            (run_id, datetime.now().isoformat(timespec="seconds"), line),
+            "INSERT INTO run_events (run_id, ts, line, nodeid, kind) VALUES (?, ?, ?, ?, ?)",
+            (run_id, datetime.now().isoformat(timespec="seconds"), line, nodeid, kind),
         )
         conn.commit()
     finally:
         conn.close()
-    await hub.broadcast(run_id, {"type": "line", "run_id": run_id, "line": line})
+    await hub.broadcast(run_id, {"type": kind, "run_id": run_id, "line": line, "nodeid": nodeid})
 
 
 async def _finalize(run_id: int, status: str, started_at: float, counts: dict[str, int]) -> None:
+    _current_nodeid.pop(run_id, None)
+    _run_tokens.pop(run_id, None)
     conn = get_connection()
     try:
         conn.execute(
@@ -313,6 +384,8 @@ async def _execute(
     marker: str | None = None,
     repeat: int = 1,
 ) -> None:
+    _current_nodeid[run_id] = None
+
     conn = get_connection()
     try:
         project = _get_project(conn, project_name)
@@ -339,6 +412,14 @@ async def _execute(
     args.append(f"--alluredir={results_dir}")
 
     env = os.environ.copy()
+    # Для плагина проекта тестов (test_hub_plugin, отдельная миссия): токен прогона
+    # для авторизации POST /api/runs/{id}/frames (см. check_run_token) и координаты,
+    # куда его слать. run_id уникален на каждый прогон (autoincrement), поэтому
+    # переиспользования токена между разными прогонами не бывает.
+    _run_tokens[run_id] = secrets.token_urlsafe(24)
+    env["TH_RUN_TOKEN"] = _run_tokens[run_id]
+    env["TH_URL"] = th_public_url()
+    env["TH_RUN_ID"] = str(run_id)
     if stand is not None:
         env["STAND_URL"] = stand["url"] or ""
         env["STAND_LOGIN"] = stand["login"] or ""
