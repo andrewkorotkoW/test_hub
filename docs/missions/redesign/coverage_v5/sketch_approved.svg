@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" font-family="Golos Text, Arial" font-size="12">
+<rect width="1440" height="900" fill="#f5f6f8"/>
+<defs><marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#8b93a7"/></marker></defs>
+<text x="30" y="40" font-size="20" font-weight="700" fill="#1a1d2e">Покрытие · схема продукта (набросок раскладки, без данных)</text>
+<circle cx="1100" cy="34" r="16" fill="none" stroke="#2563eb" stroke-width="5"/><text x="1125" y="30" font-size="13" fill="#1a1d2e">N из M экранов покрыто</text><text x="1125" y="46" font-size="12" fill="#6b7280">K без тестов, L с падениями</text>
+<rect x="30" y="60" width="470" height="560" rx="14" fill="#ffffff" stroke="#e2e5ec"/><text x="44" y="80" font-size="11" font-weight="700" fill="#8b93a7" letter-spacing="1">ВНЕШКА · слушатель</text>
+<rect x="520" y="60" width="270" height="560" rx="14" fill="#ffffff" stroke="#e2e5ec"/><text x="534" y="80" font-size="11" font-weight="700" fill="#8b93a7" letter-spacing="1">ПРОВЕРЯЮЩИЙ</text>
+<rect x="810" y="60" width="600" height="560" rx="14" fill="#ffffff" stroke="#e2e5ec"/><text x="824" y="80" font-size="11" font-weight="700" fill="#8b93a7" letter-spacing="1">АДМИНКА</text>
+<rect x="30" y="670" width="1380" height="170" rx="14" fill="#ffffff" stroke="#e2e5ec"/><text x="44" y="690" font-size="11" font-weight="700" fill="#8b93a7" letter-spacing="1">ИНТЕГРАЦИИ (внешние системы, стрелка — куда входят)</text>
+<line x1="135.0" y1="110" x2="305.0" y2="110" stroke="#c3c8d4" stroke-width="1.5" marker-end="url(#a)"/>
+<line x1="305.0" y1="110" x2="230.0" y2="180" stroke="#c3c8d4" stroke-width="1.5" marker-end="url(#a)"/>
+<line x1="230.0" y1="180" x2="105.0" y2="260" stroke="#c3c8d4" stroke-width="1.5" marker-end="url(#a)"/>
+<line x1="230.0" y1="180" x2="250.0" y2="260" stroke="#c3c8d4" stroke-width="1.5" marker-end="url(#a)"/>
+<line x1="230.0" y1="180" x2="395.0" y2="260" stroke="#c3c8d4" stroke-width="1.5" marker-end="url(#a)"/>
+<line x1="105.0" y1="260" x2="105.0" y2="330" stroke="#c3c8d4" stroke-width="1.5" marker-end="url(#a)"/>
+<line x1="105.0" y1="330" x2="70.0" y2="400" stroke="#c3c8d4" stroke-width="1.5" marker-end="url(#a)"/>
+<line x1="105.0" y1="330" x2="138.0" y2="400" stroke="#c3c8d4" stroke-width="1.5" marker-end="url(#a)"/>
+<line x1="105.0" y1="330" x2="196.0" y2="400" stroke="#c3c8d4" stroke-width="1.5" marker-end="url(#a)"/>
+<line x1="105.0" y1="330" x2="256.0" y2="400" stroke="#c3c8d4" stroke-width="1.5" marker-end="url(#a)"/>
+<line x1="250.0" y1="260" x2="250.0" y2="330" stroke="#c3c8d4" stroke-width="1.5" marker-end="url(#a)"/>
+<line x1="250.0" y1="330" x2="250.0" y2="470" stroke="#c3c8d4" stroke-width="1.5" marker-end="url(#a)"/>
+<line x1="395.0" y1="260" x2="395.0" y2="330" stroke="#c3c8d4" stroke-width="1.5" marker-end="url(#a)"/>
+<line x1="395.0" y1="330" x2="395.0" y2="400" stroke="#c3c8d4" stroke-width="1.5" marker-end="url(#a)"/>
+<line x1="230.0" y1="180" x2="105.0" y2="540" stroke="#c3c8d4" stroke-width="1.5" marker-end="url(#a)"/>
+<line x1="105.0" y1="540" x2="250.0" y2="540" stroke="#c3c8d4" stroke-width="1.5" marker-end="url(#a)"/>
+<line x1="230.0" y1="180" x2="405.0" y2="540" stroke="#c3c8d4" stroke-width="1.5" marker-end="url(#a)"/>
+<line x1="196.0" y1="400" x2="655.0" y2="260" stroke="#c3c8d4" stroke-width="1.5" marker-end="url(#a)"/>
+<line x1="655.0" y1="260" x2="655.0" y2="330" stroke="#c3c8d4" stroke-width="1.5" marker-end="url(#a)"/>
+<line x1="655.0" y1="330" x2="655.0" y2="400" stroke="#c3c8d4" stroke-width="1.5" marker-end="url(#a)"/>
+<line x1="138.0" y1="400" x2="655.0" y2="470" stroke="#c3c8d4" stroke-width="1.5" marker-end="url(#a)"/>
+<line x1="915.0" y1="110" x2="915.0" y2="180" stroke="#c3c8d4" stroke-width="1.5" marker-end="url(#a)"/>
+<line x1="1085.0" y1="110" x2="1085.0" y2="180" stroke="#c3c8d4" stroke-width="1.5" marker-end="url(#a)"/>
+<line x1="1085.0" y1="180" x2="1085.0" y2="250" stroke="#c3c8d4" stroke-width="1.5" marker-end="url(#a)"/>
+<line x1="1255.0" y1="180" x2="1255.0" y2="250" stroke="#c3c8d4" stroke-width="1.5" marker-end="url(#a)"/>
+<line x1="1085.0" y1="250" x2="915.0" y2="320" stroke="#c3c8d4" stroke-width="1.5" marker-end="url(#a)"/>
+<line x1="1085.0" y1="250" x2="1085.0" y2="320" stroke="#c3c8d4" stroke-width="1.5" marker-end="url(#a)"/>
+<line x1="1085.0" y1="250" x2="1255.0" y2="320" stroke="#c3c8d4" stroke-width="1.5" marker-end="url(#a)"/>
+<line x1="895.0" y1="720" x2="915.0" y2="110" stroke="#c3c8d4" stroke-width="1.5" marker-end="url(#a)"/>
+<line x1="115.0" y1="720" x2="135.0" y2="110" stroke="#c3c8d4" stroke-width="1.5" marker-end="url(#a)"/>
+<line x1="250.0" y1="720" x2="250.0" y2="260" stroke="#c3c8d4" stroke-width="1.5" marker-end="url(#a)"/>
+<line x1="95.0" y1="790" x2="70.0" y2="400" stroke="#c3c8d4" stroke-width="1.5" marker-end="url(#a)"/>
+<line x1="395.0" y1="720" x2="395.0" y2="330" stroke="#c3c8d4" stroke-width="1.5" marker-end="url(#a)"/>
+<line x1="1085.0" y1="390" x2="395.0" y2="260" stroke="#c3c8d4" stroke-width="1.5" marker-end="url(#a)"/>
+<line x1="1255.0" y1="390" x2="395.0" y2="400" stroke="#c3c8d4" stroke-width="1.5" marker-end="url(#a)"/>
+<rect x="60" y="90" width="150" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="74" cy="110" r="5" fill="#b8bfcc"/><text x="86" y="114" fill="#1a1d2e">Вход</text>
+<rect x="230" y="90" width="150" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="244" cy="110" r="5" fill="#b8bfcc"/><text x="256" y="114" fill="#1a1d2e">Онбординг</text>
+<rect x="145" y="160" width="170" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="159" cy="180" r="5" fill="#b8bfcc"/><text x="171" y="184" fill="#1a1d2e">Личный кабинет</text>
+<rect x="40" y="240" width="130" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="54" cy="260" r="5" fill="#b8bfcc"/><text x="66" y="264" fill="#1a1d2e">Моё обучение</text>
+<rect x="185" y="240" width="130" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="199" cy="260" r="5" fill="#b8bfcc"/><text x="211" y="264" fill="#1a1d2e">База знаний</text>
+<rect x="330" y="240" width="130" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="344" cy="260" r="5" fill="#b8bfcc"/><text x="356" y="264" fill="#1a1d2e">Уведомления</text>
+<rect x="40" y="310" width="130" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="54" cy="330" r="5" fill="#b8bfcc"/><text x="66" y="334" fill="#1a1d2e">Программа</text>
+<rect x="185" y="310" width="130" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="199" cy="330" r="5" fill="#b8bfcc"/><text x="211" y="334" fill="#1a1d2e">Материал</text>
+<rect x="330" y="310" width="130" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="344" cy="330" r="5" fill="#b8bfcc"/><text x="356" y="334" fill="#1a1d2e">Техподдержка</text>
+<rect x="40" y="380" width="60" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="54" cy="400" r="5" fill="#b8bfcc"/><text x="66" y="404" fill="#1a1d2e">Курс</text>
+<rect x="108" y="380" width="60" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="122" cy="400" r="5" fill="#b8bfcc"/><text x="134" y="404" fill="#1a1d2e">Тест</text>
+<rect x="176" y="380" width="40" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="190" cy="400" r="5" fill="#b8bfcc"/><text x="202" y="404" fill="#1a1d2e">ПЗ</text>
+<rect x="224" y="380" width="64" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="238" cy="400" r="5" fill="#b8bfcc"/><text x="250" y="404" fill="#1a1d2e">Опрос</text>
+<rect x="185" y="450" width="130" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="199" cy="470" r="5" fill="#b8bfcc"/><text x="211" y="474" fill="#1a1d2e">Достижения</text>
+<rect x="330" y="380" width="130" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="344" cy="400" r="5" fill="#b8bfcc"/><text x="356" y="404" fill="#1a1d2e">Тикет</text>
+<rect x="40" y="520" width="130" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="54" cy="540" r="5" fill="#b8bfcc"/><text x="66" y="544" fill="#1a1d2e">Профиль</text>
+<rect x="185" y="520" width="130" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="199" cy="540" r="5" fill="#b8bfcc"/><text x="211" y="544" fill="#1a1d2e">Сертификаты</text>
+<rect x="330" y="520" width="150" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="344" cy="540" r="5" fill="#b8bfcc"/><text x="356" y="544" fill="#1a1d2e">Дашборд слушателя</text>
+<rect x="560" y="240" width="190" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="574" cy="260" r="5" fill="#b8bfcc"/><text x="586" y="264" fill="#1a1d2e">Практические задания</text>
+<rect x="560" y="310" width="190" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="574" cy="330" r="5" fill="#b8bfcc"/><text x="586" y="334" fill="#1a1d2e">Новые / Отвечено</text>
+<rect x="560" y="380" width="190" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="574" cy="400" r="5" fill="#b8bfcc"/><text x="586" y="404" fill="#1a1d2e">Проверка ответа</text>
+<rect x="560" y="450" width="190" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="574" cy="470" r="5" fill="#b8bfcc"/><text x="586" y="474" fill="#1a1d2e">Прокторинг</text>
+<rect x="840" y="90" width="150" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="854" cy="110" r="5" fill="#b8bfcc"/><text x="866" y="114" fill="#1a1d2e">Пользователи</text>
+<rect x="1010" y="90" width="150" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="1024" cy="110" r="5" fill="#b8bfcc"/><text x="1036" y="114" fill="#1a1d2e">База программ</text>
+<rect x="1180" y="90" width="150" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="1194" cy="110" r="5" fill="#b8bfcc"/><text x="1206" y="114" fill="#1a1d2e">Справочники</text>
+<rect x="840" y="160" width="150" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="854" cy="180" r="5" fill="#b8bfcc"/><text x="866" y="184" fill="#1a1d2e">Карточка пользователя</text>
+<rect x="1010" y="160" width="150" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="1024" cy="180" r="5" fill="#b8bfcc"/><text x="1036" y="184" fill="#1a1d2e">Потоки → Модули</text>
+<rect x="1180" y="160" width="150" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="1194" cy="180" r="5" fill="#b8bfcc"/><text x="1206" y="184" fill="#1a1d2e">Статистика</text>
+<rect x="1010" y="230" width="150" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="1024" cy="250" r="5" fill="#b8bfcc"/><text x="1036" y="254" fill="#1a1d2e">Активности (контент)</text>
+<rect x="1180" y="230" width="150" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="1194" cy="250" r="5" fill="#b8bfcc"/><text x="1206" y="254" fill="#1a1d2e">Сертификаты (адм.)</text>
+<rect x="840" y="300" width="150" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="854" cy="320" r="5" fill="#b8bfcc"/><text x="866" y="324" fill="#1a1d2e">ПЗ (адм.)</text>
+<rect x="1010" y="300" width="150" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="1024" cy="320" r="5" fill="#b8bfcc"/><text x="1036" y="324" fill="#1a1d2e">Конструктор тестов</text>
+<rect x="1180" y="300" width="150" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="1194" cy="320" r="5" fill="#b8bfcc"/><text x="1206" y="324" fill="#1a1d2e">Опросы (адм.)</text>
+<rect x="840" y="370" width="150" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="854" cy="390" r="5" fill="#b8bfcc"/><text x="866" y="394" fill="#1a1d2e">Расписание / АОС</text>
+<rect x="1010" y="370" width="150" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="1024" cy="390" r="5" fill="#b8bfcc"/><text x="1036" y="394" fill="#1a1d2e">Рассылки</text>
+<rect x="1180" y="370" width="150" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="1194" cy="390" r="5" fill="#b8bfcc"/><text x="1206" y="394" fill="#1a1d2e">Тикеты (адм.)</text>
+<rect x="840" y="440" width="150" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="854" cy="460" r="5" fill="#b8bfcc"/><text x="866" y="464" fill="#1a1d2e">База знаний (адм.)</text>
+<rect x="1010" y="440" width="150" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="1024" cy="460" r="5" fill="#b8bfcc"/><text x="1036" y="464" fill="#1a1d2e">Инфо-баннер</text>
+<rect x="1180" y="440" width="150" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="1194" cy="460" r="5" fill="#b8bfcc"/><text x="1206" y="464" fill="#1a1d2e">Игровые сессии</text>
+<rect x="840" y="510" width="150" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="854" cy="530" r="5" fill="#b8bfcc"/><text x="866" y="534" fill="#1a1d2e">Суперадминка / тенанты</text>
+<rect x="1010" y="510" width="150" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="1024" cy="530" r="5" fill="#b8bfcc"/><text x="1036" y="534" fill="#1a1d2e">Эксперты</text>
+<rect x="840" y="700" width="110" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="854" cy="720" r="5" fill="#b8bfcc"/><text x="866" y="724" fill="#1a1d2e">БУК</text>
+<rect x="60" y="700" width="110" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="74" cy="720" r="5" fill="#b8bfcc"/><text x="86" y="724" fill="#1a1d2e">CAS</text>
+<rect x="185" y="700" width="130" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="199" cy="720" r="5" fill="#b8bfcc"/><text x="211" y="724" fill="#1a1d2e">Альпина / МИФ</text>
+<rect x="40" y="770" width="110" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="54" cy="790" r="5" fill="#b8bfcc"/><text x="66" y="794" fill="#1a1d2e">LRS / xAPI</text>
+<rect x="330" y="700" width="130" height="40" rx="10" fill="#eef0f5" stroke="#cfd4de"/><circle cx="344" cy="720" r="5" fill="#b8bfcc"/><text x="356" y="724" fill="#1a1d2e">Helpdesk</text>
+<g transform="translate(560,530)"><text x="0" y="0" font-size="11" fill="#6b7280">Цвет точки в блоке — светофор по последнему прогону:</text><circle cx="8" cy="18" r="5" fill="#22c55e"/><text x="18" y="22" font-size="11" fill="#6b7280">покрыто и проходит</text><circle cx="8" cy="36" r="5" fill="#f5b642"/><text x="18" y="40" font-size="11" fill="#6b7280">частично (xfail/skipped)</text><circle cx="8" cy="54" r="5" fill="#ff4d6d"/><text x="18" y="58" font-size="11" fill="#6b7280">есть падения</text><circle cx="8" cy="72" r="5" fill="#b8bfcc"/><text x="18" y="76" font-size="11" fill="#6b7280">тестов нет · наведение — список тестов</text></g>
+</svg>
