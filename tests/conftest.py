@@ -175,6 +175,14 @@ def isolated_allure_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "ALLURE_REPORTS_DIR", tmp_path / "allure-reports")
 
 
+@pytest.fixture()
+def isolated_frames_dir(tmp_path, monkeypatch):
+    """Как isolated_allure_dir выше, но для settings.FRAMES_DIR (кадры POST
+    /api/runs/{id}/frames, app/core/runner.py::frames_dir) — без изоляции тесты
+    писали бы PNG в BASE_DIR/workspace/frames боевого репозитория."""
+    monkeypatch.setattr(settings, "FRAMES_DIR", tmp_path / "frames")
+
+
 async def register_project(client, name, path, venv=".venv"):
     resp = await client.post("/api/projects", json={"name": name, "path": str(path), "venv": venv})
     assert resp.status_code == 201, resp.text

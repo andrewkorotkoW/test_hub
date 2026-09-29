@@ -194,6 +194,7 @@ def delete_row(
         conn.execute("DELETE FROM runs WHERE id = ?", (numeric_id,))
         conn.commit()
         shutil.rmtree(runner.allure_dir(numeric_id), ignore_errors=True)
+        shutil.rmtree(runner.frames_dir(numeric_id), ignore_errors=True)
         return
 
     if table == "run_events":

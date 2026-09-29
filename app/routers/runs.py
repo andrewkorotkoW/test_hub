@@ -1,7 +1,10 @@
+import hashlib
 import json
+import re
 import sqlite3
+from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile, WebSocket, WebSocketDisconnect, status
 from fastapi.responses import Response
 
 from ..config import settings
@@ -10,6 +13,12 @@ from ..core.ws import hub
 from ..db import get_connection
 from ..deps import get_current_user, get_db, require_roles
 from ..schemas import RunCreate
+
+_FRAME_HASH_RE = re.compile(r"^[0-9a-f]{16}$")
+
+
+def _nodeid_hash(nodeid: str) -> str:
+    return hashlib.sha1(nodeid.encode("utf-8")).hexdigest()[:16]
 
 router = APIRouter(prefix="/api", tags=["runs"])
 ws_router = APIRouter(tags=["runs-ws"])
@@ -157,6 +166,90 @@ async def cancel_run(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Run is not running or queued")
     row = _get_run_or_404(conn, run_id)
     return _run_payload(row)
+
+
+def _bearer_token(authorization: str | None) -> str | None:
+    if not authorization:
+        return None
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        return None
+    return token
+
+
+@router.post("/runs/{run_id}/frames", status_code=status.HTTP_201_CREATED)
+async def upload_frame(
+    run_id: int,
+    nodeid: str = Form(...),
+    step: int = Form(...),
+    file: UploadFile = File(...),
+    authorization: str | None = Header(default=None),
+    conn: sqlite3.Connection = Depends(get_db),
+) -> dict:
+    """Приём кадра UI-теста от плагина проекта тестов (отдельная миссия в
+    auto_tests_vshgu/demo) во время прогона. Авторизация — токеном прогона, а
+    не пользовательской сессией: заголовок `Authorization: Bearer <TH_RUN_TOKEN>`
+    с тем же токеном, что раннер передал pytest в env (см. app/core/runner.py::
+    _execute, check_run_token). 401 — токен не совпал или прогон уже не running
+    (токен раннер вычищает в _finalize, поэтому это одна и та же проверка)."""
+    row = conn.execute("SELECT status FROM runs WHERE id = ?", (run_id,)).fetchone()
+    if row is None or row["status"] != "running":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Run is not running")
+    if not runner.check_run_token(run_id, _bearer_token(authorization)):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid run token")
+
+    raw = await file.read()
+    if len(raw) > settings.TH_FRAME_MAX_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Frame exceeds TH_FRAME_MAX_BYTES ({settings.TH_FRAME_MAX_BYTES} bytes)",
+        )
+
+    frame_count = conn.execute(
+        "SELECT COUNT(*) FROM run_events WHERE run_id = ? AND kind = 'frame'", (run_id,)
+    ).fetchone()[0]
+    if frame_count >= settings.TH_FRAME_MAX_PER_RUN:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Run already has TH_FRAME_MAX_PER_RUN frames ({settings.TH_FRAME_MAX_PER_RUN})",
+        )
+
+    nodeid_hash = _nodeid_hash(nodeid)
+    rel_path = f"{nodeid_hash}/{step}.png"
+    dest = runner.frames_dir(run_id) / rel_path
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(raw)
+
+    conn.execute(
+        "INSERT INTO run_events (run_id, ts, line, nodeid, kind) VALUES (?, ?, ?, ?, 'frame')",
+        (run_id, datetime.now().isoformat(timespec="seconds"), rel_path, nodeid),
+    )
+    conn.commit()
+
+    url = f"/api/runs/{run_id}/frames/{rel_path}"
+    await hub.broadcast(
+        run_id, {"type": "frame", "run_id": run_id, "nodeid": nodeid, "step": step, "url": url}
+    )
+    return {"url": url}
+
+
+@router.get("/runs/{run_id}/frames/{nodeid_hash}/{step}.png")
+def get_frame_file(
+    run_id: int,
+    nodeid_hash: str,
+    step: int,
+    conn: sqlite3.Connection = Depends(get_db),
+    _user: sqlite3.Row = Depends(get_current_user),
+) -> Response:
+    """Сама картинка кадра — авторизация обычной пользовательской сессией (не
+    токеном прогона, тот только для приёма от pytest в upload_frame выше)."""
+    _get_run_or_404(conn, run_id)
+    if not _FRAME_HASH_RE.match(nodeid_hash):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Frame not found")
+    path = runner.frames_dir(run_id) / nodeid_hash / f"{step}.png"
+    if not path.is_file():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Frame not found")
+    return Response(content=path.read_bytes(), media_type="image/png")
 
 
 def _ws_user(websocket: WebSocket) -> sqlite3.Row | None:
