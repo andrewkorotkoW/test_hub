@@ -495,3 +495,62 @@ class SectionsTree(BaseModel):
     project: str
     generated_at: str
     kinds: list[SectionKind]
+
+
+class ProductMapCanvas(BaseModel):
+    width: float
+    height: float
+
+
+class ProductMapZone(BaseModel):
+    id: str
+    label: str
+    x: float
+    y: float
+    w: float
+    h: float
+
+
+class ProductMapSampleTest(BaseModel):
+    nodeid: str
+    name: str
+
+
+class ProductMapNode(BaseModel):
+    id: str
+    label: str
+    zone: str
+    x: float
+    y: float
+    w: float
+    h: float
+    target: Optional[str] = None
+    state: Literal["green", "yellow", "red", "grey"]
+    tests_count: dict[str, int]
+    sample_tests: list[ProductMapSampleTest]
+
+
+class ProductMapEdge(BaseModel):
+    source: str
+    target: str
+
+
+class ProductMapSummary(BaseModel):
+    total: int
+    covered: int
+    no_tests: int
+    failing: int
+
+
+class ProductMap(BaseModel):
+    project: str
+    stand: str
+    generated_at: str
+    source: Literal["file", "fallback"]
+    message: Optional[str] = None
+    run_id: Optional[int] = None
+    canvas: ProductMapCanvas
+    zones: list[ProductMapZone]
+    nodes: list[ProductMapNode]
+    edges: list[ProductMapEdge]
+    summary: ProductMapSummary

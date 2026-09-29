@@ -1,0 +1,69 @@
+# Маленькая карта продукта Demo — для проверки загрузки реального файла (не fallback
+# по дереву тестов). Формат см. app/core/product_map.py::parse_layout.
+project: Demo
+canvas:
+  width: 620
+  height: 300
+zones:
+  - id: storefront
+    label: "Витрина"
+    x: 20
+    y: 20
+    w: 380
+    h: 260
+  - id: back_office
+    label: "Личный кабинет"
+    x: 420
+    y: 20
+    w: 180
+    h: 260
+nodes:
+  - id: auth
+    label: "Вход"
+    zone: storefront
+    x: 40
+    y: 55
+    w: 160
+    h: 40
+    tests: [tests/api/auth, tests/ui/auth]
+  - id: catalog
+    label: "Каталог"
+    zone: storefront
+    x: 220
+    y: 55
+    w: 160
+    h: 40
+    tests: [tests/api/catalog, tests/ui/catalog]
+  - id: orders
+    label: "Заказы"
+    zone: storefront
+    x: 40
+    y: 130
+    w: 160
+    h: 40
+    tests: [tests/api/orders]
+  - id: purchase_flow
+    label: "Сквозная покупка"
+    zone: storefront
+    x: 220
+    y: 130
+    w: 160
+    h: 40
+    tests: [tests/e2e/test_purchase_flow]
+  - id: users
+    label: "Пользователи"
+    zone: back_office
+    x: 440
+    y: 55
+    w: 140
+    h: 40
+    tests: [tests/api/users]
+edges:
+  - from: auth
+    to: catalog
+  - from: catalog
+    to: orders
+  - from: orders
+    to: purchase_flow
+  - from: users
+    to: auth
