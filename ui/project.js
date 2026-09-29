@@ -2285,4 +2285,18 @@
   if (runParam) {
     await openRun(Number(runParam));
   }
+
+  // Глубокая ссылка со страницы «Покрытие» (схема продукта, ui/coverage.js
+  // goToNodeTests): project.html?name=...&target=<путь>[\n<путь>...]#run —
+  // открывает вкладку «Запуск» с заполненным ручным полем цели вместо дерева
+  // разделов (см. manual-target-spoiler/manualTargetInput в ui/project.html).
+  const targetParam = params.get("target");
+  if (targetParam) {
+    manualTargetInput.value = targetParam;
+    const spoiler = manualTargetInput.closest("details");
+    if (spoiler) spoiler.open = true;
+    if (window.location.hash !== "#run") window.location.hash = "run";
+    renderActiveTab();
+    document.getElementById("tests-card").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 })();
