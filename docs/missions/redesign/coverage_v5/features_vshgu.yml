@@ -1,0 +1,88 @@
+# Функциональная карта продукта ВШГУ (портал + админка + интеграции).
+# Источник для схемы продукта v5 (docs/missions/redesign/coverage_v5/) — та же карта,
+# что и в coverage_v4 (владелец её принял как перечень функций), дополненная функциями
+# для узлов, которых не было в плоском списке v4, но которые нужны схеме продукта
+# (docs/missions/redesign/coverage_v5/product_map.yml ссылается на функции этого файла
+# по имени — see node.feature). Новые записи отмечены комментарием "# v5:" перед строкой.
+# Префиксы новых записей сверены с реальными nodeid прогона #39
+# (docs/missions/redesign/coverage_v2/data.snapshot.json) тем же способом, что в v4:
+# "tests/api/dir/test_file" матчит nodeid "tests/api/dir/test_file.py::Class::test_x".
+# Где реального совпадающего теста нет — tests: [] (узел на схеме будет серым, это
+# честный пробел, а не ошибка сборки).
+project: VSHGU
+areas:
+  - name: Слушатель (внешка)
+    features:
+      - {name: Вход и онбординг, tests: [tests/ui/onboarding, tests/ui/users/test_user_login_navigation, tests/api/onboarding]}
+      # v5: узел "Вход" схемы — прежний общий префикс логина, в прогоне #39 не сматчился
+      # ни один тест (файл не был собран/переименован) — узел честно серый, см. отчёт задачи.
+      - {name: Вход, tests: [tests/ui/users/test_user_login_navigation]}
+      - {name: Онбординг, tests: [tests/ui/onboarding, tests/api/onboarding]}
+      - {name: "Личный кабинет", tests: []}
+      - {name: "Моё обучение (программы, потоки, модули)", tests: [tests/api/programs, tests/ui/practical_tasks/test_add_listener_to_stream]}
+      - {name: "Программа (кабинет слушателя)", tests: [tests/api/programs]}
+      - {name: "Вкладка «Расписание» (кабинет)", tests: [tests/ui/aos, tests/api/aos]}
+      - {name: "Вкладка «Курсы и тесты»", tests: []}
+      - {name: Курсы TinCan/SCORM, tests: [tests/ui/courses, tests/api/create_activity/courses]}
+      - {name: "Тест (прохождение)", tests: [tests/api/tests]}
+      - {name: Практические задания — прохождение, tests: [tests/ui/practical_tasks/test_complete_practical_task, tests/ui/practical_tasks/personal_assignment]}
+      - {name: Тесты и конструктор тестов, tests: [tests/ui/test_constructor, tests/api/tests]}
+      - {name: Опросы, tests: [tests/ui/polls, tests/api/polls]}
+      - {name: База знаний — материалы, tests: [tests/ui/knowledge_base, tests/api/knowledge_base]}
+      - {name: "Список материалов", tests: []}
+      - {name: "Материал (книга, файл, статья, видео, аудио, курс)", tests: [tests/ui/knowledge_base/test_create_material_audio, tests/ui/knowledge_base/test_create_material_book, tests/ui/knowledge_base/test_create_material_course, tests/ui/knowledge_base/test_create_material_file]}
+      - {name: Достижения, tests: [tests/ui/knowledge_base/test_create_achievement, tests/ui/knowledge_base/admin_statistics/test_admin_sees_user_achievement_history]}
+      - {name: Рейтинг, tests: [tests/ui/knowledge_base/admin_statistics/test_admin_sees_user_in_knowledge_base_rating]}
+      - {name: Уведомления, tests: [tests/ui/notifications, tests/api/notifications]}
+      - {name: Техподдержка (тикеты), tests: [tests/ui/tickets, tests/api/tickets]}
+      - {name: "Тикет (карточка)", tests: [tests/api/tickets, tests/ui/tickets]}
+      - {name: Профиль, tests: []}
+      - {name: Профиль и сертификаты, tests: [tests/api/certificates]}
+      - {name: Документы, tests: []}
+      - {name: Игровые сессии, tests: [tests/ui/game_session]}
+      - {name: Дашборд слушателя, tests: [tests/ui/dashboards]}
+  - name: Проверяющий / преподаватель
+    features:
+      - {name: Проверка ПЗ, tests: [tests/ui/practical_tasks/test_review_practical_task, tests/ui/practical_tasks/test_reviewer_sees_additional_materials, tests/api/users/teacher]}
+      - {name: Групповые ПЗ, tests: [tests/ui/practical_tasks/groups]}
+      - {name: Прокторинг, tests: [tests/ui/proctoring, tests/api/proctoring]}
+      # v5: очередь ПЗ и её фильтры "Новые"/"Отвечено" в auto_tests_vshgu отдельно не
+      # тестируются — проверяется сразу конечный сценарий (Проверка ПЗ выше).
+      - {name: "Практические задания — очередь", tests: []}
+      - {name: "Новые (ПЗ)", tests: []}
+      - {name: "Отвечено (ПЗ)", tests: []}
+  - name: Администратор
+    features:
+      - {name: Пользователи и роли, tests: [tests/api/users, tests/ui/users]}
+      - {name: Фильтры и поиск пользователей, tests: []}
+      # v5: карточка пользователя как отдельный экран схемы — своего теста нет,
+      # проверяется списком/API создания (Пользователи и роли).
+      - {name: "Карточка пользователя", tests: []}
+      - {name: База программ и потоки, tests: [tests/api/programs, tests/api/streams]}
+      - {name: "База программ (список)", tests: [tests/api/programs]}
+      - {name: "Программа (админка)", tests: [tests/api/programs/test_create_program_api]}
+      - {name: Потоки, tests: [tests/api/streams, tests/api/programs/test_assignments_api]}
+      - {name: Модули, tests: [tests/api/programs/test_create_module]}
+      - {name: Создание активностей (контент), tests: [tests/api/create_activity]}
+      - {name: Расписание и AOS, tests: [tests/api/aos, tests/ui/aos]}
+      - {name: Практические задания — админка, tests: [tests/ui/practical_tasks/test_create_practical_task, tests/ui/practical_tasks/test_add_practical_task_to_schedule, tests/api/create_activity/homeworks]}
+      - {name: "Конструктор тестов (админка)", tests: [tests/ui/test_constructor]}
+      - {name: Справочники, tests: [tests/api/dictionaries, tests/ui/dictionaries]}
+      - {name: Статистика обучения, tests: [tests/ui/learning_statistics, tests/api/learning_statistics]}
+      - {name: Сертификаты — шаблоны и выдача, tests: [tests/api/certificates]}
+      - {name: База знаний — админка, tests: [tests/ui/knowledge_base/test_create_article_and_verify_in_user_ui, tests/api/knowledge_base]}
+      - {name: Инфо-баннер, tests: [tests/api/banner, tests/ui/banner]}
+      - {name: Тикеты — обработка, tests: [tests/api/tickets, tests/ui/tickets]}
+      - {name: Суперадминка / тенанты, tests: []}
+      - {name: Эксперты, tests: []}
+  - name: Интеграции
+    features:
+      - {name: БУК (внешние пользователи), tests: [tests/api/buk, tests/ui/buk]}
+      - {name: CAS (единый вход), tests: [tests/api/cas, tests/ui/cas]}
+      - {name: Альпина и МИФ (ЭБС), tests: [tests/api/alpina_and_mif, tests/ui/alpina_and_mif]}
+      - {name: LRS / xAPI, tests: [tests/api/create_activity/courses/tincan]}
+      - {name: Helpdesk, tests: []}
+  - name: Сквозные сценарии
+    features:
+      - {name: "E2E: программа → поток → слушатель → прохождение", tests: [tests/e2e, tests/api/e2e]}
+      - {name: Smoke прод, tests: []}
