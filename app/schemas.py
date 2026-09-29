@@ -287,6 +287,73 @@ class XfailCheckResult(BaseModel):
     count: int
 
 
+class TestCaseStep(BaseModel):
+    n: int
+    action: str
+    expected: str
+    attachments: list[str] = Field(default_factory=list)
+
+
+class TestCaseStepInput(BaseModel):
+    action: str
+    expected: str
+
+
+class TestCase(BaseModel):
+    id: int
+    project: str
+    section: str
+    title: str
+    steps: list[TestCaseStep]
+    precondition: Optional[str] = None
+    priority: str
+    nodeid: Optional[str] = None
+    source: Literal["generated", "manual"]
+    updated_at: Optional[str] = None
+    updated_by: Optional[str] = None
+    status: Optional[str] = None
+    attachments: list[str] = Field(default_factory=list)
+
+
+class TestCaseCreate(BaseModel):
+    section: str
+    title: str
+    precondition: Optional[str] = None
+    priority: str = "medium"
+    steps: list[TestCaseStepInput] = Field(default_factory=list)
+    nodeid: Optional[str] = None
+
+
+class TestCaseUpdate(BaseModel):
+    title: str
+    precondition: Optional[str] = None
+    priority: str = "medium"
+    steps: list[TestCaseStepInput] = Field(default_factory=list)
+    nodeid: Optional[str] = None
+
+
+class TestCaseImportResult(BaseModel):
+    files: int
+    imported: int
+    updated: int
+    skipped_manual: int
+
+
+class TestCaseArea(BaseModel):
+    area: Optional[str] = None
+    section: str
+    cases: list[TestCase]
+
+
+class TestCaseKind(BaseModel):
+    kind: str
+    areas: list[TestCaseArea]
+
+
+class TestCaseTree(BaseModel):
+    kinds: list[TestCaseKind]
+
+
 class ScheduleCreate(BaseModel):
     stand: Optional[str] = None
     target: str = "all"
