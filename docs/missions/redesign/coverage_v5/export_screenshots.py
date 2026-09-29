@@ -1,7 +1,8 @@
-"""Экспорт мокапов карты покрытия v5 в JPG (1440px, Playwright).
+"""Экспорт финального мокапа карты покрытия v5 в JPG (1440px, Playwright).
 
-Адаптировано из docs/missions/redesign/coverage_v4/export_screenshots.py под
-варианты этого каталога (j/k вместо h/i).
+Адаптировано из docs/missions/redesign/coverage_v4/export_screenshots.py: один
+вариант вместо двух (J/K из предыдущего этапа владелец отклонил в пользу
+раскладки sketch_approved.svg), поэтому TARGETS сведён к одному кадру.
 
 Запуск: python3 export_screenshots.py
 """
@@ -12,11 +13,8 @@ from playwright.sync_api import sync_playwright
 HERE = pathlib.Path(__file__).resolve().parent
 HTML = HERE / "mockups.html"
 
-# (variant, frame_id, файл-имя без темы)
-TARGETS = [
-    ("j", "f-cov-j", "coverage-j-sitemap"),
-    ("k", "f-cov-k", "coverage-k-journey"),
-]
+FRAME_ID = "f-coverage"
+BASENAME = "coverage-j-scheme"
 THEMES = ["dark", "light"]
 
 
@@ -24,19 +22,18 @@ def main():
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page(viewport={"width": 1440, "height": 900})
-        for variant, frame_id, basename in TARGETS:
-            for theme in THEMES:
-                url = f"file://{HTML}?v={variant}&theme={theme}"
-                page.goto(url, wait_until="networkidle")
-                # .ctl — верхняя панель (position:sticky) — при скролле "прилипает"
-                # и попадает в скриншот элемента поверх контента, поэтому её
-                # на время снимка прячем.
-                page.evaluate("document.querySelector('.ctl').style.display='none'")
-                el = page.locator(f"#{frame_id}")
-                el.wait_for(state="visible")
-                out = HERE / f"{basename}-{theme}.jpg"
-                el.screenshot(path=str(out), type="jpeg", quality=90)
-                print("saved", out.name)
+        for theme in THEMES:
+            url = f"file://{HTML}?theme={theme}"
+            page.goto(url, wait_until="networkidle")
+            # .ctl — верхняя панель (position:sticky) — при скролле "прилипает"
+            # и попадает в скриншот элемента поверх контента, поэтому её
+            # на время снимка прячем.
+            page.evaluate("document.querySelector('.ctl').style.display='none'")
+            el = page.locator(f"#{FRAME_ID}")
+            el.wait_for(state="visible")
+            out = HERE / f"{BASENAME}-{theme}.jpg"
+            el.screenshot(path=str(out), type="jpeg", quality=90)
+            print("saved", out.name)
         browser.close()
 
 

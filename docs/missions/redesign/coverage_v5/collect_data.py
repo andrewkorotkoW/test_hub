@@ -1,24 +1,25 @@
-"""Готовит снимок данных для мокапов карты покрытия v5
-(docs/missions/redesign/coverage_v5/mockups.html, варианты J «Карта сайта» и
-K «Путь пользователя») — после того как владелец отклонил v1-v4 (списки,
-таблицы, дашборды по функциям) и объяснил идею: покрытие должно быть
-нарисовано как схема продукта — экраны блоками со связями, цвет = светофор,
-без списков и чисел в колонках.
+"""Готовит снимок данных для финального мокапа карты покрытия v5
+(docs/missions/redesign/coverage_v5/mockups.html) — единственная схема продукта
+по раскладке, утверждённой владельцем 29.09 (sketch_approved.svg/.png): три
+зоны колонками (Внешка / Проверяющий / Админка) + полоса интеграций снизу.
+Варианты J/K из предыдущего этапа (карта сайта / путь пользователя) владелец
+отклонил в пользу этой раскладки, см. отчёт задачи.
 
 Источники:
-  - product_map.yml — граф узлов схемы (id, зона, row/col для раскладки,
-    ссылка на функцию по имени) и рёбер (навигация пользователя).
+  - product_map.json — граф схемы: зоны и узлы с их пиксельными координатами
+    (x/y/w/h скопированы из sketch_approved.svg — раскладка рисуется строго
+    по нему, см. docs/missions/redesign/coverage_v5/sketch_approved.svg),
+    рёбра навигации и привязка узла к функции (node.feature).
   - features_vshgu.yml — та же карта функций, что и в coverage_v4 (владелец
-    принял её как список функций продукта), дополненная функциями для узлов
-    схемы, которых не было в плоском списке v4 (см. комментарии "# v5:" в
-    файле). node.feature в product_map.yml — это имя записи в этом файле.
+    принял её как список функций продукта), дополненная тремя функциями для
+    узлов схемы, которых не было в плоском списке (см. комментарии "# v5:").
   - coverage_v2/data.snapshot.json — реальный прогон #39 (develop,
-    28.09.2026), тот же, что и в v2/v3/v4, для сопоставимости чисел.
+    28.09.2026), тот же, что и в v2/v3/v4/предыдущем этапе v5, для
+    сопоставимости чисел.
 
-Светофор узла — как в v3/v4 (status_of): red — есть failed/broken;
-yellow — нет падений, но есть xfail/skipped; green — все тесты passed;
-grey — под tests узла не подошёл ни один тест прогона (пусто в yml или
-не нашлось совпадений).
+Светофор узла — как в v3/v4: red — есть failed/broken; yellow — нет падений,
+но есть xfail/skipped; green — все тесты passed; grey — под tests узла не
+подошёл ни один тест прогона (пусто в yml или не нашлось совпадений).
 
 Запуск:
     python3 collect_data.py > data.snapshot.json
@@ -32,7 +33,7 @@ import yaml
 
 HERE = Path(__file__).resolve().parent
 FEATURES_YML = HERE / "features_vshgu.yml"
-PRODUCT_MAP_YML = HERE / "product_map.yml"
+PRODUCT_MAP_JSON = HERE / "product_map.json"
 V2_SNAPSHOT = HERE.parent / "coverage_v2" / "data.snapshot.json"
 
 
@@ -72,8 +73,8 @@ def load_feature_tests() -> dict[str, list[str]]:
     return out
 
 
-def build_nodes(run_items: list[dict], feature_tests: dict[str, list[str]]) -> list[dict]:
-    pm = yaml.safe_load(PRODUCT_MAP_YML.read_text(encoding="utf-8"))
+def build_nodes(run_items: list[dict], feature_tests: dict[str, list[str]]) -> tuple[list[dict], list[dict], list[dict]]:
+    pm = json.loads(PRODUCT_MAP_JSON.read_text(encoding="utf-8"))
     nodes = []
     for n in pm["nodes"]:
         prefixes = feature_tests.get(n["feature"], [])
@@ -85,13 +86,16 @@ def build_nodes(run_items: list[dict], feature_tests: dict[str, list[str]]) -> l
             "id": n["id"],
             "label": n["label"],
             "zone": n["zone"],
-            "row": n["row"],
-            "col": n["col"],
+            "x": n["x"], "y": n["y"], "w": n["w"], "h": n["h"],
             "feature": n["feature"],
             "status": status,
             "total_tests": len(matched),
             "tests": [
-                {"short": it["nodeid"].split("::")[-1].split("/")[-1], "status": it["status"]}
+                {
+                    "short": it["nodeid"].split("::")[-1].split("/")[-1],
+                    "kind": "ui" if "/ui/" in it["nodeid"] else ("e2e" if it["nodeid"].startswith("tests/e2e") else "api"),
+                    "status": it["status"],
+                }
                 for it in matched_sorted
             ],
         }
@@ -116,12 +120,14 @@ def main() -> None:
 
     result = {
         "meta": {
-            "note": "Схема продукта v5: узлы = экраны/разделы портала (product_map.yml), "
-                    "цвет узла пересчитан по nodeid тестов реального прогона #39 (develop, "
-                    "28.09.2026, coverage_v2/data.snapshot.json) через префиксы функции из "
-                    "features_vshgu.yml, на которую ссылается узел. Интеграции (zone=int) "
-                    "не входят в KPI «экранов покрыто» — это внешние узлы, пристыкованные "
-                    "стрелкой к целевому экрану (node.target).",
+            "note": "Финальная схема продукта v5 (раскладка утверждена 29.09, "
+                    "sketch_approved.svg): узлы = экраны/разделы портала "
+                    "(product_map.json), цвет узла — светофор по nodeid тестов "
+                    "реального прогона #39 (develop, 28.09.2026, "
+                    "coverage_v2/data.snapshot.json) через префиксы функции из "
+                    "features_vshgu.yml, на которую ссылается узел. Интеграции "
+                    "(zone=int) не входят в KPI «экранов покрыто» — это внешние "
+                    "узлы, пристыкованные стрелкой к целевому экрану (node.target).",
         },
         "run": run,
         "kpi": {

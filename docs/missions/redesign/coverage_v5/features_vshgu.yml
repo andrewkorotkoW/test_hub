@@ -51,6 +51,9 @@ areas:
       - {name: "Практические задания — очередь", tests: []}
       - {name: "Новые (ПЗ)", tests: []}
       - {name: "Отвечено (ПЗ)", tests: []}
+      # v5: в утверждённой раскладке "Новые" и "Отвечено" — один блок-фильтр очереди
+      # ПЗ, своего теста нет (см. "Новые (ПЗ)"/"Отвечено (ПЗ)" выше) — узел серый.
+      - {name: "Новые / Отвечено (ПЗ)", tests: []}
   - name: Администратор
     features:
       - {name: Пользователи и роли, tests: [tests/api/users, tests/ui/users]}
@@ -63,6 +66,9 @@ areas:
       - {name: "Программа (админка)", tests: [tests/api/programs/test_create_program_api]}
       - {name: Потоки, tests: [tests/api/streams, tests/api/programs/test_assignments_api]}
       - {name: Модули, tests: [tests/api/programs/test_create_module]}
+      # v5: блок "Потоки → Модули" утверждённой схемы — один узел на оба экрана
+      # админки, объединяет префиксы обеих функций выше.
+      - {name: "Потоки и модули (админка)", tests: [tests/api/streams, tests/api/programs/test_assignments_api, tests/api/programs/test_create_module]}
       - {name: Создание активностей (контент), tests: [tests/api/create_activity]}
       - {name: Расписание и AOS, tests: [tests/api/aos, tests/ui/aos]}
       - {name: Практические задания — админка, tests: [tests/ui/practical_tasks/test_create_practical_task, tests/ui/practical_tasks/test_add_practical_task_to_schedule, tests/api/create_activity/homeworks]}
@@ -75,6 +81,9 @@ areas:
       - {name: Тикеты — обработка, tests: [tests/api/tickets, tests/ui/tickets]}
       - {name: Суперадминка / тенанты, tests: []}
       - {name: Эксперты, tests: []}
+      # v5: экран "Рассылки" утверждённой схемы (админка уведомлений) — своего
+      # теста в auto_tests_vshgu нет, узел серый.
+      - {name: "Рассылки (админка)", tests: []}
   - name: Интеграции
     features:
       - {name: БУК (внешние пользователи), tests: [tests/api/buk, tests/ui/buk]}
