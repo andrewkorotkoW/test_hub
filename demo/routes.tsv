@@ -1,0 +1,13 @@
+auth_login	POST	/api/auth/login
+auth_me	GET	/api/auth/me
+catalog_list	GET	/api/catalog
+catalog_item	GET	/api/catalog/{id}
+orders_create	POST	/api/orders
+orders_get	GET	/api/orders/{id}
+orders_list	GET	/api/orders
+users_list	GET	/api/users
+users_get	GET	/api/users/{id}
+page_login	GET	/login
+page_catalog	GET	/catalog
+page_catalog_item	GET	/catalog/{id}
+page_order	GET	/orders/{id}

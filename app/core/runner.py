@@ -23,6 +23,7 @@ import json
 import os
 import re
 import sqlite3
+import sys
 import time
 from datetime import datetime
 from pathlib import Path
@@ -89,6 +90,11 @@ def _lock_for(project: str) -> asyncio.Lock:
 
 
 def _venv_python(project_path: str, venv: str) -> Path:
+    # venv="" — использовать интерпретатор самого test_hub (его venv/sys.executable),
+    # а не venv/bin/python внутри project_path. Нужно проектам без собственного venv
+    # (см. проект Demo в app/db.py, тестируемый тем же venv, что и test_hub).
+    if not venv:
+        return Path(sys.executable)
     return Path(project_path) / venv / "bin" / "python"
 
 

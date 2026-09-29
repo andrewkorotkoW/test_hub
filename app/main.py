@@ -1,13 +1,14 @@
 import asyncio
 import contextlib
 import logging
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from .config import settings
+from .config import BASE_DIR, settings
 from .core import runner, schedule
 from .db import init_db
 from .routers import admin, auth, coverage, flaky, projects, runs, schedules, sections, share, stats, users, xfail
@@ -43,11 +44,41 @@ async def lifespan(app: FastAPI):
     scheduler_task = asyncio.create_task(schedule.scheduler_loop())
     app.state.schedule_task = scheduler_task
 
+    # Демо-сервис (demo/app/) — отдельный процесс uvicorn на TH_DEMO_PORT, не
+    # asyncio-задача в нашем процессе: это самостоятельное FastAPI-приложение со
+    # своими роутами, и запуск его как второго uvicorn.Server в том же event loop
+    # столкнул бы оба сервера на установке обработчиков SIGINT/SIGTERM
+    # (uvicorn.Server.serve() всегда их переустанавливает, см. capture_signals) —
+    # Ctrl+C перестал бы штатно останавливать сам test_hub. Подпроцесс этого
+    # риска лишён, как и раннер pytest в app/core/runner.py.
+    demo_proc: asyncio.subprocess.Process | None = None
+    if settings.TH_DEMO:
+        try:
+            demo_proc = await asyncio.create_subprocess_exec(
+                sys.executable, "-m", "uvicorn", "demo.app.main:app",
+                "--host", "127.0.0.1", "--port", str(settings.TH_DEMO_PORT),
+                "--log-level", "warning",
+                cwd=str(BASE_DIR),
+                stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
+            )
+        except OSError:
+            logger.exception("demo: не удалось запустить встроенный демо-сервис")
+            demo_proc = None
+    app.state.demo_proc = demo_proc
+
     yield
 
     scheduler_task.cancel()
     with contextlib.suppress(asyncio.CancelledError):
         await scheduler_task
+
+    if demo_proc is not None and demo_proc.returncode is None:
+        demo_proc.terminate()
+        try:
+            await asyncio.wait_for(demo_proc.wait(), timeout=5)
+        except asyncio.TimeoutError:
+            demo_proc.kill()
+            await demo_proc.wait()
 
     if tg_application is not None:
         try:

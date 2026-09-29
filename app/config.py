@@ -7,6 +7,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
 
+def _parse_bool(raw: str) -> bool:
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _parse_allowed_ids(raw: str) -> set[int]:
     ids: set[int] = set()
     for token in raw.split(","):
@@ -39,6 +43,13 @@ class Settings:
     TH_TG_ALLOWED_IDS: set[int] = _parse_allowed_ids(os.getenv("TH_TG_ALLOWED_IDS", ""))
     TH_TG_SERVICE_LOGIN: str = os.getenv("TH_TG_SERVICE_LOGIN", "tg_bot")
     TH_TG_SERVICE_PASSWORD: str = os.getenv("TH_TG_SERVICE_PASSWORD", "tg_bot")
+
+    # Встроенный демо-сервис (demo/app/), на котором работает демо-проект Demo
+    # (см. app/db.py) — test_hub поднимает его сам отдельным процессом (см.
+    # lifespan в app/main.py). По умолчанию включён: цель — рабочий пример из
+    # коробки сразу после клонирования, без реальных стендов.
+    TH_DEMO: bool = _parse_bool(os.getenv("TH_DEMO", "1"))
+    TH_DEMO_PORT: int = int(os.getenv("TH_DEMO_PORT", "8710"))
 
 
 settings = Settings()
