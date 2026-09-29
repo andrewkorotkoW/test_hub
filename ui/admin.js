@@ -23,6 +23,8 @@
   const standName = document.getElementById("stand-name");
   const standUrl = document.getElementById("stand-url");
   const standLogin = document.getElementById("stand-login");
+  const standSentryProject = document.getElementById("stand-sentry-project");
+  const standSentryEnvironment = document.getElementById("stand-sentry-environment");
   const standCancelEdit = document.getElementById("stand-cancel-edit");
 
   function resetStandForm() {
@@ -41,7 +43,7 @@
     if (!project) { standsRows.innerHTML = ""; return; }
     const stands = await api(`/api/projects/${encodeURIComponent(project)}/stands`);
     if (!stands.length) {
-      standsRows.innerHTML = `<tr><td colspan="4" class="muted">Стендов пока нет.</td></tr>`;
+      standsRows.innerHTML = `<tr><td colspan="5" class="muted">Стендов пока нет.</td></tr>`;
       return;
     }
     standsRows.innerHTML = stands.map((s) => `
@@ -49,8 +51,9 @@
         <td>${escapeHtml(s.name)}</td>
         <td>${escapeHtml(s.url)}</td>
         <td>${escapeHtml(s.login || "—")}</td>
+        <td>${escapeHtml(s.sentry_project || "—")}${s.sentry_environment ? ` / ${escapeHtml(s.sentry_environment)}` : ""}</td>
         <td class="inline-actions">
-          <button type="button" class="edit-stand" data-id="${s.id}" data-name="${escapeHtml(s.name)}" data-url="${escapeHtml(s.url)}" data-login="${escapeHtml(s.login || "")}">Изменить</button>
+          <button type="button" class="edit-stand" data-id="${s.id}" data-name="${escapeHtml(s.name)}" data-url="${escapeHtml(s.url)}" data-login="${escapeHtml(s.login || "")}" data-sentry-project="${escapeHtml(s.sentry_project || "")}" data-sentry-environment="${escapeHtml(s.sentry_environment || "")}">Изменить</button>
           <button type="button" class="danger delete-stand" data-id="${s.id}">Удалить</button>
         </td>
       </tr>
@@ -66,6 +69,8 @@
       standName.value = editBtn.dataset.name;
       standUrl.value = editBtn.dataset.url;
       standLogin.value = editBtn.dataset.login;
+      standSentryProject.value = editBtn.dataset.sentryProject;
+      standSentryEnvironment.value = editBtn.dataset.sentryEnvironment;
       standCancelEdit.hidden = false;
       return;
     }
@@ -89,6 +94,8 @@
       name: standName.value.trim(),
       url: standUrl.value.trim(),
       login: standLogin.value.trim() || null,
+      sentry_project: standSentryProject.value.trim() || null,
+      sentry_environment: standSentryEnvironment.value.trim() || null,
     };
     try {
       if (standForm.dataset.editingId) {

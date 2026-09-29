@@ -27,7 +27,7 @@
         </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Имя</th><th>URL</th><th>Логин</th><th></th></tr></thead>
+            <thead><tr><th>Имя</th><th>URL</th><th>Логин</th><th>Sentry</th><th></th></tr></thead>
             <tbody id="stands-rows"></tbody>
           </table>
         </div>
@@ -36,6 +36,8 @@
           <input id="stand-name" placeholder="Имя" required>
           <input id="stand-url" placeholder="URL" required>
           <input id="stand-login" placeholder="Логин (необязательно)">
+          <input id="stand-sentry-project" placeholder="Sentry project (необязательно)">
+          <input id="stand-sentry-environment" placeholder="Sentry environment (необязательно)">
           <button type="submit" class="primary">Сохранить</button>
           <button type="button" id="stand-cancel-edit" hidden>Отмена</button>
         </form>

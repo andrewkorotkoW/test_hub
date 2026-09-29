@@ -62,5 +62,11 @@ class Settings:
     TH_DEMO: bool = _parse_bool(os.getenv("TH_DEMO", "1"))
     TH_DEMO_PORT: int = int(os.getenv("TH_DEMO_PORT", "8710"))
 
+    # Sentry (см. app/core/sentry.py) — блок ошибок продукта для QA. Без заполненных
+    # значений блок в UI показывает "Sentry не подключён" и ничего не ломает.
+    TH_SENTRY_URL: str = os.getenv("TH_SENTRY_URL", "")
+    TH_SENTRY_TOKEN: str = os.getenv("TH_SENTRY_TOKEN", "")
+    TH_SENTRY_ORG: str = os.getenv("TH_SENTRY_ORG", "")
+
 
 settings = Settings()

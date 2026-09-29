@@ -27,7 +27,8 @@ def _stand_payload(row: sqlite3.Row) -> dict:
 
 def _stands_for(conn: sqlite3.Connection, project_name: str) -> list[dict]:
     rows = conn.execute(
-        "SELECT id, name, url, login, manual_only FROM stands WHERE project = ? ORDER BY name",
+        "SELECT id, name, url, login, manual_only, sentry_project, sentry_environment "
+        "FROM stands WHERE project = ? ORDER BY name",
         (project_name,),
     ).fetchall()
     return [_stand_payload(r) for r in rows]
@@ -146,12 +147,15 @@ def create_stand(
     if exists:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Stand already exists")
     cur = conn.execute(
-        "INSERT INTO stands (project, name, url, login) VALUES (?, ?, ?, ?)",
-        (name, body.name, body.url, body.login),
+        "INSERT INTO stands (project, name, url, login, sentry_project, sentry_environment) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (name, body.name, body.url, body.login, body.sentry_project, body.sentry_environment),
     )
     conn.commit()
     row = conn.execute(
-        "SELECT id, name, url, login, manual_only FROM stands WHERE id = ?", (cur.lastrowid,)
+        "SELECT id, name, url, login, manual_only, sentry_project, sentry_environment "
+        "FROM stands WHERE id = ?",
+        (cur.lastrowid,),
     ).fetchone()
     return _stand_payload(row)
 
@@ -178,12 +182,20 @@ def update_stand(
     stand_name = body.name if body.name is not None else row["name"]
     url = body.url if body.url is not None else row["url"]
     login = body.login if body.login is not None else row["login"]
+    sentry_project = body.sentry_project if body.sentry_project is not None else row["sentry_project"]
+    sentry_environment = (
+        body.sentry_environment if body.sentry_environment is not None else row["sentry_environment"]
+    )
     conn.execute(
-        "UPDATE stands SET name = ?, url = ?, login = ? WHERE id = ?", (stand_name, url, login, stand_id)
+        "UPDATE stands SET name = ?, url = ?, login = ?, sentry_project = ?, sentry_environment = ? "
+        "WHERE id = ?",
+        (stand_name, url, login, sentry_project, sentry_environment, stand_id),
     )
     conn.commit()
     row = conn.execute(
-        "SELECT id, name, url, login, manual_only FROM stands WHERE id = ?", (stand_id,)
+        "SELECT id, name, url, login, manual_only, sentry_project, sentry_environment "
+        "FROM stands WHERE id = ?",
+        (stand_id,),
     ).fetchone()
     return _stand_payload(row)
 
@@ -203,7 +215,9 @@ def update_stand_manual_only(
     )
     conn.commit()
     row = conn.execute(
-        "SELECT id, name, url, login, manual_only FROM stands WHERE id = ?", (stand_id,)
+        "SELECT id, name, url, login, manual_only, sentry_project, sentry_environment "
+        "FROM stands WHERE id = ?",
+        (stand_id,),
     ).fetchone()
     return _stand_payload(row)
 
