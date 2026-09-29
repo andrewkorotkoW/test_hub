@@ -44,12 +44,16 @@ class StandCreate(BaseModel):
     name: str
     url: str
     login: Optional[str] = None
+    sentry_project: Optional[str] = None
+    sentry_environment: Optional[str] = None
 
 
 class StandUpdate(BaseModel):
     name: Optional[str] = None
     url: Optional[str] = None
     login: Optional[str] = None
+    sentry_project: Optional[str] = None
+    sentry_environment: Optional[str] = None
 
 
 class StandManualOnlyUpdate(BaseModel):

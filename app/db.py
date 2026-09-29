@@ -420,6 +420,8 @@ def init_db() -> None:
         _migrate_add_column(conn, "projects", "color", "color TEXT")
         _migrate_add_column(conn, "run_events", "nodeid", "nodeid TEXT")
         _migrate_add_column(conn, "run_events", "kind", "kind TEXT NOT NULL DEFAULT 'line'")
+        _migrate_add_column(conn, "stands", "sentry_project", "sentry_project TEXT")
+        _migrate_add_column(conn, "stands", "sentry_environment", "sentry_environment TEXT")
         # flaky_stats, xfail_registry, schedules и stand_presets сами по себе — новые
         # таблицы (не существующие с другой схемой в старых БД), поэтому их создание
         # уже покрыто CREATE TABLE IF NOT EXISTS в SCHEMA выше и отдельной ALTER-
