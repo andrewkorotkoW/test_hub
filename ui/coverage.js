@@ -50,6 +50,11 @@
   const toolbarMsg = document.getElementById("cov-toolbar-msg");
   const mapBox = document.getElementById("coverage-map");
   const detailBox = document.getElementById("coverage-detail");
+  const pmMessage = document.getElementById("pm-message");
+  const pmRingBox = document.getElementById("pm-ring");
+  const pmSummaryText = document.getElementById("pm-summary-text");
+  const pmCanvas = document.getElementById("pm-canvas");
+  const pmTip = document.getElementById("pm-tip");
 
   if (user.role === "qa") {
     recalcBtn.hidden = false;
@@ -94,6 +99,7 @@
     if (!collapsed && treeRoot) syncTreeView();
   });
 
+  let productMap = null;       // последний ProductMap (схема продукта) с сервера
   let summary = null;          // последний CoverageSummary с сервера
   let highlightedRoutes = null; // Set<name> маршрутов, задействованных выбранным тестом, либо null
   let lastRoute = null;         // {method, path} последнего открытого в панели связей маршрута
@@ -180,6 +186,374 @@
 
   function currentStand() {
     return standSelect.value || (summary.stands[0] && summary.stands[0].stand) || "";
+  }
+
+  // ---------------- схема продукта (карта покрытия v5) ----------------
+  // Источник данных — GET /api/projects/{name}/product-map?stand=, см. app/core/
+  // product_map.py и app/routers/product_map.py (t1/t2, уже в main). Разметка и
+  // ортогональная разводка связей — по образцу эталонного макета
+  // docs/missions/redesign/coverage_v5/mockups.html (см. docs/missions/2026-09-29_
+  // coverage_scheme_stage2.md), но без карты MANUAL_ROUTES — координаты приходят
+  // с бэкенда для произвольного проекта (не только VSHGU), поэтому связи считаются
+  // общей эвристикой (routeGeneric ниже), а не вручную подобранными ломаными.
+  function pluralRu(n, one, few, many) {
+    const m = Math.abs(n) % 100;
+    if (m >= 11 && m <= 14) return many;
+    const d = m % 10;
+    if (d === 1) return one;
+    if (d >= 2 && d <= 4) return few;
+    return many;
+  }
+
+  const PM_STATE_WORD = {
+    green: "покрыто и проходит",
+    yellow: "частично (xfail/skipped)",
+    red: "есть падения",
+    grey: "тестов нет",
+  };
+
+  function pmRingSvg(percent) {
+    const size = 72;
+    const strokeWidth = 9;
+    const r = (size - strokeWidth) / 2;
+    const c = 2 * Math.PI * r;
+    const dash = (Math.max(0, Math.min(100, percent)) / 100) * c;
+    return `
+      <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+        <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="var(--border)" stroke-width="${strokeWidth}" />
+        <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="var(--accent)" stroke-width="${strokeWidth}"
+                stroke-dasharray="${dash} ${c - dash}" stroke-linecap="round"
+                transform="rotate(-90 ${size / 2} ${size / 2})" />
+        <text x="50%" y="50%" text-anchor="middle" dominant-baseline="central" class="ring-text">${percent}%</text>
+      </svg>
+    `;
+  }
+
+  // Ортогональный маршрут между двумя узлами (2 поворота на 90°, как в
+  // sketch_approved.svg): соседи по одному ряду — прямая линия; соседние ряды/
+  // колонки с чистым зазором между ними — уголок через середину зазора; иначе —
+  // общий случай через среднюю по X вертикаль (приближение для произвольной
+  // раскладки, не гарантирует отсутствие пересечений на нетиповых картах).
+  // Сетка кандидатных X/Y-линий (границы/центры узлов + отступ margin вокруг
+  // каждого) — по ней BFS ищет ортогональный путь без пересечений (см.
+  // pmEdgeRoute). Считается один раз на весь рендер холста, не на каждую связь.
+  function pmBuildRouteGrid(nodes, canvas) {
+    const margin = 8;
+    const xsSet = new Set([0, canvas.width]);
+    const ysSet = new Set([0, canvas.height]);
+    nodes.forEach((n) => {
+      xsSet.add(n.x);
+      xsSet.add(n.x + n.w);
+      xsSet.add(n.x + n.w / 2);
+      xsSet.add(Math.max(0, n.x - margin));
+      xsSet.add(Math.min(canvas.width, n.x + n.w + margin));
+      ysSet.add(n.y);
+      ysSet.add(n.y + n.h);
+      ysSet.add(n.y + n.h / 2);
+      ysSet.add(Math.max(0, n.y - margin));
+      ysSet.add(Math.min(canvas.height, n.y + n.h + margin));
+    });
+    const xs = Array.from(xsSet).sort((p, q) => p - q);
+    const ys = Array.from(ysSet).sort((p, q) => p - q);
+    return { xs, ys };
+  }
+
+  // Отрезок (x1,y1)-(x2,y2) — сторона одной ячейки сетки (строго горизонтальный
+  // или вертикальный) — блокирован, если проходит через ВНУТРЕННОСТЬ чужого
+  // узла (по границе — можно, иначе выйти из своего же узла было бы нечем).
+  function pmSegmentBlocked(x1, y1, x2, y2, obstacles) {
+    const eps = 0.01;
+    for (let i = 0; i < obstacles.length; i++) {
+      const n = obstacles[i];
+      const rx0 = n.x + eps;
+      const rx1 = n.x + n.w - eps;
+      const ry0 = n.y + eps;
+      const ry1 = n.y + n.h - eps;
+      if (x1 === x2) {
+        if (x1 <= rx0 || x1 >= rx1) continue;
+        const lo = Math.min(y1, y2);
+        const hi = Math.max(y1, y2);
+        if (lo < ry1 && hi > ry0) return true;
+      } else {
+        if (y1 <= ry0 || y1 >= ry1) continue;
+        const lo = Math.min(x1, x2);
+        const hi = Math.max(x1, x2);
+        if (lo < rx1 && hi > rx0) return true;
+      }
+    }
+    return false;
+  }
+
+  // BFS по сетке grid от (sx,sy) до (tx,ty) — кратчайший (по числу шагов
+  // сетки, не по длине) путь среди свободных рёбер; на выходе — только точки
+  // поворота (коллинеарные промежуточные узлы схлопнуты).
+  function pmRouteOnGrid(grid, sx, sy, tx, ty, obstacles) {
+    const { xs, ys } = grid;
+    const xi = xs.indexOf(sx);
+    const yi = ys.indexOf(sy);
+    const txi = xs.indexOf(tx);
+    const tyi = ys.indexOf(ty);
+    if (xi < 0 || yi < 0 || txi < 0 || tyi < 0) return null;
+
+    const key = (i, j) => i * ys.length + j;
+    const startKey = key(xi, yi);
+    const targetKey = key(txi, tyi);
+    const visited = new Set([startKey]);
+    const prev = new Map();
+    const queue = [[xi, yi]];
+    let head = 0;
+    while (head < queue.length) {
+      const [i, j] = queue[head];
+      head += 1;
+      if (key(i, j) === targetKey) break;
+      const neighbors = [[i - 1, j], [i + 1, j], [i, j - 1], [i, j + 1]];
+      for (let k = 0; k < neighbors.length; k++) {
+        const ni = neighbors[k][0];
+        const nj = neighbors[k][1];
+        if (ni < 0 || ni >= xs.length || nj < 0 || nj >= ys.length) continue;
+        const nKey = key(ni, nj);
+        if (visited.has(nKey)) continue;
+        if (pmSegmentBlocked(xs[i], ys[j], xs[ni], ys[nj], obstacles)) continue;
+        visited.add(nKey);
+        prev.set(nKey, key(i, j));
+        queue.push([ni, nj]);
+      }
+    }
+    if (!visited.has(targetKey)) return null;
+
+    const pathKeys = [targetKey];
+    let cur = targetKey;
+    while (cur !== startKey) {
+      cur = prev.get(cur);
+      pathKeys.push(cur);
+    }
+    pathKeys.reverse();
+    const pts = pathKeys.map((k) => [xs[Math.floor(k / ys.length)], ys[k % ys.length]]);
+
+    const simplified = [pts[0]];
+    for (let i = 1; i < pts.length - 1; i++) {
+      const [px, py] = simplified[simplified.length - 1];
+      const [cx, cy] = pts[i];
+      const [nx, ny] = pts[i + 1];
+      const sameDir = (px === cx && cx === nx) || (py === cy && cy === ny);
+      if (!sameDir) simplified.push(pts[i]);
+    }
+    simplified.push(pts[pts.length - 1]);
+    return simplified;
+  }
+
+  // Точка выхода/входа на границе узла — сторона (лево/право/низ/верх),
+  // обращённая в сторону другого конца связи (типовой приём для ортогональных
+  // коннекторов, см. например mxGraph/dagre).
+  function pmNodeAnchor(n, otherCx, otherCy) {
+    const cx = n.x + n.w / 2;
+    const cy = n.y + n.h / 2;
+    const dx = otherCx - cx;
+    const dy = otherCy - cy;
+    if (Math.abs(dx) > Math.abs(dy)) {
+      return dx >= 0 ? [n.x + n.w, cy] : [n.x, cy];
+    }
+    return dy >= 0 ? [cx, n.y + n.h] : [cx, n.y];
+  }
+
+  // Маршрут связи a -> b: соседи по одному ряду — прямая линия; иначе — BFS по
+  // сетке (см. выше) с остальными узлами как препятствиями, что на реальных
+  // картах (VSHGU, 46 узлов/35 связей) даёт связи, не проходящие сквозь чужие
+  // блоки — то, ради чего в sketch_approved.svg разводка была ручной. Если BFS
+  // не нашёл путь (вырожденный случай сетки) — старый эвристический фолбэк на
+  // 2 поворота без гарантии отсутствия пересечений.
+  function pmEdgeRoute(a, b, grid, allNodes) {
+    const acx = a.x + a.w / 2;
+    const acy = a.y + a.h / 2;
+    const bcx = b.x + b.w / 2;
+    const bcy = b.y + b.h / 2;
+
+    if (Math.abs(acy - bcy) < 4) {
+      return acx <= bcx ? [[a.x + a.w, acy], [b.x, acy]] : [[a.x, acy], [b.x + b.w, acy]];
+    }
+
+    const [sx, sy] = pmNodeAnchor(a, bcx, bcy);
+    const [tx, ty] = pmNodeAnchor(b, acx, acy);
+    const obstacles = allNodes.filter((n) => n.id !== a.id && n.id !== b.id);
+    const routed = pmRouteOnGrid(grid, sx, sy, tx, ty, obstacles);
+    if (routed) return routed;
+
+    const down = bcy > acy;
+    const gapTop = down ? a.y + a.h : b.y + b.h;
+    const gapBottom = down ? b.y : a.y;
+    if (gapBottom - gapTop > 6) {
+      const gapY = (gapTop + gapBottom) / 2;
+      return [
+        [acx, down ? a.y + a.h : a.y],
+        [acx, gapY],
+        [bcx, gapY],
+        [bcx, down ? b.y : b.y + b.h],
+      ];
+    }
+
+    const goRight = bcx >= acx;
+    const midX = (acx + bcx) / 2;
+    return [
+      [goRight ? a.x + a.w : a.x, acy],
+      [midX, acy],
+      [midX, bcy],
+      [goRight ? b.x : b.x + b.w, bcy],
+    ];
+  }
+
+  // node.target дублирует часть edges (см. app/core/product_map.py) для узлов
+  // интеграций, но на fallback-раскладке (без файла карты) edges всегда пусты —
+  // достраиваем связь из target, если её ещё нет среди edges.
+  function pmAllEdges() {
+    if (!productMap) return [];
+    const seen = new Set(productMap.edges.map((e) => `${e.source}>${e.target}`));
+    const extra = [];
+    productMap.nodes.forEach((n) => {
+      if (n.target && !seen.has(`${n.id}>${n.target}`)) {
+        extra.push({ source: n.id, target: n.target });
+        seen.add(`${n.id}>${n.target}`);
+      }
+    });
+    return productMap.edges.concat(extra);
+  }
+
+  function renderProductMapMessage() {
+    if (productMap.message) {
+      pmMessage.textContent = productMap.message;
+      pmMessage.hidden = false;
+    } else {
+      pmMessage.hidden = true;
+    }
+  }
+
+  function renderProductMapSummary() {
+    const s = productMap.summary;
+    const pct = s.total ? Math.round((s.covered / s.total) * 100) : 0;
+    const bits = [];
+    if (s.no_tests) bits.push(`${s.no_tests} без тестов`);
+    if (s.failing) bits.push(`${s.failing} с падениями`);
+    const phrase = bits.length ? `${bits.join(", ")}.` : "Все экраны покрыты и проходят.";
+    pmSummaryText.innerHTML = `<b>${s.covered} из ${s.total}</b> экранов покрыто<br>${escapeHtml(phrase)}`;
+    pmRingBox.innerHTML = pmRingSvg(pct);
+  }
+
+  function hideProductMapTip() {
+    pmTip.hidden = true;
+  }
+
+  function showProductMapTip(node, el) {
+    const tc = node.tests_count || { api: 0, ui: 0, other: 0, total: 0 };
+    const head = `<div class="pm-tip-title"><span class="pm-tip-dot pm-dot-${escapeHtml(node.state)}"></span>${escapeHtml(node.label)}</div>`;
+    // "grey" у backend означает и «тестов нет вовсе», и «тесты есть, но не
+    // засветились в последнем прогоне стенда» (app/core/product_map.py::
+    // _node_status, worst="unknown") — эти случаи различает только tc.total,
+    // легенда снизу карты формулирует именно первый (более частый) вариант.
+    const stateWord = tc.total && node.state === "grey" ? "нет данных о последнем прогоне" : PM_STATE_WORD[node.state] || "";
+    const sub = tc.total
+      ? `<div class="pm-tip-sub">${tc.total} ${pluralRu(tc.total, "тест", "теста", "тестов")} · API ${tc.api} · UI ${tc.ui}${tc.other ? ` · прочих ${tc.other}` : ""} · ${stateWord}</div>`
+      : `<div class="pm-tip-sub">Тестов не найдено — ${stateWord}</div>`;
+    const items = (node.sample_tests || []).slice(0, 5).map((t) => `<div class="pm-tip-item">${escapeHtml(t.name)}</div>`).join("");
+    const more = tc.total > 5 ? `<div class="pm-tip-more">и ещё ${tc.total - 5}…</div>` : "";
+    pmTip.innerHTML = head + sub + items + more;
+    pmTip.hidden = false;
+    const r = el.getBoundingClientRect();
+    let left = r.left;
+    let top = r.bottom + 8;
+    if (left + 282 > window.innerWidth - 12) left = window.innerWidth - 294;
+    if (top + 220 > window.innerHeight - 12) top = r.top - 8 - 200;
+    pmTip.style.left = `${Math.max(8, left)}px`;
+    pmTip.style.top = `${Math.max(8, top)}px`;
+  }
+
+  // Клик по узлу — переход в дерево тестов раздела: вкладка «Запуск» проекта
+  // (project.html#run) с ручным списком целей вместо дерева разделов (см.
+  // manualTargetInput/selectedTarget в ui/project.js — то же поле, что и у
+  // формы запуска). API отдаёт не сами префиксы узла карты продукта, а первые
+  // 5 покрывающих тестов (sample_tests) — берём уникальные файлы из них.
+  function goToNodeTests(node) {
+    const tc = node.tests_count || { total: 0 };
+    if (!tc.total) return;
+    const files = Array.from(new Set((node.sample_tests || []).map((t) => t.nodeid.split("::")[0])));
+    if (!files.length) return;
+    const qs = new URLSearchParams({ name: projectName, target: files.join("\n") });
+    window.location.href = `project.html?${qs.toString()}#run`;
+  }
+
+  function bindProductMapNodeEvents() {
+    const nodeById = new Map(productMap.nodes.map((n) => [n.id, n]));
+    pmCanvas.querySelectorAll(".pm-node").forEach((el) => {
+      const node = nodeById.get(el.dataset.id);
+      if (!node) return;
+      el.addEventListener("mouseenter", () => showProductMapTip(node, el));
+      el.addEventListener("mouseleave", hideProductMapTip);
+      el.addEventListener("focus", () => showProductMapTip(node, el));
+      el.addEventListener("blur", hideProductMapTip);
+      el.addEventListener("click", () => goToNodeTests(node));
+      el.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter" || ev.key === " ") {
+          ev.preventDefault();
+          goToNodeTests(node);
+        }
+      });
+    });
+  }
+
+  function renderProductMapCanvas() {
+    const canvas = productMap.canvas;
+    const nodeById = new Map(productMap.nodes.map((n) => [n.id, n]));
+    pmCanvas.style.width = `${canvas.width}px`;
+    pmCanvas.style.height = `${canvas.height}px`;
+
+    let html = "";
+    productMap.zones.forEach((z) => {
+      html += `<div class="pm-zone-bg" style="left:${z.x}px;top:${z.y}px;width:${z.w}px;height:${z.h}px"></div>`;
+      html += `<div class="pm-zone-label" style="left:${z.x}px;top:${z.y}px;width:${Math.max(0, z.w - 24)}px">${escapeHtml(z.label)}</div>`;
+    });
+
+    const grid = pmBuildRouteGrid(productMap.nodes, canvas);
+    html += `<svg class="pm-edges" width="${canvas.width}" height="${canvas.height}">`;
+    html += `<defs><marker id="pm-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8 z" class="pm-arrow-head" /></marker></defs>`;
+    pmAllEdges().forEach((e) => {
+      const a = nodeById.get(e.source);
+      const b = nodeById.get(e.target);
+      if (!a || !b) return;
+      const isInt = a.zone === "int" || b.zone === "int";
+      const pts = pmEdgeRoute(a, b, grid, productMap.nodes);
+      const s = pts.map((p) => `${p[0]},${p[1]}`).join(" ");
+      html += `<polyline class="pm-edge${isInt ? " pm-edge-int" : ""}" data-source="${escapeHtml(e.source)}" data-target="${escapeHtml(e.target)}" points="${s}" marker-end="url(#pm-arrow)" />`;
+    });
+    html += `</svg>`;
+
+    productMap.nodes.forEach((n) => {
+      const cls = ["pm-node", `pm-node-${n.state}`, n.zone === "int" ? "pm-node-int" : "", n.w < 70 ? "pm-node-narrow" : ""]
+        .filter(Boolean).join(" ");
+      html += `
+        <div class="${cls}" data-id="${escapeHtml(n.id)}" tabindex="0"
+             style="left:${n.x}px;top:${n.y}px;width:${n.w}px;height:${n.h}px">
+          <span class="pm-dot"></span><span class="pm-label">${escapeHtml(n.label)}</span>
+        </div>
+      `;
+    });
+
+    pmCanvas.innerHTML = html;
+    bindProductMapNodeEvents();
+  }
+
+  function renderProductMap() {
+    renderProductMapMessage();
+    renderProductMapSummary();
+    renderProductMapCanvas();
+  }
+
+  async function loadProductMap() {
+    const stand = currentStand();
+    try {
+      const qs = stand ? `?stand=${encodeURIComponent(stand)}` : "";
+      productMap = await api(`/api/projects/${encodeURIComponent(projectName)}/product-map${qs}`);
+      renderProductMap();
+    } catch (err) {
+      pmCanvas.innerHTML = `<p class="error-box">Не удалось загрузить схему продукта: ${escapeHtml(err.message)}</p>`;
+    }
   }
 
   // ---------------- map ----------------
@@ -1490,6 +1864,7 @@
   }
 
   standSelect.addEventListener("change", () => {
+    loadProductMap();
     renderMap();
     renderStatusChart();
     renderTreemap();
@@ -1584,4 +1959,5 @@
   });
 
   await loadSummary();
+  await loadProductMap();
 })();

@@ -866,6 +866,85 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 }
 .route-cell-label { pointer-events: none; }
 
+/* ---------- coverage: схема продукта (карта покрытия v5, DESIGN.md токены) ---------- */
+.pm-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+.pm-toolbar h2 { margin: 0; }
+.pm-toolbar .field { flex: 0 0 auto; }
+
+.pm-top { display: flex; align-items: center; gap: 16px; margin-bottom: 14px; }
+.pm-ring-box { flex: 0 0 auto; line-height: 0; }
+.pm-summary-text { font-size: 13px; color: var(--text-muted); line-height: 1.5; margin: 0; }
+.pm-summary-text b { color: var(--text); font-weight: 700; }
+
+/* контейнер прокручивается по горизонтали сам (DESIGN.md Layout: таблицы/широкие
+   схемы скроллятся внутри своего контейнера, страница — никогда) */
+.pm-canvas-scroll { overflow-x: auto; border-radius: var(--radius); }
+.pm-canvas { position: relative; background: var(--bg); border-radius: var(--radius); }
+
+.pm-zone-bg { position: absolute; border-radius: 14px; background: var(--surface-hover); border: 1px solid var(--border); }
+.pm-zone-label {
+  position: absolute; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--accent); padding: 8px 12px; pointer-events: none;
+}
+
+.pm-edges { position: absolute; inset: 0; pointer-events: none; }
+.pm-edges .pm-edge { fill: none; stroke: var(--text-muted); stroke-opacity: .55; stroke-width: 1.5; }
+.pm-edges .pm-edge-int { stroke-dasharray: 3 3; stroke-opacity: .7; }
+.pm-arrow-head { fill: var(--border); }
+
+.pm-node {
+  position: absolute; display: flex; align-items: center; gap: 5px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--surface); padding: 0 8px; cursor: pointer;
+}
+.pm-node:hover, .pm-node:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; z-index: 5; }
+.pm-node-narrow { padding: 0 4px; gap: 3px; }
+.pm-node-narrow .pm-label { font-size: 10px; }
+.pm-node-int { border-style: dashed; border-radius: 999px; background: var(--surface); }
+.pm-node.pm-node-grey { opacity: .62; cursor: default; }
+
+.pm-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
+.pm-node-green .pm-dot { background: var(--passed); }
+.pm-node-yellow .pm-dot { background: var(--xfail); }
+.pm-node-red .pm-dot { background: var(--failed); }
+.pm-node-grey .pm-dot { background: var(--text-muted); opacity: .7; }
+
+.pm-label {
+  font-size: 11px; font-weight: 600; line-height: 1.15; color: var(--text); overflow: hidden;
+  text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+
+.pm-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 12px; font-size: 12px; color: var(--text-muted); }
+.pm-legend-item { display: flex; align-items: center; gap: 6px; }
+.pm-legend-item i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.pm-legend-item i.green { background: var(--passed); }
+.pm-legend-item i.yellow { background: var(--xfail); }
+.pm-legend-item i.red { background: var(--failed); }
+.pm-legend-item i.grey { background: var(--text-muted); opacity: .7; }
+
+.pm-tip {
+  position: fixed; z-index: 50; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow-card); padding: 12px 14px; width: 270px;
+  pointer-events: none;
+}
+.pm-tip-title { font-weight: 700; font-size: 13.5px; margin: 0 0 2px; display: flex; align-items: center; gap: 7px; }
+.pm-tip-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: 0 0 auto; }
+.pm-tip-dot.pm-dot-green { background: var(--passed); }
+.pm-tip-dot.pm-dot-yellow { background: var(--xfail); }
+.pm-tip-dot.pm-dot-red { background: var(--failed); }
+.pm-tip-dot.pm-dot-grey { background: var(--text-muted); opacity: .7; }
+.pm-tip-sub { font-size: 11.5px; color: var(--text-muted); margin-bottom: 8px; }
+.pm-tip-item { font-size: 11.5px; padding: 2px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pm-tip-more { font-size: 10.5px; color: var(--text-muted); margin-top: 4px; }
+
+/* «Подробно» — старый набор виджетов (treemap/таблица областей/карта маршрутов),
+   свёрнут по умолчанию (см. .longest-tests-spoiler — тот же приём стрелки ▸/▾) */
+.coverage-details-spoiler { margin-top: 16px; }
+.coverage-details-spoiler > summary { cursor: pointer; list-style: none; margin-bottom: 4px; }
+.coverage-details-spoiler > summary::-webkit-details-marker { display: none; }
+.coverage-details-spoiler > summary h2 { display: inline-flex; align-items: center; gap: 6px; margin: 0; }
+.coverage-details-spoiler > summary h2::before { content: "▸"; font-size: 12px; color: var(--text-muted); }
+.coverage-details-spoiler[open] > summary h2::before { content: "▾"; }
+
 .detail-list { margin: 6px 0 12px; padding-left: 18px; font-size: 13px; }
 .detail-list li { margin-bottom: 4px; }
 .detail-list li.clickable { cursor: pointer; }
