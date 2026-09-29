@@ -37,7 +37,11 @@
         <p class="pm-summary-text" id="pm-summary-text"></p>
       </div>
       <div class="pm-canvas-scroll">
-        <div class="pm-canvas" id="pm-canvas"><p class="muted">Загрузка…</p></div>
+        <svg class="pm-canvas-svg" id="pm-canvas-svg" preserveAspectRatio="xMidYMin meet">
+          <foreignObject width="100%" height="100%">
+            <div class="pm-canvas" id="pm-canvas" xmlns="http://www.w3.org/1999/xhtml"><p class="muted">Загрузка…</p></div>
+          </foreignObject>
+        </svg>
       </div>
       <div class="pm-legend">
         <span class="pm-legend-item"><i class="green"></i>покрыто и проходит</span>

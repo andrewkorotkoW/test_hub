@@ -877,8 +877,17 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 .pm-summary-text b { color: var(--text); font-weight: 700; }
 
 /* контейнер прокручивается по горизонтали сам (DESIGN.md Layout: таблицы/широкие
-   схемы скроллятся внутри своего контейнера, страница — никогда) */
+   схемы скроллятся внутри своего контейнера, страница — никогда). Сама схема живёт в
+   координатах canvas.width×canvas.height (viewBox, атрибуты выставляет
+   pmCanvasSvgAttrs в ui/coverage.js); width:100%/height:auto пропорционально ужимает
+   её под ширину карточки, чтобы на десктопных окнах она была видна целиком без
+   скролла. На экранах <1000px сжатие делает подписи узлов нечитаемыми — там схема
+   рисуется в натуральную величину, и вместо сжатия работает скролл контейнера. */
 .pm-canvas-scroll { overflow-x: auto; border-radius: var(--radius); }
+.pm-canvas-svg { display: block; width: 100%; height: auto; }
+@media (max-width: 999px) {
+  .pm-canvas-svg { width: auto; }
+}
 .pm-canvas { position: relative; background: var(--bg); border-radius: var(--radius); }
 
 .pm-zone-bg { position: absolute; border-radius: 14px; background: var(--surface-hover); border: 1px solid var(--border); }

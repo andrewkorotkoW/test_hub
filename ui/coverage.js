@@ -53,6 +53,7 @@
   const pmMessage = document.getElementById("pm-message");
   const pmRingBox = document.getElementById("pm-ring");
   const pmSummaryText = document.getElementById("pm-summary-text");
+  const pmCanvasSvg = document.getElementById("pm-canvas-svg");
   const pmCanvas = document.getElementById("pm-canvas");
   const pmTip = document.getElementById("pm-tip");
 
@@ -498,8 +499,29 @@
     });
   }
 
+  // Атрибуты обёртки <svg class="pm-canvas-svg"> вокруг схемы: viewBox задаёт её
+  // собственные координаты (canvas.width×canvas.height из product_map), width/height —
+  // натуральный (немасштабированный) размер, от которого CSS считает аспект. Само
+  // масштабирование — в ui/style.css (.pm-canvas-svg: width:100%/height:auto при ширине
+  // экрана ≥1000px — карта пропорционально ужимается под карточку; на <1000px — нативный
+  // размер + горизонтальный скролл внутри карточки, не страницы). Раньше карта всегда
+  // рисовалась в натуральную величину и была видна только после горизонтального скролла
+  // карточки — на обычных десктопных окнах (контент карточки уже native canvas.width)
+  // правая зона «Админка» пропадала за краем без скролла на первый взгляд.
+  function pmCanvasSvgAttrs(canvas) {
+    return {
+      viewBox: `0 0 ${canvas.width} ${canvas.height}`,
+      width: String(canvas.width),
+      height: String(canvas.height),
+    };
+  }
+
   function renderProductMapCanvas() {
     const canvas = productMap.canvas;
+    const svgAttrs = pmCanvasSvgAttrs(canvas);
+    pmCanvasSvg.setAttribute("viewBox", svgAttrs.viewBox);
+    pmCanvasSvg.setAttribute("width", svgAttrs.width);
+    pmCanvasSvg.setAttribute("height", svgAttrs.height);
     const nodeById = new Map(productMap.nodes.map((n) => [n.id, n]));
     pmCanvas.style.width = `${canvas.width}px`;
     pmCanvas.style.height = `${canvas.height}px`;
