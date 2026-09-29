@@ -31,7 +31,7 @@ from pathlib import Path
 
 from ..config import settings
 from ..db import get_connection
-from . import allure_report, flaky, xfail_registry
+from . import allure_report, flaky, test_cases, xfail_registry
 from .ws import hub
 
 _COLLECT_RE = re.compile(r"^(?P<file>[\w./-]+\.py)::(?P<rest>.+)$")
@@ -355,6 +355,12 @@ async def _finalize(run_id: int, status: str, started_at: float, counts: dict[st
         # здесь. Независимы друг от друга — ни один не знает про другой.
         asyncio.create_task(asyncio.to_thread(flaky.recalc, row["project"], row["stand"]))
         asyncio.create_task(asyncio.to_thread(xfail_registry.recalc, row["project"], row["stand"], run_id))
+
+    if row is not None:
+        # Скриншоты шагов тест-кейсов из allure-вложений этого прогона (см.
+        # app.core.test_cases.sync_run_attachments) — не зависит от стенда (в
+        # отличие от flaky/xfail выше), поэтому вне if row["stand"].
+        asyncio.create_task(asyncio.to_thread(test_cases.sync_run_attachments, row["project"], run_id))
 
     # Уведомление о расписании (app.core.schedule.on_run_finished) само решает, был ли
     # этот run_id вообще запущен планировщиком — не блокирует завершение прогона.

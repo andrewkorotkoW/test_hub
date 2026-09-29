@@ -12,16 +12,42 @@ import_drafts() апсертит записи по ключу (project, nodeid) 
 Статус последнего прогона довешивается тем же способом, что и в xfail_registry/
 flaky/coverage: nodeid -> allure fullName -> поиск в allure-results последнего
 завершённого прогона стенда (app.core.stats.default_stand/latest_finished_run_id,
-app.core.allure_report.parse_results)."""
+app.core.allure_report.parse_results).
+
+Скриншоты шагов (test_case_attachments, source in ('allure', 'manual')):
+- sync_run_attachments() вызывается раннером после каждого завершённого прогона
+  (app.core.runner.py::_finalize, рядом с xfail_registry.recalc — тем же приёмом:
+  asyncio.to_thread, своя БД-коннекция, независимо от остальных пересчётов). Для
+  каждого кейса проекта с nodeid, чей allure fullName встречается среди
+  *-result.json этого прогона, собирает image-вложения (type/mime image/png или
+  image/jpeg) и заменяет ими предыдущие attachments с source='allure' этого кейса
+  (и в БД, и на диске) — это синхронизация состояния "на последний прогон", а не
+  накопление. Тесты, не участвовавшие в прогоне, не трогаются — их старые
+  allure-скриншоты остаются от прошлого прогона, где эти тесты выполнялись.
+  Привязка к шагу: allure_pytest кладёт вложения шага в `steps[i].attachments`
+  (i — 0-based позиция в списке шагов результата) — это лишь приближённое
+  сопоставление с шагами test_cases (allure не хранит номер шага test_hub),
+  используется порядковый номер step_n = i + 1. Вложения теста целиком, не
+  привязанные ни к какому шагу (`attachments` на верхнем уровне *-result.json),
+  получают step_n = 0 — в карточке кейса это общие вложения (значение выбрано
+  вместо NULL: колонка test_case_attachments.step_n NOT NULL). Вложенные
+  под-шаги (steps[i].steps) не разворачиваются — на практике плагины test_hub
+  кладут скриншоты шага ровно на первый уровень steps[].
+- add_manual_attachment()/delete_manual_attachment() — ручная загрузка/удаление
+  через API (app/routers/test_cases.py), source='manual'; автосинхронизация их
+  не трогает."""
 from __future__ import annotations
 
 import json
+import mimetypes
 import re
 import sqlite3
+import uuid
 from datetime import datetime
 from pathlib import Path
 
 from ..config import settings
+from ..db import get_connection
 from . import allure_report, stats
 
 TEMPLATE_FILE = "TEMPLATE.md"
@@ -34,9 +60,25 @@ PRECONDITION_RE = re.compile(r"^-\s*Предусловия:\s*(.*)$")
 
 TESTCASES_DIR = settings.WORKSPACE_DIR / "testcases"
 
+_IMAGE_MIME_EXTENSIONS = {"image/png": ".png", "image/jpeg": ".jpg"}
+_EXTENSION_MIME_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
+
+
+class UnsupportedAttachmentType(Exception):
+    """Загружаемый файл — не PNG/JPG (ни по расширению, ни по mime-типу)."""
+
+
+class NotManualAttachment(Exception):
+    """Попытка удалить через API вложение с source='allure' — оно управляется
+    только автосинхронизацией (sync_run_attachments), не ручным DELETE."""
+
 
 def attachments_dir(project: str, case_id: int) -> Path:
     return TESTCASES_DIR / project / str(case_id)
+
+
+def _attachment_url(project: str, case_id: int, attachment_id: int) -> str:
+    return f"/api/projects/{project}/testcases/{case_id}/attachments/{attachment_id}"
 
 
 # ------------------------------------------------------------------ парсер markdown-черновиков
@@ -285,13 +327,40 @@ def _status_map(conn: sqlite3.Connection, project: str) -> dict[str, str]:
 # ------------------------------------------------------------------ чтение
 
 
-def _case_payload(row: sqlite3.Row, status: str | None) -> dict:
+def _attachment_payload(row: sqlite3.Row, project: str) -> dict:
+    return {
+        "id": row["id"],
+        "step_n": row["step_n"],
+        "url": _attachment_url(project, row["case_id"], row["id"]),
+        "source": row["source"],
+        "created_at": row["created_at"],
+    }
+
+
+def _load_attachments(conn: sqlite3.Connection, project: str, case_id: int) -> list[dict]:
+    rows = conn.execute(
+        "SELECT * FROM test_case_attachments WHERE case_id = ? ORDER BY step_n, id", (case_id,)
+    ).fetchall()
+    return [_attachment_payload(row, project) for row in rows]
+
+
+def _case_payload(row: sqlite3.Row, status: str | None, attachments: list[dict] | None = None) -> dict:
+    """attachments=None — для list_tree/create_manual/update_case, где вложения
+    не нужны в каждой строке дерева (N+1 запросов). get_case (карточка кейса)
+    передаёт реальный список — по шагам (attachments[i]["step_n"] == steps[i]["n"])
+    и общие (step_n == 0), см. описание модуля."""
+    steps = json.loads(row["steps"] or "[]")
+    by_step: dict[int, list[dict]] = {}
+    for attachment in attachments or []:
+        by_step.setdefault(attachment["step_n"], []).append(attachment)
+    for step in steps:
+        step["attachments"] = by_step.get(step["n"], [])
     return {
         "id": row["id"],
         "project": row["project"],
         "section": row["section"],
         "title": row["title"],
-        "steps": json.loads(row["steps"] or "[]"),
+        "steps": steps,
         "precondition": row["precondition"],
         "priority": row["priority"],
         "nodeid": row["nodeid"],
@@ -299,7 +368,7 @@ def _case_payload(row: sqlite3.Row, status: str | None) -> dict:
         "updated_at": row["updated_at"],
         "updated_by": row["updated_by"],
         "status": status,
-        "attachments": [],
+        "attachments": by_step.get(0, []),
     }
 
 
@@ -312,7 +381,8 @@ def get_case(conn: sqlite3.Connection, project: str, case_id: int) -> dict | Non
     status = None
     if row["nodeid"]:
         status = _status_map(conn, project).get(_nodeid_to_full_name(row["nodeid"]))
-    return _case_payload(row, status)
+    attachments = _load_attachments(conn, project, case_id)
+    return _case_payload(row, status, attachments)
 
 
 def _matches_query(row: sqlite3.Row, q: str) -> bool:
@@ -367,3 +437,166 @@ def list_tree(
         cases.append(_case_payload(row, case_status))
 
     return _build_tree(cases)
+
+
+# ------------------------------------------------------------------ автосинхронизация со скриншотами allure
+
+
+def _image_attachments_from_result(data: dict) -> list[tuple[int, str, str]]:
+    """Один *-result.json -> [(step_n, имя_файла_в_results_dir, mime), ...] для
+    image-вложений (см. описание модуля про step_n=0 и первый уровень steps[])."""
+    found: list[tuple[int, str, str]] = []
+
+    def _collect(attachments: list | None, step_n: int) -> None:
+        for att in attachments or []:
+            source = att.get("source")
+            if not source:
+                continue
+            mime = att.get("type") or mimetypes.guess_type(att.get("name") or source)[0] or ""
+            if mime in _IMAGE_MIME_EXTENSIONS:
+                found.append((step_n, source, mime))
+
+    _collect(data.get("attachments"), 0)
+    for i, step in enumerate(data.get("steps") or [], start=1):
+        _collect(step.get("attachments"), i)
+    return found
+
+
+def _attachments_by_full_name(results_dir: Path) -> dict[str, list[tuple[int, str, str]]]:
+    by_full_name: dict[str, list[tuple[int, str, str]]] = {}
+    for path in results_dir.glob("*-result.json"):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        full_name = data.get("fullName") or data.get("name")
+        if full_name:
+            by_full_name[full_name] = _image_attachments_from_result(data)
+    return by_full_name
+
+
+def _clear_allure_attachments(conn: sqlite3.Connection, case_id: int) -> None:
+    rows = conn.execute(
+        "SELECT path FROM test_case_attachments WHERE case_id = ? AND source = 'allure'", (case_id,)
+    ).fetchall()
+    for row in rows:
+        (TESTCASES_DIR / row["path"]).unlink(missing_ok=True)
+    conn.execute("DELETE FROM test_case_attachments WHERE case_id = ? AND source = 'allure'", (case_id,))
+
+
+def _replace_allure_attachments(
+    conn: sqlite3.Connection,
+    project: str,
+    case_id: int,
+    attachments: list[tuple[int, str, str]],
+    results_dir: Path,
+    now: str,
+) -> None:
+    _clear_allure_attachments(conn, case_id)
+    if not attachments:
+        return
+    case_dir = attachments_dir(project, case_id)
+    case_dir.mkdir(parents=True, exist_ok=True)
+    for i, (step_n, source_name, mime) in enumerate(attachments):
+        src = results_dir / source_name
+        if not src.is_file():
+            continue
+        dest_name = f"allure_{step_n}_{i}{_IMAGE_MIME_EXTENSIONS[mime]}"
+        (case_dir / dest_name).write_bytes(src.read_bytes())
+        conn.execute(
+            "INSERT INTO test_case_attachments (case_id, step_n, path, source, created_at) VALUES (?, ?, ?, 'allure', ?)",
+            (case_id, step_n, f"{project}/{case_id}/{dest_name}", now),
+        )
+
+
+def sync_run_attachments(project: str, run_id: int) -> None:
+    """Вызывается раннером после каждого завершённого прогона (см. описание
+    модуля) — своя БД-коннекция, т.к. запускается через asyncio.to_thread из
+    app.core.runner.py::_finalize, как и xfail_registry.recalc."""
+    conn = get_connection()
+    try:
+        cases = conn.execute(
+            "SELECT id, nodeid FROM test_cases WHERE project = ? AND nodeid IS NOT NULL AND nodeid != ''",
+            (project,),
+        ).fetchall()
+        if not cases:
+            return
+        results_dir = settings.ALLURE_RESULTS_DIR / str(run_id)
+        by_full_name = _attachments_by_full_name(results_dir)
+        if not by_full_name:
+            return
+        now = datetime.now().isoformat(timespec="seconds")
+        for case in cases:
+            full_name = _nodeid_to_full_name(case["nodeid"])
+            if full_name not in by_full_name:
+                continue
+            _replace_allure_attachments(conn, project, case["id"], by_full_name[full_name], results_dir, now)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+# ------------------------------------------------------------------ ручная загрузка/удаление вложений
+
+
+def add_manual_attachment(
+    conn: sqlite3.Connection, project: str, case_id: int, step_n: int, filename: str, data: bytes
+) -> dict | None:
+    """Сохраняет ручной скриншот шага (source='manual'). None — кейса с таким id
+    в проекте нет; UnsupportedAttachmentType — расширение файла не png/jpg/jpeg."""
+    case = conn.execute("SELECT id FROM test_cases WHERE project = ? AND id = ?", (project, case_id)).fetchone()
+    if case is None:
+        return None
+    mime = _EXTENSION_MIME_TYPES.get(Path(filename).suffix.lower())
+    if mime is None:
+        raise UnsupportedAttachmentType(filename)
+
+    case_dir = attachments_dir(project, case_id)
+    case_dir.mkdir(parents=True, exist_ok=True)
+    dest_name = f"manual_{uuid.uuid4().hex}{_IMAGE_MIME_EXTENSIONS[mime]}"
+    (case_dir / dest_name).write_bytes(data)
+
+    now = datetime.now().isoformat(timespec="seconds")
+    rel_path = f"{project}/{case_id}/{dest_name}"
+    cur = conn.execute(
+        "INSERT INTO test_case_attachments (case_id, step_n, path, source, created_at) VALUES (?, ?, ?, 'manual', ?)",
+        (case_id, step_n, rel_path, now),
+    )
+    conn.commit()
+    return _attachment_payload(
+        conn.execute("SELECT * FROM test_case_attachments WHERE id = ?", (cur.lastrowid,)).fetchone(), project
+    )
+
+
+def delete_manual_attachment(conn: sqlite3.Connection, project: str, case_id: int, attachment_id: int) -> bool:
+    """True — удалено; False — не найдено (или кейс/проект не совпали);
+    NotManualAttachment — найдено, но source='allure' (не годится для DELETE)."""
+    row = conn.execute(
+        "SELECT a.* FROM test_case_attachments a JOIN test_cases c ON c.id = a.case_id "
+        "WHERE a.id = ? AND a.case_id = ? AND c.project = ?",
+        (attachment_id, case_id, project),
+    ).fetchone()
+    if row is None:
+        return False
+    if row["source"] != "manual":
+        raise NotManualAttachment(attachment_id)
+    (TESTCASES_DIR / row["path"]).unlink(missing_ok=True)
+    conn.execute("DELETE FROM test_case_attachments WHERE id = ?", (attachment_id,))
+    conn.commit()
+    return True
+
+
+def get_attachment_file(conn: sqlite3.Connection, project: str, case_id: int, attachment_id: int) -> tuple[bytes, str] | None:
+    """(содержимое, mime) вложения для отдачи GET .../attachments/{id}; None — не найдено."""
+    row = conn.execute(
+        "SELECT a.* FROM test_case_attachments a JOIN test_cases c ON c.id = a.case_id "
+        "WHERE a.id = ? AND a.case_id = ? AND c.project = ?",
+        (attachment_id, case_id, project),
+    ).fetchone()
+    if row is None:
+        return None
+    path = TESTCASES_DIR / row["path"]
+    if not path.is_file():
+        return None
+    mime = _EXTENSION_MIME_TYPES.get(path.suffix.lower(), "application/octet-stream")
+    return path.read_bytes(), mime
