@@ -12,7 +12,8 @@ from .config import BASE_DIR, settings
 from .core import runner, schedule
 from .db import init_db
 from .routers import (
-    admin, auth, coverage, flaky, projects, runs, schedules, sections, sentry, share, stats, test_cases, users, xfail,
+    admin, auth, coverage, flaky, product_map, projects, runs, schedules, sections, sentry, share, stats, test_cases,
+    users, xfail,
 )
 
 logger = logging.getLogger(__name__)
@@ -107,6 +108,7 @@ app.include_router(share.public_router)
 app.include_router(schedules.router)
 app.include_router(test_cases.router)
 app.include_router(sentry.router)
+app.include_router(product_map.router)
 
 # Статика фронтенда (ui/) монтируется последней, чтобы её catch-all "/" не
 # перехватывал API-маршруты, зарегистрированные выше.
