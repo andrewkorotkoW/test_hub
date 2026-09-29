@@ -42,9 +42,18 @@ _COLLECT_RE = re.compile(r"^(?P<file>[\w./-]+\.py)::(?P<rest>.+)$")
 # nodeid может содержать пробелы (параметризованные тесты, "test[a b]") — поэтому
 # у "end"/"step" nodeid распознаётся жадным `.+` с бэктрекингом до статуса/номера
 # шага в конце строки, а не split() по пробелу.
+#
+# pytest -v печатает nodeid теста и PASSED/FAILED/XFAIL без завершающего перевода
+# строки перед тем, как плагин допишет свой маркер — поэтому в реальном выводе
+# маркер оказывается не в начале строки, а где-то посередине ("test_x ... [TH]
+# start test_x", "PASSED [ 50%][TH] end test_x passed"), и в одной строке может
+# встретиться несколько маркеров подряд. _split_th_markers() режет такую строку на
+# сегменты по границам маркеров, и уже каждый сегмент целиком (от "[TH]" до
+# следующего маркера или конца строки) проверяется регэкспами ниже.
 _TH_START_RE = re.compile(r"^\[TH\] start (?P<nodeid>.+)$")
 _TH_END_RE = re.compile(r"^\[TH\] end (?P<nodeid>.+) (?P<test_status>\S+)$")
 _TH_STEP_RE = re.compile(r"^\[TH\] step (?P<nodeid>.+) (?P<step>\d+) (?P<name>.+)$")
+_TH_MARKER_START_RE = re.compile(r"\[TH\] (?:start|end|step) ")
 
 # Маскирование секретов в строках вывода pytest перед записью в run_events/трансляцией
 # по WebSocket (см. задачу шаринга отчёта — публичная ссылка на прогон не должна
@@ -317,19 +326,36 @@ def _parse_th_line(run_id: int, line: str) -> tuple[str, str | None]:
     return "line", _current_nodeid.get(run_id)
 
 
+def _split_th_markers(line: str) -> list[str]:
+    """Режет строку вывода pytest на сегменты по границам маркеров "[TH] start/end/
+    step" — они не всегда стоят в начале строки (см. комментарий у _TH_START_RE) и
+    могут повторяться в одной строке несколько раз. Текст до первого маркера (если
+    есть) идёт отдельным сегментом kind='line', каждый маркер и всё до следующего
+    маркера (или до конца строки) — отдельным сегментом."""
+    starts = [m.start() for m in _TH_MARKER_START_RE.finditer(line)]
+    if not starts:
+        return [line]
+    segments = [line[:starts[0]]] if starts[0] > 0 else []
+    for i, start in enumerate(starts):
+        end = starts[i + 1] if i + 1 < len(starts) else len(line)
+        segments.append(line[start:end])
+    return segments
+
+
 async def _log_line(run_id: int, line: str) -> None:
     line = mask_secrets(line)
-    kind, nodeid = _parse_th_line(run_id, line)
     conn = get_connection()
     try:
-        conn.execute(
-            "INSERT INTO run_events (run_id, ts, line, nodeid, kind) VALUES (?, ?, ?, ?, ?)",
-            (run_id, datetime.now().isoformat(timespec="seconds"), line, nodeid, kind),
-        )
-        conn.commit()
+        for segment in _split_th_markers(line):
+            kind, nodeid = _parse_th_line(run_id, segment)
+            conn.execute(
+                "INSERT INTO run_events (run_id, ts, line, nodeid, kind) VALUES (?, ?, ?, ?, ?)",
+                (run_id, datetime.now().isoformat(timespec="seconds"), segment, nodeid, kind),
+            )
+            conn.commit()
+            await hub.broadcast(run_id, {"type": kind, "run_id": run_id, "line": segment, "nodeid": nodeid})
     finally:
         conn.close()
-    await hub.broadcast(run_id, {"type": kind, "run_id": run_id, "line": line, "nodeid": nodeid})
 
 
 async def _finalize(run_id: int, status: str, started_at: float, counts: dict[str, int]) -> None:

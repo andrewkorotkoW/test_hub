@@ -30,6 +30,36 @@ def _frame_step_and_url(run_id: int, rel_path: str) -> tuple[int, str]:
     return step, f"/api/runs/{run_id}/frames/{rel_path}"
 
 
+def _nodeid_to_full_name(nodeid: str) -> str:
+    """pytest nodeid -> allure fullName. Та же логика, что и в app.core.coverage/flaky/
+    xfail_registry/tg_bot (allure_pytest.utils.allure_full_name) — своя копия по тому
+    же соглашению модулей: не тянуть межмодульную зависимость ради одной функции."""
+    file_part, _, rest = nodeid.partition("::")
+    module = file_part[:-3] if file_part.endswith(".py") else file_part
+    module = module.replace("/", ".")
+    if not rest:
+        return module
+    segments = rest.split("::")
+    test = segments[-1].split("[")[0]
+    class_name = f".{segments[-2]}" if len(segments) > 1 else ""
+    return f"{module}{class_name}#{test}"
+
+
+def _full_name_index(tree: dict) -> dict[str, str]:
+    """allure fullName -> pytest nodeid по дереву тестов (runner.discover()) — тем же
+    приёмом, что и app/core/flaky.py::full_name_index и app/core/xfail_registry.py::
+    full_name_index, здесь нужен для GET /runs/{id}/tests после завершения прогона:
+    allure_report.parse_results отдаёт только fullName (см. allure_report._parse_result),
+    а единым ключом теста в ответе должен быть pytest nodeid (кадры/лог пишутся под ним)."""
+    index: dict[str, str] = {}
+    for file_path, classes in tree.items():
+        for cls_name, tests in classes.items():
+            for test_name in tests:
+                nodeid = f"{file_path}::{cls_name}::{test_name}" if cls_name else f"{file_path}::{test_name}"
+                index.setdefault(_nodeid_to_full_name(nodeid), nodeid)
+    return index
+
+
 def _get_project_or_404(conn: sqlite3.Connection, name: str) -> sqlite3.Row:
     row = conn.execute("SELECT * FROM projects WHERE name = ?", (name,)).fetchone()
     if not row:
@@ -125,17 +155,22 @@ def get_report(
 
 
 @router.get("/runs/{run_id}/tests")
-def list_run_tests(
+async def list_run_tests(
     run_id: int,
     conn: sqlite3.Connection = Depends(get_db),
     _user: sqlite3.Row = Depends(get_current_user),
 ) -> list[dict]:
     """Тесты прогона со статусами: пока прогон running/queued — по живым
     test_start/test_end событиям run_events (статус теста в это время известен
-    только из "[TH] end <nodeid> <status>"-строки), после завершения — из
-    allure_report.parse_results, как get_report. allure отдаёт fullName (см.
-    allure_report._parse_result), а не pytest nodeid — используем его как
-    nodeid в ответе за неимением лучшего источника после завершения прогона."""
+    только из "[TH] end <nodeid> <status>"-строки, nodeid там уже pytest nodeid),
+    после завершения — из allure_report.parse_results, как get_report.
+
+    allure отдаёт только fullName (см. allure_report._parse_result), а единый ключ
+    теста в ответе — pytest nodeid (кадры и лог пишутся под ним, не под fullName) —
+    поэтому fullName после завершения прогона приводится к nodeid через статическое
+    дерево тестов проекта (runner.discover() + _full_name_index), как это уже делают
+    app/routers/flaky.py и app/routers/xfail.py. Оба поля (nodeid и full_name)
+    отдаются всегда — UI использует nodeid, full_name — только для отображения/логов."""
     row = _get_run_or_404(conn, run_id)
     frame_nodeids = {
         r["nodeid"]
@@ -160,13 +195,29 @@ def list_run_tests(
             else:
                 statuses[nodeid] = runner.end_status_from_line(ev["line"]) or "unknown"
         return [
-            {"nodeid": nodeid, "status": test_status, "has_frames": nodeid in frame_nodeids}
+            {
+                "nodeid": nodeid,
+                "full_name": _nodeid_to_full_name(nodeid),
+                "status": test_status,
+                "has_frames": nodeid in frame_nodeids,
+            }
             for nodeid, test_status in statuses.items()
         ]
 
+    project = conn.execute("SELECT path, venv FROM projects WHERE name = ?", (row["project"],)).fetchone()
+    nodeid_by_full_name: dict[str, str] = {}
+    if project is not None:
+        discovered = await runner.discover(project["path"], project["venv"])
+        nodeid_by_full_name = _full_name_index(discovered.get("tree") or {})
+
     results = allure_report.parse_results(runner.allure_dir(run_id))
     return [
-        {"nodeid": t["name"], "status": t["status"], "has_frames": t["name"] in frame_nodeids}
+        {
+            "nodeid": nodeid_by_full_name.get(t["name"], t["name"]),
+            "full_name": t["name"],
+            "status": t["status"],
+            "has_frames": nodeid_by_full_name.get(t["name"], t["name"]) in frame_nodeids,
+        }
         for t in results
     ]
 

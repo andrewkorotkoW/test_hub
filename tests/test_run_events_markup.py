@@ -14,10 +14,17 @@ frames_dir при удалении прогона):
 3. Старый (домиграционный по сути) завершённый прогон — без единого run_events и
    без каталога allure-results вовсе — GET tests/log/frames не должны падать 500,
    а отдавать пустой/деградированный ответ.
+4. Живой прогон #40 VSHGU (реальные данные в БД, только чтение при разборе задачи)
+   показал, что "[TH] start/end"-маркер в реальном выводе pytest -v стоит не в
+   начале строки (nodeid/PASSED печатаются без перевода строки перед маркером) —
+   разбор ждал "^[TH]" и такие строки целиком проваливались в kind='line' без
+   nodeid. Чистые тесты на _split_th_markers — в test_run_events_nodeid.py, здесь —
+   сквозной тест на _log_line (запись в run_events).
 """
 import sqlite3
 from datetime import datetime
 
+from app.core import runner
 from app.db import init_db
 
 from .conftest import poll_until, register_project
@@ -164,3 +171,46 @@ async def test_tests_log_frames_endpoints_degrade_gracefully_for_run_without_any
     frames_resp = await qa_client.get(f"/api/runs/{run_id}/tests/tests%2Fx.py%3A%3Atest_a/frames")
     assert frames_resp.status_code == 200
     assert frames_resp.json() == []
+
+
+async def test_log_line_splits_glued_th_markers_into_separate_run_events(db_path):
+    """Реальная строка вывода pytest -v (прогон #40 VSHGU) — nodeid или PASSED/XFAIL
+    перед маркером на той же строке, без перевода строки. _log_line должен записать
+    текст до маркера отдельной kind='line' строкой, а сам маркер — отдельным
+    test_start/test_end событием с правильным nodeid."""
+    conn = sqlite3.connect(db_path)
+    now = datetime.now().isoformat(timespec="seconds")
+    cur = conn.execute(
+        "INSERT INTO runs (project, stand, target, status, started, requested_by, counts) "
+        "VALUES ('glued_proj', NULL, 'all', 'running', ?, 'qa', '{}')",
+        (now,),
+    )
+    conn.commit()
+    run_id = cur.lastrowid
+    conn.close()
+
+    nodeid = "tests/ui/x.py::TestX::test_x"
+    runner._current_nodeid[run_id] = None
+    try:
+        await runner._log_line(run_id, f"{nodeid} [TH] start {nodeid}")
+        await runner._log_line(run_id, "console output")
+        await runner._log_line(run_id, f"PASSED [ 50%][TH] end {nodeid} passed")
+    finally:
+        runner._current_nodeid.pop(run_id, None)
+
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute(
+            "SELECT kind, nodeid, line FROM run_events WHERE run_id = ? ORDER BY id", (run_id,)
+        ).fetchall()
+    finally:
+        conn.close()
+
+    assert [(r["kind"], r["nodeid"], r["line"]) for r in rows] == [
+        ("line", None, f"{nodeid} "),
+        ("test_start", nodeid, f"[TH] start {nodeid}"),
+        ("line", nodeid, "console output"),
+        ("line", nodeid, "PASSED [ 50%]"),
+        ("test_end", nodeid, f"[TH] end {nodeid} passed"),
+    ]

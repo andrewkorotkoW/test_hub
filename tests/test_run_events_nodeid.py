@@ -46,6 +46,37 @@ def test_parse_th_line_tracks_current_nodeid_across_calls():
         runner._current_nodeid.pop(run_id, None)
 
 
+def test_split_th_markers_handles_marker_not_at_line_start():
+    """pytest -v печатает nodeid/PASSED-XFAIL без перевода строки перед тем, как
+    плагин допишет свой маркер (реальный прогон #40 VSHGU: "test_x ... [TH] start
+    test_x", "PASSED [ 50%][TH] end test_x passed") — раньше "[TH]" распознавался
+    только в начале строки, и такие строки целиком проваливались в kind='line'."""
+    nodeid = "tests/ui/x.py::TestX::test_x"
+    assert runner._split_th_markers(f"{nodeid} [TH] start {nodeid}") == [
+        f"{nodeid} ",
+        f"[TH] start {nodeid}",
+    ]
+    assert runner._split_th_markers(f"PASSED [ 50%][TH] end {nodeid} passed") == [
+        "PASSED [ 50%]",
+        f"[TH] end {nodeid} passed",
+    ]
+
+
+def test_split_th_markers_handles_several_markers_in_one_line():
+    nodeid_a = "tests/x.py::test_a"
+    nodeid_b = "tests/x.py::test_b"
+    assert runner._split_th_markers(f"[TH] end {nodeid_a} passed[TH] start {nodeid_b}") == [
+        f"[TH] end {nodeid_a} passed",
+        f"[TH] start {nodeid_b}",
+    ]
+
+
+def test_split_th_markers_without_marker_returns_line_unchanged():
+    assert runner._split_th_markers("plain pytest output, no markers here") == [
+        "plain pytest output, no markers here"
+    ]
+
+
 def test_check_run_token_rejects_unknown_or_empty():
     run_id = 54321
     runner._run_tokens.pop(run_id, None)
