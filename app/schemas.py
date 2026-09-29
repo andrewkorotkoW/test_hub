@@ -291,6 +291,25 @@ class XfailCheckResult(BaseModel):
     count: int
 
 
+class SentryIssueOut(BaseModel):
+    id: str
+    title: str
+    culprit: Optional[str] = None
+    level: str
+    count: int
+    user_count: int
+    first_seen: Optional[str] = None
+    last_seen: Optional[str] = None
+    permalink: Optional[str] = None
+    is_new: Optional[bool] = None
+
+
+class SentryIssuesResponse(BaseModel):
+    connected: bool
+    reason: Optional[str] = None
+    issues: list[SentryIssueOut] = Field(default_factory=list)
+
+
 class TestCaseAttachment(BaseModel):
     id: int
     step_n: int
