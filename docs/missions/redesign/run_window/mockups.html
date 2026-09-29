@@ -254,7 +254,8 @@ var DATA = {"meta":{"source_repo":"/Users/andreykorotkow/PycharmProjects/test_hu
 
   function sidebar(active){
     var items=[["projects.html","Проекты",false],["#","Прогоны",active==="runs"],["coverage.html","Покрытие",active==="coverage"],["xfail.html","Xfail",false],["project.html#schedules","Расписания",false]];
-    return '<aside class="side"><div class="brand">Test Hub</div><nav>'+items.map(function(i){return '<a class="'+(i[2]?"on":"")+'" href="#">'+i[1]+'</a>'}).join("")+'</nav><div class="spacer"></div><div class="foot"><button class="btn" style="width:100%">Тема: тёмная</button><button class="btn" style="width:100%">Выйти</button></div></aside>';
+    var themeText=root.getAttribute("data-theme")==="light"?"светлая":"тёмная";
+    return '<aside class="side"><div class="brand">Test Hub</div><nav>'+items.map(function(i){return '<a class="'+(i[2]?"on":"")+'" href="#">'+i[1]+'</a>'}).join("")+'</nav><div class="spacer"></div><div class="foot"><button class="btn" style="width:100%">Тема: '+themeText+'</button><button class="btn" style="width:100%">Выйти</button></div></aside>';
   }
   function runHeader(){
     var r=DATA.run,c=r.counts;
