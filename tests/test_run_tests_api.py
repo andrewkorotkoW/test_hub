@@ -17,6 +17,8 @@ from starlette.testclient import TestClient
 from app.core import runner
 from app.main import app
 
+from .conftest import register_project
+
 
 def _insert_run(conn, project, status_, requested_by="qa"):
     now = datetime.now().isoformat(timespec="seconds")
@@ -56,11 +58,20 @@ async def test_list_run_tests_while_running_uses_live_th_events(qa_client, db_pa
     resp = await qa_client.get(f"/api/runs/{run_id}/tests")
     assert resp.status_code == 200
     items = {item["nodeid"]: item for item in resp.json()}
-    assert items[nodeid_a] == {"nodeid": nodeid_a, "status": "passed", "has_frames": True}
-    assert items[nodeid_b] == {"nodeid": nodeid_b, "status": "running", "has_frames": False}
+    assert items[nodeid_a] == {
+        "nodeid": nodeid_a, "full_name": "tests.test_x#test_a", "status": "passed", "has_frames": True,
+    }
+    assert items[nodeid_b] == {
+        "nodeid": nodeid_b, "full_name": "tests.test_x#test_b", "status": "running", "has_frames": False,
+    }
 
 
-async def test_list_run_tests_after_finish_uses_allure_results(qa_client, isolated_allure_dir, db_path):
+async def test_list_run_tests_after_finish_falls_back_to_full_name_for_unknown_project(
+    qa_client, isolated_allure_dir, db_path
+):
+    """Проект "any_proj" не зарегистрирован (нет строки в projects) — статическое
+    дерево тестов (runner.discover()) недоступно, поэтому nodeid деградирует до
+    allure fullName (лучше, чем падать), но full_name отдаётся всегда."""
     conn = sqlite3.connect(db_path)
     try:
         run_id = _insert_run(conn, "any_proj", "passed")
@@ -77,7 +88,50 @@ async def test_list_run_tests_after_finish_uses_allure_results(qa_client, isolat
 
     resp = await qa_client.get(f"/api/runs/{run_id}/tests")
     assert resp.status_code == 200
-    assert resp.json() == [{"nodeid": "tests.test_x#test_marked", "status": "passed", "has_frames": False}]
+    assert resp.json() == [
+        {
+            "nodeid": "tests.test_x#test_marked",
+            "full_name": "tests.test_x#test_marked",
+            "status": "passed",
+            "has_frames": False,
+        }
+    ]
+
+
+async def test_list_run_tests_after_finish_maps_allure_full_name_to_pytest_nodeid(
+    qa_client, isolated_allure_dir, runnable_project_dir, db_path
+):
+    """Живой прогон #40 VSHGU показал: allure отдаёт только fullName
+    (tests.ui...TestX#test_x), а кадры/лог пишутся под pytest nodeid
+    (tests/ui/...py::TestX::test_x) — без сопоставления UI не находил кадры
+    (has_frames=false). GET /tests должен приводить fullName к nodeid через
+    статическое дерево тестов проекта (runner.discover()), как это уже делают
+    app/routers/flaky.py и app/routers/xfail.py."""
+    await register_project(qa_client, "with_tree_proj", runnable_project_dir)
+    conn = sqlite3.connect(db_path)
+    try:
+        run_id = _insert_run(conn, "with_tree_proj", "passed")
+    finally:
+        conn.close()
+
+    results_dir = runner.allure_dir(run_id)
+    results_dir.mkdir(parents=True)
+    (results_dir / "abc-result.json").write_text(
+        json.dumps(
+            {"fullName": "tests.test_sample#test_ok", "name": "test_ok", "status": "passed", "start": 0, "stop": 1000}
+        )
+    )
+
+    resp = await qa_client.get(f"/api/runs/{run_id}/tests")
+    assert resp.status_code == 200
+    assert resp.json() == [
+        {
+            "nodeid": "tests/test_sample.py::test_ok",
+            "full_name": "tests.test_sample#test_ok",
+            "status": "passed",
+            "has_frames": False,
+        }
+    ]
 
 
 async def test_get_run_test_log_filters_by_nodeid_and_kind(qa_client, db_path):
@@ -117,6 +171,49 @@ async def test_get_run_test_frames_lists_steps_and_urls(qa_client, isolated_fram
     assert resp.json() == [
         {"step": 1, "url": f"/api/runs/{run_id}/frames/{h}/1.png"},
         {"step": 2, "url": f"/api/runs/{run_id}/frames/{h}/2.png"},
+    ]
+
+
+async def test_list_run_tests_after_finish_has_frames_matches_by_pytest_nodeid(
+    qa_client, isolated_allure_dir, isolated_frames_dir, runnable_project_dir, db_path
+):
+    """Кадры (POST /runs/{id}/frames) всегда пишутся под pytest nodeid (плагин
+    передаёт его напрямую, а не allure fullName) — has_frames после завершения
+    прогона должен считаться по nodeid, приведённому из allure fullName, а не по
+    самому fullName (см. run 40 VSHGU: has_frames был false, хотя кадры были)."""
+    await register_project(qa_client, "with_tree_proj2", runnable_project_dir)
+    conn = sqlite3.connect(db_path)
+    try:
+        run_id = _insert_run(conn, "with_tree_proj2", "passed")
+        nodeid = "tests/test_sample.py::TestGroup::test_class_a"
+        h = hashlib.sha1(nodeid.encode()).hexdigest()[:16]
+        _insert_event(conn, run_id, f"{h}/1.png", nodeid, "frame")
+    finally:
+        conn.close()
+
+    results_dir = runner.allure_dir(run_id)
+    results_dir.mkdir(parents=True)
+    (results_dir / "abc-result.json").write_text(
+        json.dumps(
+            {
+                "fullName": "tests.test_sample.TestGroup#test_class_a",
+                "name": "test_class_a",
+                "status": "passed",
+                "start": 0,
+                "stop": 1000,
+            }
+        )
+    )
+
+    resp = await qa_client.get(f"/api/runs/{run_id}/tests")
+    assert resp.status_code == 200
+    assert resp.json() == [
+        {
+            "nodeid": nodeid,
+            "full_name": "tests.test_sample.TestGroup#test_class_a",
+            "status": "passed",
+            "has_frames": True,
+        }
     ]
 
 

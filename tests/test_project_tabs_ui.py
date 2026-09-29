@@ -111,6 +111,23 @@ def test_project_js_open_run_switches_to_run_tab():
     assert 'window.location.hash = "run"' in match.group(1)
 
 
+def test_project_js_run_query_param_opens_run_card_unconditionally_on_load():
+    """project.html?name=...&run=<id> должно открывать карточку завершённого/любого
+    прогона сразу при загрузке страницы (ссылки из бота/истории/суперадминки) — не
+    только форму запуска на вкладке «Запуск». Код должен идти на верхнем уровне
+    IIFE (не внутри условия/обработчика, который может не выполниться), после того
+    как все остальные данные страницы уже загружены."""
+    match = re.search(
+        r'const runParam = params\.get\("run"\);\s*\n\s*if \(runParam\) \{\s*\n\s*(.*?)\n\s*\}',
+        PROJECT_JS,
+    )
+    assert match, "не найден блок открытия прогона по query-параметру run= в ui/project.js"
+    assert "await openRun(Number(runParam))" in match.group(1)
+    # блок должен быть на верхнем уровне (2 пробела отступа — как остальной код
+    # верхнего уровня project.js), а не внутри вложенной функции/обработчика
+    assert re.search(r"\n  const runParam = params\.get\(\"run\"\);\n  if \(runParam\) \{\n", PROJECT_JS)
+
+
 # ------------------------------------------------------------------ меню: «Прогоны» -> история, «Настройки» убраны
 
 def test_common_js_settings_item_removed_from_nav():

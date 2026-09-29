@@ -234,7 +234,7 @@ def _insert_event(conn, run_id, line, nodeid, kind):
 
 
 async def test_split_card_api_shape_matches_what_project_js_reads(qa_client, isolated_frames_dir, db_path):
-    """project.js читает из /tests ровно nodeid/status/has_frames (testRowHtml,
+    """project.js читает из /tests как минимум nodeid/status/has_frames (testRowHtml,
     normalizeTestStatus, upsertSplitTest), из /tests/{nodeid}/log — плоский массив
     строк (selectedTestLog передаётся прямо в filterRequestLines/renderConsoleBox),
     из /tests/{nodeid}/frames — список объектов с step и url (renderFramesTab
@@ -258,9 +258,12 @@ async def test_split_card_api_shape_matches_what_project_js_reads(qa_client, iso
     tests_resp = await qa_client.get(f"/api/runs/{run_id}/tests")
     assert tests_resp.status_code == 200
     items = tests_resp.json()
-    assert items == [{"nodeid": nodeid, "status": "passed", "has_frames": True}]
-    # поля, которые реально читает project.js (testRowHtml/upsertSplitTest/normalizeTestStatus)
-    assert set(items[0].keys()) == {"nodeid", "status", "has_frames"}
+    assert items == [
+        {"nodeid": nodeid, "full_name": "tests.ui.test_x#test_foo", "status": "passed", "has_frames": True}
+    ]
+    # поля, которые реально читает project.js (testRowHtml/upsertSplitTest/normalizeTestStatus) —
+    # full_name бэкенд отдаёт всегда (единый ключ — nodeid), но UI его пока не использует.
+    assert {"nodeid", "status", "has_frames"} <= set(items[0].keys())
 
     log_resp = await qa_client.get(f"/api/runs/{run_id}/tests/{quote(nodeid, safe='')}/log")
     assert log_resp.status_code == 200
