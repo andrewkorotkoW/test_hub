@@ -128,6 +128,8 @@ CREATE TABLE IF NOT EXISTS test_cases (
     precondition TEXT,
     priority TEXT NOT NULL DEFAULT 'medium',
     nodeid TEXT,
+    case_key TEXT,
+    requirement TEXT,
     source TEXT NOT NULL DEFAULT 'generated' CHECK (source IN ('generated', 'manual')),
     updated_at TEXT,
     updated_by TEXT,
@@ -449,6 +451,19 @@ def init_db() -> None:
         _migrate_add_column(conn, "run_events", "kind", "kind TEXT NOT NULL DEFAULT 'line'")
         _migrate_add_column(conn, "stands", "sentry_project", "sentry_project TEXT")
         _migrate_add_column(conn, "stands", "sentry_environment", "sentry_environment TEXT")
+        _migrate_add_column(conn, "test_cases", "case_key", "case_key TEXT")
+        _migrate_add_column(conn, "test_cases", "requirement", "requirement TEXT")
+        # На старых БД case_key ещё не заполнен для уже импортированных кейсов с
+        # автотестом (у них case_key всегда равен nodeid, см. app/core/test_cases.py)
+        # — без бэкфилла первый же повторный импорт не нашёл бы их по case_key и
+        # попытался вставить дубликат, упав в UNIQUE(project, nodeid).
+        conn.execute("UPDATE test_cases SET case_key = nodeid WHERE case_key IS NULL AND nodeid IS NOT NULL")
+        conn.commit()
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_test_cases_project_case_key "
+            "ON test_cases (project, case_key) WHERE case_key IS NOT NULL"
+        )
+        conn.commit()
         # flaky_stats, xfail_registry, schedules и stand_presets сами по себе — новые
         # таблицы (не существующие с другой схемой в старых БД), поэтому их создание
         # уже покрыто CREATE TABLE IF NOT EXISTS в SCHEMA выше и отдельной ALTER-

@@ -4,10 +4,13 @@ parse_area_file` в том репозитории — парсер здесь п
 ручного заведения.
 
 Второй источник истины поверх allure, ровно по прецеденту app.core.xfail_registry:
-import_drafts() апсертит записи по ключу (project, nodeid) с source='generated',
+import_drafts() апсертит записи по ключу (project, case_key) с source='generated',
 запись с source='manual' (выставляется update_case() при первой ручной правке)
 повторным импортом не затирается — тот же приём, что recalc() в xfail_registry не
-затирает issue_url/note.
+затирает issue_url/note. case_key — nodeid (кейсы с автотестом) либо TC-ID из
+заголовка `### TC-XXX-NNN …` (ручные кейсы без автотеста, см. CASE_ID_RE) —
+кейсы без автотеста в черновиках такой же полноправный источник, просто без
+привязки к nodeid.
 
 Статус последнего прогона довешивается тем же способом, что и в xfail_registry/
 flaky/coverage: nodeid -> allure fullName -> поиск в allure-results последнего
@@ -53,10 +56,12 @@ from . import allure_report, stats
 TEMPLATE_FILE = "TEMPLATE.md"
 UPDATE_MARK = "<!-- обновить -->"
 
-HEADING_RE = re.compile(r"^### TC-[A-Za-z0-9_]+-\d+\s+(.+)$")
+HEADING_RE = re.compile(r"^### (TC-[A-Za-z0-9_]+-\d+)\s+(.+)$")
+CASE_ID_RE = re.compile(r"TC-[A-Z0-9]+-\d+")
 AUTOTEST_RE = re.compile(r"^-\s*Автотест:\s*(\S+)\s*$")
 META_RE = re.compile(r"^-\s*Приоритет:\s*(\S+)\s+Тип:\s*(\S+)\s+Роли:\s*(.*)$")
 PRECONDITION_RE = re.compile(r"^-\s*Предусловия:\s*(.*)$")
+REQUIREMENT_RE = re.compile(r"^-\s*Требование:\s*(.*)$")
 
 TESTCASES_DIR = settings.WORKSPACE_DIR / "testcases"
 
@@ -99,13 +104,16 @@ def _parse_case_block(block: list[str]) -> dict | None:
     heading = HEADING_RE.match(block[0])
     if heading is None:
         return None
-    title = heading.group(1).strip()
+    title = heading.group(2).strip()
     if title.endswith(UPDATE_MARK):
         title = title[: -len(UPDATE_MARK)].strip()
+    case_id_match = CASE_ID_RE.search(heading.group(1))
+    case_id = case_id_match.group(0) if case_id_match else None
 
     nodeid: str | None = None
     priority = "medium"
     precondition: str | None = None
+    requirement: str | None = None
     steps: list[dict] = []
 
     for line in block[1:]:
@@ -122,18 +130,32 @@ def _parse_case_block(block: list[str]) -> dict | None:
         if m:
             precondition = m.group(1).strip() or None
             continue
+        m = REQUIREMENT_RE.match(stripped)
+        if m:
+            requirement = m.group(1).strip() or None
+            continue
         row = _parse_table_row(stripped)
         if row:
             steps.append({"action": row[0], "expected": row[1]})
 
-    return {"title": title, "nodeid": nodeid, "priority": priority, "precondition": precondition, "steps": steps}
+    return {
+        "title": title,
+        "case_id": case_id,
+        "nodeid": nodeid,
+        "priority": priority,
+        "precondition": precondition,
+        "requirement": requirement,
+        "steps": steps,
+    }
 
 
 def parse_area_file(path: Path) -> list[dict]:
-    """Черновик области (`docs/test_cases/<area>.md`) -> список кейсов
-    {title, nodeid, priority, precondition, steps: [{action, expected}]}.
+    """Черновик области (`docs/test_cases/<area>.md` или `docs/test_cases/<area>/<file>.md`)
+    -> список кейсов {title, case_id, nodeid, priority, precondition, requirement,
+    steps: [{action, expected}]}. case_id — идентификатор из заголовка (TC-XXX-NNN,
+    см. CASE_ID_RE), nodeid — None для кейсов без строки "Автотест:".
     Портировано из auto_tests_vshgu `tools/test_cases/testit_sync.py::parse_area_file`,
-    без полей, которых нет в схеме test_hub (tc_id/тип/роли/steps-hash/Test IT id)."""
+    без полей, которых нет в схеме test_hub (тип/роли/steps-hash/Test IT id)."""
     text = path.read_text(encoding="utf-8")
     lines = text.splitlines()
     heading_idx = [i for i, l in enumerate(lines) if HEADING_RE.match(l)]
@@ -178,11 +200,43 @@ def _section_from_nodeid(nodeid: str) -> str:
 # ------------------------------------------------------------------ импорт черновиков
 
 
+def _rel_subdir(path: Path, root: Path) -> str:
+    """Путь `path` относительно `root` без имени файла: "" — файл лежит прямо в
+    `root`, иначе относительный путь подпапки в posix-виде ("mts_link")."""
+    rel_dir = path.parent.relative_to(root)
+    return "" if rel_dir == Path(".") else rel_dir.as_posix()
+
+
+def _case_key(case: dict) -> str | None:
+    """Ключ идентичности кейса для апсерта: nodeid — для кейсов с автотестом,
+    иначе TC-ID из заголовка (case_id, см. CASE_ID_RE). None — у заголовка нет
+    ни того, ни другого (такой кейс не с чем сопоставлять повторно, просто
+    каждый раз вставляется новой строкой)."""
+    return case["nodeid"] or case["case_id"]
+
+
+def _section_for_case(case: dict, subdir: str, file_stem: str) -> str:
+    """Раздел кейса в дереве test_cases. С nodeid — как раньше, по пути автотеста
+    (_section_from_nodeid), но если черновик лежит в подпапке
+    docs/test_cases/<subdir>/..., <subdir> становится верхним уровнем секции.
+    Без nodeid (ручной кейс без автотеста) раздел строится из расположения
+    самого файла-черновика: <subdir>/<имя файла без расширения> — например,
+    файл docs/test_cases/mts_link/02_create.md даёт секцию "mts_link/02_create"
+    (в дереве — верхний уровень "mts_link", область "02_create")."""
+    if case["nodeid"]:
+        base = _section_from_nodeid(case["nodeid"])
+        return f"{subdir}/{base}" if subdir else base
+    return f"{subdir}/{file_stem}" if subdir else file_stem
+
+
 def import_drafts(conn: sqlite3.Connection, project_row: sqlite3.Row) -> dict:
-    """Читает `<project.path>/docs/test_cases/*.md`, апсертит test_cases по ключу
-    (project, nodeid) с source='generated'. Записи с уже выставленным
-    source='manual' не трогает — повторный импорт не должен затирать ручные
-    правки (см. описание модуля)."""
+    """Читает `<project.path>/docs/test_cases/**/*.md` (рекурсивно, TEMPLATE.md
+    пропускается в любой подпапке), апсертит test_cases по ключу
+    (project, case_key) с source='generated' — и для кейсов с автотестом
+    (case_key = nodeid), и для ручных кейсов без него (case_key = TC-ID из
+    заголовка, см. _case_key). Записи с уже выставленным source='manual' не
+    трогает — повторный импорт не должен затирать ручные правки (см. описание
+    модуля)."""
     docs_dir = Path(project_row["path"]) / "docs" / "test_cases"
     result = {"files": 0, "imported": 0, "updated": 0, "skipped_manual": 0}
     if not docs_dir.is_dir():
@@ -191,37 +245,45 @@ def import_drafts(conn: sqlite3.Connection, project_row: sqlite3.Row) -> dict:
     project = project_row["name"]
     now = datetime.now().isoformat(timespec="seconds")
 
-    for path in sorted(docs_dir.glob("*.md")):
+    for path in sorted(docs_dir.rglob("*.md")):
         if path.name == TEMPLATE_FILE:
             continue
         result["files"] += 1
+        subdir = _rel_subdir(path, docs_dir)
+        file_stem = path.stem
         for case in parse_area_file(path):
-            if not case["nodeid"]:
-                # Черновики без автотеста в этом конвейере не встречаются (см.
-                # generate.py) — кейсы без nodeid заводятся вручную (create_manual).
+            case_key = _case_key(case)
+            if not case_key:
                 continue
             existing = conn.execute(
-                "SELECT * FROM test_cases WHERE project = ? AND nodeid = ?", (project, case["nodeid"])
+                "SELECT * FROM test_cases WHERE project = ? AND case_key = ?", (project, case_key)
             ).fetchone()
             if existing and existing["source"] == "manual":
                 result["skipped_manual"] += 1
                 continue
 
-            section = _section_from_nodeid(case["nodeid"])
+            section = _section_for_case(case, subdir, file_stem)
             steps_json = json.dumps(_numbered_steps(case["steps"]), ensure_ascii=False)
             if existing:
                 conn.execute(
                     "UPDATE test_cases SET section = ?, title = ?, steps = ?, precondition = ?, priority = ?, "
-                    "source = 'generated', updated_at = ? WHERE id = ?",
-                    (section, case["title"], steps_json, case["precondition"], case["priority"], now, existing["id"]),
+                    "requirement = ?, nodeid = ?, case_key = ?, source = 'generated', updated_at = ? WHERE id = ?",
+                    (
+                        section, case["title"], steps_json, case["precondition"], case["priority"],
+                        case["requirement"], case["nodeid"], case_key, now, existing["id"],
+                    ),
                 )
                 result["updated"] += 1
             else:
                 conn.execute(
                     "INSERT INTO test_cases "
-                    "(project, section, title, steps, precondition, priority, nodeid, source, updated_at, updated_by) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, 'generated', ?, NULL)",
-                    (project, section, case["title"], steps_json, case["precondition"], case["priority"], case["nodeid"], now),
+                    "(project, section, title, steps, precondition, priority, nodeid, case_key, requirement, "
+                    "source, updated_at, updated_by) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'generated', ?, NULL)",
+                    (
+                        project, section, case["title"], steps_json, case["precondition"], case["priority"],
+                        case["nodeid"], case_key, case["requirement"], now,
+                    ),
                 )
                 result["imported"] += 1
 
@@ -362,6 +424,7 @@ def _case_payload(row: sqlite3.Row, status: str | None, attachments: list[dict] 
         "title": row["title"],
         "steps": steps,
         "precondition": row["precondition"],
+        "requirement": row["requirement"],
         "priority": row["priority"],
         "nodeid": row["nodeid"],
         "source": row["source"],

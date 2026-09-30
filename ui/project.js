@@ -1887,6 +1887,10 @@
     if (!c.precondition) return "";
     return `<div class="tc-precondition"><b>Предусловия.</b> ${escapeHtml(c.precondition)}</div>`;
   }
+  function tcRequirementHtml(c) {
+    if (!c.requirement) return "";
+    return `<div class="tc-requirement muted">Требование: ${escapeHtml(c.requirement)}</div>`;
+  }
   function tcGeneralAttachmentsHtml(c) {
     if (!c.attachments || !c.attachments.length) return "";
     return `<div class="tc-case-meta"><span class="muted">Общие вложения:</span></div>${tcAttachmentThumbsHtml(c.attachments)}`;
@@ -1901,6 +1905,7 @@
     return `
       <div class="tc-case-crumbs">${escapeHtml(TestCasesLogic.sectionLabel(c.section))}</div>
       <div class="tc-case-title">${escapeHtml(c.title)}</div>
+      ${tcRequirementHtml(c)}
       <div class="tc-case-meta">
         ${tcStatusPillHtml(c)}
         <span class="tc-tag">Приоритет: ${tcPriorityLabel(c.priority)}</span>
@@ -2016,7 +2021,7 @@
     inner.innerHTML = `<p class="muted">Загрузка…</p>`;
     try {
       const full = await getCaseDetail(id);
-      inner.innerHTML = `${tcPreconditionHtml(full)}${tcStepsTableHtml(full.steps)}${tcGeneralAttachmentsHtml(full)}`;
+      inner.innerHTML = `${tcRequirementHtml(full)}${tcPreconditionHtml(full)}${tcStepsTableHtml(full.steps)}${tcGeneralAttachmentsHtml(full)}`;
       bindTcThumbClicks(inner);
     } catch (err) {
       inner.innerHTML = `<p class="error-box">Не удалось загрузить кейс: ${escapeHtml(err.message)}</p>`;

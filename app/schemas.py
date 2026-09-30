@@ -337,6 +337,7 @@ class TestCase(BaseModel):
     title: str
     steps: list[TestCaseStep]
     precondition: Optional[str] = None
+    requirement: Optional[str] = None
     priority: str
     nodeid: Optional[str] = None
     source: Literal["generated", "manual"]
