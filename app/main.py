@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from .config import BASE_DIR, settings
-from .core import live, runner, schedule
+from .core import demo_video, live, runner, schedule
 from .db import init_db
 from .routers import (
     admin, auth, coverage, flaky, product_map, projects, runs, schedules, sections, sentry, share, stats, test_cases,
@@ -63,6 +63,7 @@ async def lifespan(app: FastAPI):
     schedule.set_bot(tg_application.bot if tg_application is not None else None)
 
     runner.register_finalize_hook(schedule.on_run_finished)
+    runner.register_finalize_hook(demo_video.on_run_finished)
     scheduler_task = asyncio.create_task(schedule.scheduler_loop())
     app.state.schedule_task = scheduler_task
 
