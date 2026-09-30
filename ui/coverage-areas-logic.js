@@ -27,6 +27,16 @@
   var AREA_ROOT_LABEL = "(корень)";
   var KIND_ORDER = ["api", "ui", "e2e"];
 
+  // Русские подписи известных разделов (папка второго уровня tests/api|ui/<область>) —
+  // переиспользуются страницей «Покрытие: Светофор» (coverage-traffic-logic.js). Для
+  // остальных папок — фоллбек на имя папки как есть, ничего не выдумываем.
+  var AREA_LABELS_RU = {
+    auth: "Авторизация",
+    catalog: "Каталог",
+    users: "Пользователи",
+    orders: "Заказы",
+  };
+
   function statusKey(raw) {
     if (raw === "passed") return "passed";
     if (raw === "failed" || raw === "broken") return "failed";
@@ -320,6 +330,7 @@
   var api = {
     STATUS_COLORS: STATUS_COLORS,
     AREA_ROOT_LABEL: AREA_ROOT_LABEL,
+    AREA_LABELS_RU: AREA_LABELS_RU,
     statusKey: statusKey,
     statusLabelRu: statusLabelRu,
     splitFilePath: splitFilePath,

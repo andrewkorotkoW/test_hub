@@ -930,6 +930,33 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 .pm-legend-item i.red { background: var(--failed); }
 .pm-legend-item i.grey { background: var(--text-muted); opacity: .7; }
 
+/* ---------- покрытие: вид «Светофор» (v6/K, coverage-traffic-logic.js) ---------- */
+.chart-ring-sub { font-size: 11px; color: var(--text-muted); }
+.traffic-summary-line { color: var(--text-muted); margin: 4px 0 16px; }
+.traffic-columns { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+@media (max-width: 900px) {
+  .traffic-columns { grid-template-columns: 1fr; }
+}
+.traffic-column h3 { margin: 0 0 8px; font-size: 14px; }
+.traffic-column-body {
+  display: flex; flex-direction: column; gap: 8px;
+  max-height: 480px; overflow-y: auto; padding-right: 2px;
+}
+.traffic-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--card-radius);
+  padding: 10px 12px;
+}
+.traffic-card.clickable { cursor: pointer; }
+.traffic-card.clickable:hover { border-color: var(--accent); background: var(--surface-hover); }
+.traffic-card-head { display: flex; align-items: center; gap: 8px; }
+.traffic-card-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; display: inline-block; }
+.traffic-dot-green { background: var(--passed); }
+.traffic-dot-yellow { background: var(--xfail); }
+.traffic-dot-red { background: var(--failed); }
+.traffic-dot-grey { background: var(--text-muted); opacity: .7; }
+.traffic-card-title { flex: 1 1 auto; font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.traffic-card-sub { font-size: 12px; margin-top: 4px; }
+
 .pm-tip {
   position: fixed; z-index: 50; background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); box-shadow: var(--shadow-card); padding: 12px 14px; width: 270px;
