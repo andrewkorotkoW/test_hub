@@ -290,6 +290,7 @@ def _run_payload(row: sqlite3.Row) -> dict:
         "finished": row["finished"],
         "duration": row["duration"],
         "counts": json.loads(row["counts"]) if row["counts"] else {},
+        "label": row["label"],
     }
 
 

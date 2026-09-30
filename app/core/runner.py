@@ -205,12 +205,15 @@ async def submit_run(
     marker: str | None = None,
     repeat: int = 1,
     confirm_manual: bool = False,
+    label: str | None = None,
 ) -> int:
     """Создаёт запись прогона (running, если для проекта нет активного, иначе queued)
     и, если она стартует сразу, запускает фоновую задачу исполнения. `repeat` > 1
     прогоняет одну и ту же цель несколько раз подряд в одном прогоне (см. _execute) —
     используется флаки-детектором (app/core/flaky.py) для накопления истории на
-    одном и том же снимке кода/стенда.
+    одном и том же снимке кода/стенда. `label` — имя «сборки» (раздела покрытия),
+    от которой запущен прогон (см. docs/missions/2026-10-01_coverage_k_and_test_sets.md,
+    этап 2); только подписывает прогон, на исполнение не влияет.
 
     Если стенд найден и manual_only=1 (см. ManualRunNotConfirmed), запуск требует
     confirm_manual=True от живого пользователя — сервисная учётка бота (settings
@@ -233,10 +236,10 @@ async def submit_run(
             start_now = active is None
             now = datetime.now().isoformat(timespec="seconds")
             cur = conn.execute(
-                "INSERT INTO runs (project, stand, target, status, started, requested_by, counts, marker, repeat) "
-                "VALUES (?, ?, ?, ?, ?, ?, '{}', ?, ?)",
+                "INSERT INTO runs (project, stand, target, status, started, requested_by, counts, marker, repeat, label) "
+                "VALUES (?, ?, ?, ?, ?, ?, '{}', ?, ?, ?)",
                 (project_name, stand_name, target, "running" if start_now else "queued",
-                 now if start_now else None, requested_by, marker, repeat),
+                 now if start_now else None, requested_by, marker, repeat, label),
             )
             conn.commit()
             run_id = cur.lastrowid

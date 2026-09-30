@@ -88,6 +88,7 @@ def _run_payload(row: sqlite3.Row) -> dict:
         "duration": row["duration"],
         "requested_by": row["requested_by"],
         "counts": json.loads(row["counts"]) if row["counts"] else {},
+        "label": row["label"],
     }
 
 
@@ -118,7 +119,7 @@ async def create_run(
     try:
         run_id = await runner.submit_run(
             project["name"], body.stand, body.target, user["login"], body.marker, body.repeat,
-            confirm_manual=body.confirm_manual,
+            confirm_manual=body.confirm_manual, label=body.label,
         )
     except runner.ManualRunNotConfirmed as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
@@ -129,13 +130,19 @@ async def create_run(
 @router.get("/projects/{name}/runs")
 def list_runs(
     name: str,
+    label: str | None = None,
     conn: sqlite3.Connection = Depends(get_db),
     _user: sqlite3.Row = Depends(get_current_user),
 ) -> list[dict]:
     _get_project_or_404(conn, name)
-    rows = conn.execute(
-        "SELECT * FROM runs WHERE project = ? ORDER BY id DESC", (name,)
-    ).fetchall()
+    if label is not None:
+        rows = conn.execute(
+            "SELECT * FROM runs WHERE project = ? AND label = ? ORDER BY id DESC", (name, label)
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM runs WHERE project = ? ORDER BY id DESC", (name,)
+        ).fetchall()
     return [_run_payload(r) for r in rows]
 
 
