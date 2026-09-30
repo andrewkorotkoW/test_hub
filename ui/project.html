@@ -92,6 +92,21 @@
     </div>
 
     <div class="tab-panel" data-tab-panel="run" hidden>
+    <div class="card set-card" id="set-card" hidden>
+      <div class="set-card-head">
+        <h2 id="set-title">Сборка</h2>
+        <a id="set-coverage-link" class="coverage-link" href="#">← К покрытию</a>
+      </div>
+      <p id="set-count" class="muted"></p>
+      <details class="coverage-details-spoiler set-composition-spoiler" id="set-composition-details">
+        <summary>Состав</summary>
+        <div id="set-composition-body" class="set-composition-body"></div>
+      </details>
+      <h3>Статус по стендам</h3>
+      <div id="set-stand-status" class="set-stand-status"><p class="muted">Загрузка…</p></div>
+      <h3>Прогоны этой сборки</h3>
+      <div id="set-runs-feed" class="runs-feed"><p class="muted">Загрузка…</p></div>
+    </div>
     <div class="project-layout">
       <div class="card" id="tests-card">
         <h2>Тесты</h2>
@@ -107,6 +122,11 @@
           </select>
         </div>
         <div id="tests-error" class="error-box" hidden></div>
+        <div id="set-target-summary" class="set-target-summary" hidden>
+          <p class="muted">Цели: <span id="set-target-text"></span></p>
+          <button type="button" id="set-edit-targets-btn">Изменить состав</button>
+        </div>
+        <div id="tests-tree-block">
         <div class="field sections-search-field">
           <label for="sections-search-input">Поиск по разделам</label>
           <input type="search" id="sections-search-input" placeholder="например notifications">
@@ -123,6 +143,7 @@
           <textarea id="manual-target-input" rows="3" placeholder="например tests/api/notifications/test_x.py::test_y"></textarea>
           <p class="muted">Если поле заполнено, запуск использует его вместо дерева разделов выше.</p>
         </details>
+        </div>
         <div class="run-buttons" id="run-buttons-row">
           <button id="run-all-btn" class="primary">Запустить всё</button>
           <button id="run-selected-btn">Запустить выбранное</button>
@@ -138,7 +159,7 @@
       </div>
 
       <div class="card" id="run-card" hidden>
-        <h2>Прогон #<span id="run-id-label"></span></h2>
+        <h2>Прогон #<span id="run-id-label"></span><span id="run-label-badge" class="badge-manual" hidden></span></h2>
         <div class="run-status-bar">
           <span id="run-status-pill" class="status-pill queued" data-status="queued">queued</span>
           <div class="run-view-toggle" id="run-view-toggle" hidden>
@@ -442,6 +463,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="sections-tree-logic.js"></script>
   <script src="testcases-logic.js"></script>
+  <script src="build-page-logic.js"></script>
   <script src="project.js"></script>
 </body>
 </html>

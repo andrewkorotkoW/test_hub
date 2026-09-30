@@ -8,6 +8,14 @@
 
   const user = await initPage();
 
+  // ---------------- «Сборка тестов» (project.html?...&set=<area>#run, см. миссию
+  // 2026-10-01_coverage_k_and_test_sets.md, этап 2) ----------------
+  // Чистая логика сопоставления раздела/подсчёта — в build-page-logic.js
+  // (window.BuildPageLogic), подключённом раньше этого файла.
+  const { E2E_BUILD_KEY } = BuildPageLogic;
+  const buildLabel = params.get("set");
+  const isBuildMode = !!buildLabel;
+
   const titleEl = document.getElementById("project-title");
   titleEl.textContent = projectName;
   const logo = document.createElement("img");
@@ -18,6 +26,7 @@
   titleEl.prepend(logo);
   document.getElementById("coverage-link").href = `coverage.html?name=${encodeURIComponent(projectName)}`;
   document.getElementById("xfail-link").href = `xfail.html?name=${encodeURIComponent(projectName)}`;
+  document.getElementById("set-coverage-link").href = `coverage.html?name=${encodeURIComponent(projectName)}`;
   const pageError = document.getElementById("page-error");
 
   // ---------------- вкладки: Дашборд/Запуск/Расписания/История/Флаки ----------------
@@ -71,6 +80,16 @@
   const standSelect = document.getElementById("stand-select");
   const markerSelect = document.getElementById("marker-select");
   const testsError = document.getElementById("tests-error");
+  const setCard = document.getElementById("set-card");
+  const setTitle = document.getElementById("set-title");
+  const setCount = document.getElementById("set-count");
+  const setCompositionBody = document.getElementById("set-composition-body");
+  const setStandStatus = document.getElementById("set-stand-status");
+  const setRunsFeed = document.getElementById("set-runs-feed");
+  const setTargetSummary = document.getElementById("set-target-summary");
+  const setTargetText = document.getElementById("set-target-text");
+  const setEditTargetsBtn = document.getElementById("set-edit-targets-btn");
+  const testsTreeBlock = document.getElementById("tests-tree-block");
   const sectionsTreeBox = document.getElementById("sections-tree");
   const sectionsSearchInput = document.getElementById("sections-search-input");
   const sectionsPresetsRow = document.getElementById("sections-presets-row");
@@ -88,6 +107,7 @@
   const manualRunCancelBtn = document.getElementById("manual-run-cancel-btn");
   const runCard = document.getElementById("run-card");
   const runIdLabel = document.getElementById("run-id-label");
+  const runLabelBadge = document.getElementById("run-label-badge");
   const pill = document.getElementById("run-status-pill");
   const shareBtn = document.getElementById("share-run-btn");
   const cancelBtn = document.getElementById("cancel-run-btn");
@@ -341,12 +361,14 @@
 
   // ---------------- stands ----------------
   let standsByName = {};
+  let standsList = [];
   let manualRunPresetItems = [];
 
   async function loadStands() {
     try {
       const stands = await api(`/api/projects/${encodeURIComponent(projectName)}/stands`);
       standsByName = {};
+      standsList = stands;
       stands.forEach((s) => { standsByName[s.name] = s; });
       standSelect.innerHTML = `<option value="">— без стенда —</option>` +
         stands.map((s) => `<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)} (${escapeHtml(s.url)})</option>`).join("");
@@ -371,7 +393,7 @@
   async function updateRunControlsForStand() {
     const stand = standsByName[standSelect.value];
     const isManual = !!(stand && stand.manual_only);
-    runAllBtn.hidden = isManual;
+    runAllBtn.hidden = isManual || isBuildMode;
     runSelectedBtn.hidden = isManual;
     manualRunBlock.hidden = !isManual;
     if (!isManual) {
@@ -395,8 +417,8 @@
 
   standSelect.addEventListener("change", updateRunControlsForStand);
 
-  function openManualRunModal({ label, stand, target, marker }) {
-    manualRunModalOverlay.dataset.pending = JSON.stringify({ stand, target, marker: marker || null });
+  function openManualRunModal({ label, stand, target, marker, runLabel = null }) {
+    manualRunModalOverlay.dataset.pending = JSON.stringify({ stand, target, marker: marker || null, runLabel });
     manualRunModalText.textContent = `Запустить на ${stand}: ${label}. Это боевой тестовый стенд, запуск только вручную.`;
     manualRunConfirmCheckbox.checked = false;
     manualRunConfirmBtn.disabled = true;
@@ -427,6 +449,7 @@
       stand: standSelect.value,
       target,
       marker: markerSelect.value || null,
+      runLabel: isBuildMode ? buildLabel : null,
     });
   });
 
@@ -451,11 +474,12 @@
     try {
       const run = await api(`/api/projects/${encodeURIComponent(projectName)}/runs`, {
         method: "POST",
-        json: { stand: pending.stand, target: pending.target, marker: pending.marker, confirm_manual: true },
+        json: { stand: pending.stand, target: pending.target, marker: pending.marker, confirm_manual: true, label: pending.runLabel || null },
       });
       closeManualRunModal();
       await openRun(run.id);
       await loadHistory();
+      await loadBuildRuns();
     } catch (err) {
       alert(`Не удалось запустить тесты: ${err.message}`);
       manualRunConfirmBtn.disabled = !manualRunConfirmCheckbox.checked;
@@ -686,6 +710,12 @@
         checked = new Set();
         render();
       },
+      // Предустановка отмеченных файлов извне (страница «Сборка», см. initBuildMode) —
+      // тот же checked, что и после клика по пресету, дерево перерисовывается.
+      setChecked(fileTargets) {
+        checked = new Set(fileTargets);
+        render();
+      },
       targets() {
         return SectionsTreeLogic.collectTargets(data, new Set(checkedFileTargets(box)));
       },
@@ -697,9 +727,12 @@
     schedSectionsTreeBox, schedSectionsSearchInput, schedSectionsPresetsRow, schedMarkerSelect
   );
 
+  let sectionsDataCache = { kinds: [] };
+
   async function loadSections() {
     try {
       const data = await api(`/api/projects/${encodeURIComponent(projectName)}/sections`);
+      sectionsDataCache = data;
       sectionsPicker.setData(data);
       schedSectionsPicker.setData(data);
     } catch (err) {
@@ -716,6 +749,106 @@
     const manual = manualTargetInput.value.trim();
     if (manual) return manual;
     return sectionsPicker.targets().join("\n");
+  }
+
+  // ---------------- «Сборка тестов»: страница запуска по ?set=<area>#run ----------------
+  // Раздел = второй уровень дерева tests/api|ui/<area>|tests/e2e, то же понятие, что у
+  // GET .../sections (app/core/sections.py) — используем уже загруженные им данные вместо
+  // повторного runner.discover (тот гоняет живой `pytest --collect-only`, на каждый показ
+  // страницы сборки это была бы лишняя медленная подкоманда). Сопоставление/подсчёт —
+  // в build-page-logic.js (window.BuildPageLogic).
+  function renderSetComposition(areas) {
+    if (!areas.length) {
+      setCompositionBody.innerHTML = `<p class="muted">Тесты для этого раздела не найдены.</p>`;
+      return;
+    }
+    setCompositionBody.innerHTML = areas.map((a) => `
+      <div class="set-composition-group">
+        <p class="muted">${escapeHtml(KIND_LABELS[a.kind] || a.kind)}</p>
+        <ul class="detail-list">
+          ${(a.files || []).map((f) => `<li>${escapeHtml(f.name)} <span class="muted">(${f.tests_count} тест.)</span></li>`).join("")}
+        </ul>
+      </div>
+    `).join("");
+  }
+
+  function updateSetTargetSummary() {
+    const targets = sectionsPicker.targets();
+    setTargetText.textContent = targets.length ? targets.join(", ") : "—";
+  }
+
+  function initBuildMode() {
+    if (!isBuildMode) { setCard.hidden = true; return; }
+    setCard.hidden = false;
+    const areas = BuildPageLogic.matchedBuildAreas(sectionsDataCache, buildLabel);
+    setTitle.textContent = `Сборка: ${BuildPageLogic.buildTitleLabel(buildLabel)}`;
+    setCount.textContent = `${BuildPageLogic.totalTestsCount(areas)} тест.`;
+    renderSetComposition(areas);
+
+    sectionsPicker.setChecked(BuildPageLogic.leafTargetsFromAreas(areas));
+    updateSetTargetSummary();
+
+    testsTreeBlock.hidden = true;
+    setTargetSummary.hidden = false;
+  }
+
+  setEditTargetsBtn.addEventListener("click", () => {
+    testsTreeBlock.hidden = false;
+    setTargetSummary.hidden = true;
+  });
+
+  function standDotStatusText(run) {
+    if (!run) return `<span class="muted">прогонов ещё не было</span>`;
+    const m = runMetrics(run);
+    return `
+      <span class="status-pill ${escapeHtml(run.status)}" data-status="${escapeHtml(run.status)}">${escapeHtml(run.status)}</span>
+      <span class="muted">${fmtDate(run.started)}</span>
+      <span class="muted">${m.passed} passed / ${m.failed} failed</span>
+    `;
+  }
+
+  function renderSetStandStatus(buildRuns) {
+    if (!standsList.length) {
+      setStandStatus.innerHTML = `<p class="muted">Стендов пока нет.</p>`;
+      return;
+    }
+    const byStand = BuildPageLogic.latestRunByStand(standsList.map((s) => s.name), buildRuns);
+    setStandStatus.innerHTML = standsList.map((s) => `
+        <div class="set-stand-row">
+          <span class="set-stand-name">${escapeHtml(s.name)}</span>
+          ${standDotStatusText(byStand[s.name])}
+        </div>
+      `).join("");
+  }
+
+  function renderSetRunsFeed(buildRuns) {
+    const items = buildRuns.slice(0, 10);
+    if (!items.length) {
+      setRunsFeed.innerHTML = `<p class="muted">Прогонов этой сборки ещё не было.</p>`;
+      return;
+    }
+    setRunsFeed.innerHTML = items.map(runsFeedItemHtml).join("");
+  }
+
+  setRunsFeed.addEventListener("click", (ev) => {
+    const reportBtn = ev.target.closest(".runs-feed-report-btn");
+    if (reportBtn) { openRun(Number(reportBtn.dataset.runId)); return; }
+    const shareBtn2 = ev.target.closest(".runs-feed-share-btn");
+    if (shareBtn2) openShareModal(Number(shareBtn2.dataset.runId));
+  });
+
+  async function loadBuildRuns() {
+    if (!isBuildMode) return;
+    try {
+      const runs = await api(
+        `/api/projects/${encodeURIComponent(projectName)}/runs?label=${encodeURIComponent(buildLabel)}`
+      );
+      renderSetStandStatus(runs);
+      renderSetRunsFeed(runs);
+    } catch (err) {
+      setStandStatus.innerHTML = `<p class="error-box">Не удалось загрузить прогоны сборки: ${escapeHtml(err.message)}</p>`;
+      setRunsFeed.innerHTML = "";
+    }
   }
 
   // ---------------- run + live log ----------------
@@ -1083,6 +1216,8 @@
       const payload = await api(`/api/runs/${runId}/report`);
       setPill(payload.status);
       cancelBtn.hidden = user.role === "customer" || !["queued", "running"].includes(payload.status);
+      runLabelBadge.hidden = !payload.label;
+      if (payload.label) runLabelBadge.textContent = `сборка: ${payload.label}`;
       renderReport(payload, runId);
       return payload;
     } catch (err) {
@@ -1100,6 +1235,7 @@
     sawLine = false;
     runCard.hidden = false;
     runIdLabel.textContent = runId;
+    runLabelBadge.hidden = true;
     shareBtn.hidden = !canShare;
     logBox.textContent = "";
     reportSection.hidden = true;
@@ -1153,16 +1289,17 @@
     }
   });
 
-  async function submitRun(target) {
+  async function submitRun(target, label = null) {
     runAllBtn.disabled = true;
     runSelectedBtn.disabled = true;
     try {
       const run = await api(`/api/projects/${encodeURIComponent(projectName)}/runs`, {
         method: "POST",
-        json: { stand: standSelect.value || null, target, marker: markerSelect.value || null },
+        json: { stand: standSelect.value || null, target, marker: markerSelect.value || null, label },
       });
       await openRun(run.id);
       await loadHistory();
+      await loadBuildRuns();
     } catch (err) {
       showPageError(`Не удалось запустить тесты: ${err.message}`);
     } finally {
@@ -1178,7 +1315,7 @@
       alert("Отметьте хотя бы один раздел/файл или заполните ручное поле.");
       return;
     }
-    submitRun(target);
+    submitRun(target, isBuildMode ? buildLabel : null);
   });
 
   // ---------------- шаринг отчёта ----------------
@@ -1575,13 +1712,12 @@
     `;
   }
 
-  function renderRunsFeed(runs) {
-    const items = runs.slice(0, 8);
-    if (!items.length) {
-      runsFeedBox.innerHTML = `<p class="muted">Прогонов ещё не было.</p>`;
-      return;
-    }
-    runsFeedBox.innerHTML = items.map((r) => `
+  // Одна строка ленты прогонов — общая для дашборда (runsFeedBox, последние 8) и
+  // карточки «Прогоны этой сборки» на странице сборки (setRunsFeed, последние 10,
+  // см. initBuildMode/loadBuildRuns ниже): бейдж label показывает, от какой сборки
+  // запущен прогон (пусто у обычных прогонов без label).
+  function runsFeedItemHtml(r) {
+    return `
       <div class="runs-feed-item">
         <span class="status-pill ${escapeHtml(r.status)}" data-status="${escapeHtml(r.status)}">${escapeHtml(r.status)}</span>
         <div class="runs-feed-meta">
@@ -1590,6 +1726,7 @@
           <span>${fmtDate(r.started)}</span>
           <span>${fmtDuration(r.duration)}</span>
           <span>${escapeHtml(r.requested_by || "—")}</span>
+          ${r.label ? `<span class="badge-manual">сборка: ${escapeHtml(r.label)}</span>` : ""}
         </div>
         ${runsFeedBarHtml(r)}
         <div class="runs-feed-actions">
@@ -1597,7 +1734,16 @@
           ${canShare ? `<button type="button" class="runs-feed-share-btn" data-run-id="${r.id}">Поделиться</button>` : ""}
         </div>
       </div>
-    `).join("");
+    `;
+  }
+
+  function renderRunsFeed(runs) {
+    const items = runs.slice(0, 8);
+    if (!items.length) {
+      runsFeedBox.innerHTML = `<p class="muted">Прогонов ещё не было.</p>`;
+      return;
+    }
+    runsFeedBox.innerHTML = items.map(runsFeedItemHtml).join("");
   }
 
   runsFeedBox.addEventListener("click", (ev) => {
@@ -1754,7 +1900,7 @@
             <td>${r.id}</td>
             <td class="status-text ${escapeHtml(r.status)}">${escapeHtml(r.status)}</td>
             <td>${escapeHtml(r.stand || "—")}${isManualStandRun(r.stand) ? `<span class="badge-manual">ручной</span>` : ""}</td>
-            <td>${r.target === "all" ? "всё" : "выборочно"}</td>
+            <td>${r.target === "all" ? "всё" : "выборочно"}${r.label ? ` <span class="badge-manual">сборка: ${escapeHtml(r.label)}</span>` : ""}</td>
             <td>${fmtDate(r.started)}</td>
             <td>${fmtDuration(r.duration)}</td>
             <td>${escapeHtml(r.requested_by || "—")}</td>
@@ -2282,7 +2428,9 @@
   applyTcView(tcInitialView);
 
   await loadStands();
-  await Promise.all([loadSections(), loadHistory(), loadFlaky(), loadSchedules(), loadTestcases(), loadSentryCard()]);
+  await loadSections();
+  initBuildMode();
+  await Promise.all([loadHistory(), loadFlaky(), loadSchedules(), loadTestcases(), loadSentryCard(), loadBuildRuns()]);
 
   // Глубокая ссылка из суперадминки (admin_all.html): project.html?name=...&run=<id>
   // сразу открывает отчёт конкретного прогона.
@@ -2303,5 +2451,13 @@
     if (window.location.hash !== "#run") window.location.hash = "run";
     renderActiveTab();
     document.getElementById("tests-card").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  // Ссылка со страницы «Покрытие» (вид «Светофор», t1): project.html?name=...&set=
+  // <area>#run — открывает вкладку «Запуск» в режиме сборки (см. initBuildMode выше).
+  if (isBuildMode) {
+    if (window.location.hash !== "#run") window.location.hash = "run";
+    renderActiveTab();
+    setCard.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 })();

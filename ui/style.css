@@ -1280,6 +1280,24 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 .runs-feed-actions { display: flex; gap: 6px; flex: 0 0 auto; }
 .runs-feed-actions button { padding: 4px 10px; font-size: 12px; }
 
+/* ---------- «Сборка тестов» — страница запуска раздела покрытия, см. миссию
+   2026-10-01_coverage_k_and_test_sets.md, этап 2 (project.html?...&set=<area>#run) ---------- */
+.set-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 2px; }
+.set-card-head h2 { margin: 0; }
+.set-composition-spoiler > summary { cursor: pointer; list-style: none; color: var(--accent); font-size: 13px; font-weight: 600; }
+.set-composition-spoiler > summary::-webkit-details-marker { display: none; }
+.set-composition-spoiler > summary::before { content: "▸ "; color: var(--text-muted); }
+.set-composition-spoiler[open] > summary::before { content: "▾ "; }
+.set-composition-body { margin-top: 8px; }
+.set-composition-group { margin-bottom: 10px; }
+.set-composition-group:last-child { margin-bottom: 0; }
+.set-stand-status { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.set-stand-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.set-stand-row:last-child { border-bottom: none; }
+.set-stand-name { font-weight: 600; min-width: 140px; }
+.set-target-summary { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.set-target-summary p { margin: 0; }
+
 /* ошибки продукта (Sentry) — карточка дашборда (только qa) и вкладка «Sentry»
    в окне прогона, см. docs/missions/2026-09-29_sentry.md. Светофор и строки
    переиспользуют токены статусов, второй палитры не заводим. */
