@@ -259,7 +259,10 @@ async def test_split_card_api_shape_matches_what_project_js_reads(qa_client, iso
     assert tests_resp.status_code == 200
     items = tests_resp.json()
     assert items == [
-        {"nodeid": nodeid, "full_name": "tests.ui.test_x#test_foo", "status": "passed", "has_frames": True}
+        {
+            "nodeid": nodeid, "full_name": "tests.ui.test_x#test_foo", "status": "passed", "has_frames": True,
+            "has_video": False,
+        }
     ]
     # поля, которые реально читает project.js (testRowHtml/upsertSplitTest/normalizeTestStatus) —
     # full_name бэкенд отдаёт всегда (единый ключ — nodeid), но UI его пока не использует.

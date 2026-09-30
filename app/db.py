@@ -71,6 +71,16 @@ CREATE TABLE IF NOT EXISTS run_events (
     kind TEXT NOT NULL DEFAULT 'line'
 );
 
+CREATE TABLE IF NOT EXISTS run_test_videos (
+    run_id INTEGER NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+    nodeid TEXT NOT NULL,
+    path TEXT NOT NULL,
+    duration_ms INTEGER,
+    size INTEGER,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (run_id, nodeid)
+);
+
 CREATE TABLE IF NOT EXISTS share_links (
     token TEXT PRIMARY KEY,
     run_id INTEGER NOT NULL REFERENCES runs(id) ON DELETE CASCADE,

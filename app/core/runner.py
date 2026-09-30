@@ -157,6 +157,13 @@ def frames_dir(run_id: int) -> Path:
     return settings.FRAMES_DIR / str(run_id)
 
 
+def video_dir(run_id: int) -> Path:
+    """workspace/runs/<run_id>/video/ — видео теста (см. POST /api/runs/{id}/
+    tests/{nodeid}/video в app/routers/runs.py), отдельно от frames_dir: кадры
+    шагов идут в allure/тест-кейсы, видео — самостоятельная запись прогона."""
+    return settings.VIDEO_DIR / str(run_id) / "video"
+
+
 # ------------------------------------------------------------------ обнаружение
 async def discover(project_path: str, venv: str) -> dict:
     """Дерево тестов файл -> класс -> [тест] через `pytest --collect-only -q`.
@@ -364,6 +371,10 @@ async def _log_line(run_id: int, line: str) -> None:
 async def _finalize(run_id: int, status: str, started_at: float, counts: dict[str, int]) -> None:
     _current_nodeid.pop(run_id, None)
     _run_tokens.pop(run_id, None)
+    # Живой кадр (app/core/live.py) НЕ чистится здесь: контракт требует, чтобы
+    # live.jpg/share ещё 5 минут после завершения прогона отдавали последний
+    # кадр. live.get_frame() сам вычищает его лениво по received_at при первом
+    # обращении после истечения этих 5 минут — без фонового потока/таймера.
     conn = get_connection()
     try:
         conn.execute(

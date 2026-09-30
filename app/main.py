@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from .config import BASE_DIR, settings
-from .core import runner, schedule
+from .core import live, runner, schedule
 from .db import init_db
 from .routers import (
     admin, auth, coverage, flaky, product_map, projects, runs, schedules, sections, sentry, share, stats, test_cases,
@@ -37,6 +37,10 @@ def _check_prod_secret() -> None:
 async def lifespan(app: FastAPI):
     _check_prod_secret()
     init_db()
+    # Живые кадры (app/core/live.py) — только в памяти процесса; на рестарт они
+    # и так пропадают вместе с процессом, но lifespan может быть вызван повторно
+    # в одном процессе (см. register_finalize_hook и тесты), поэтому чистим явно.
+    live.clear_all()
 
     tg_application = None
     if settings.TH_TG_BOT_TOKEN:
