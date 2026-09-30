@@ -1,0 +1,49 @@
+# docker-compose.yml — test_hub одной командой (`docker compose up -d --build`).
+# Подробный порядок действий (перенос workspace/, подключение проектов тестов,
+# обновление, откат) — docs/DEPLOY.md.
+#
+# Тома:
+#   - ./workspace  -> /app/workspace  постоянные данные test_hub: БД test_hub.db,
+#     allure-results/allure-reports, frames, testcases, coverage, stats, sections,
+#     product_map — всё это подкаталоги WORKSPACE_DIR (см. app/config.py), одного
+#     тома достаточно на всё.
+#   - ./.env       -> /app/.env       секреты/токены и пути проектов (в образ не
+#     попадает, см. .dockerignore).
+#   - /projects/<repo> — сюда монтируются клоны репозиториев тестовых проектов
+#     (auto_tests_vshgu, bike_fit, Velo_bot и т.п.), чьи прогоны запускает раннер
+#     (app/core/runner.py). В .env контейнера пути на них задаются переменными
+#     TH_PROJECTS_ROOT=/projects и TH_VSHGU_PATH=/projects/auto_tests_vshgu (имена
+#     зафиксированы в docs/missions/2026-09-30_server_readiness.md — их читают
+#     app/config.py/app/db.py при сидировании проектов). Ниже — только пример для
+#     auto_tests_vshgu, под остальные проекты добавляйте свои строки по тому же
+#     образцу и раскомментируйте нужные.
+#
+# venv тестовых проектов внутри контейнера НЕ создаются автоматически при
+# `docker compose up` — образ/compose их не трогает. Решение: ручной шаг один раз
+# после монтирования/обновления репозитория, тем же способом, каким владелец уже
+# делает это на маке (`python3 -m venv .venv && pip install -r requirements.txt`),
+# а не ленивый entrypoint/шаг раннера. Обоснование в docs/DEPLOY.md: ленивое
+# создание venv по требованию раннера означало бы решать, когда venv "устарел" и
+# нужно пересоздать (requirements.txt проекта поменялся, версия python другая) —
+# это лишняя логика в раннере ради события, которое происходит редко (новый
+# проект тестов или смена его зависимостей), а не при каждом прогоне:
+#
+#   docker compose exec test_hub bash -lc \
+#     "cd /projects/auto_tests_vshgu && python3 -m venv .venv \
+#      && .venv/bin/pip install -r requirements.txt \
+#      && .venv/bin/playwright install --with-deps chromium"
+
+services:
+  test_hub:
+    build: .
+    image: test_hub:latest
+    env_file:
+      - .env
+    ports:
+      - "${TH_PORT:-8700}:${TH_PORT:-8700}"
+    volumes:
+      - ./workspace:/app/workspace
+      - ./.env:/app/.env:ro
+      # Пример точки монтирования проекта тестов — путь слева укажите свой:
+      # - /path/to/auto_tests_vshgu:/projects/auto_tests_vshgu
+    restart: unless-stopped
