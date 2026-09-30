@@ -1,9 +1,13 @@
 import json
+import logging
+import secrets
 import sqlite3
 from pathlib import Path
 
 from .config import settings
 from .security import hash_password
+
+logger = logging.getLogger(__name__)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -205,15 +209,34 @@ def get_connection() -> sqlite3.Connection:
     return conn
 
 
+def _log_generated_passwords(passwords: dict[str, str]) -> None:
+    """TH_ENV=prod: единственное место, где случайный seed-пароль виден в открытом
+    виде (дальше в БД попадает только его scrypt-хэш, см. hash_password) — вместо
+    принудительной смены пароля при первом входе (потребовала бы новой колонки и
+    экрана в UI) выводим его в лог один раз при первом создании учётки."""
+    lines = "\n".join(f"  {login}: {password}" for login, password in sorted(passwords.items()))
+    logger.warning(
+        "TH_ENV=prod: сгенерированы случайные пароли seed-пользователей — "
+        "сохраните их сейчас, повторно нигде не выводятся:\n%s",
+        lines,
+    )
+
+
 def _seed_if_empty(conn: sqlite3.Connection) -> None:
     count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
     if count:
         return
+    generated: dict[str, str] = {}
     for login, password, role, onboarded in SEED_USERS:
+        if settings.TH_ENV == "prod":
+            password = secrets.token_urlsafe(12)
+            generated[login] = password
         conn.execute(
             "INSERT INTO users (login, password_hash, role, onboarded) VALUES (?, ?, ?, ?)",
             (login, hash_password(password), role, onboarded),
         )
+    if generated:
+        _log_generated_passwords(generated)
     for name, path, venv in SEED_PROJECTS:
         # На чужой машине эти абсолютные пути (личные проекты владельца) не
         # существуют — сидировать нечего, и раннер всё равно не найдёт venv/bin/python.
@@ -377,9 +400,13 @@ def _seed_superadmin(conn: sqlite3.Connection) -> None:
     ).fetchone()
     if exists:
         return
+    password = SUPERADMIN_PASSWORD
+    if settings.TH_ENV == "prod":
+        password = secrets.token_urlsafe(12)
+        _log_generated_passwords({SUPERADMIN_LOGIN: password})
     conn.execute(
         "INSERT INTO users (login, password_hash, role, onboarded) VALUES (?, ?, ?, ?)",
-        (SUPERADMIN_LOGIN, hash_password(SUPERADMIN_PASSWORD), "superadmin", 1),
+        (SUPERADMIN_LOGIN, hash_password(password), "superadmin", 1),
     )
     conn.commit()
 

@@ -37,6 +37,11 @@ def _default_projects_root() -> Path:
 class Settings:
     TH_PORT: int = int(os.getenv("TH_PORT", "8700"))
     TH_SECRET: str = os.getenv("TH_SECRET", "change-me")
+
+    # 'dev' (по умолчанию, как сейчас у владельца) или 'prod' — переключает
+    # проверку TH_SECRET и генерацию seed-паролей при старте (см. lifespan
+    # в app/main.py и _seed_if_empty/_seed_superadmin в app/db.py).
+    TH_ENV: str = os.getenv("TH_ENV", "dev")
     WORKSPACE_DIR: Path = BASE_DIR / "workspace"
     DB_PATH: Path = BASE_DIR / "workspace" / "test_hub.db"
     ALLURE_RESULTS_DIR: Path = BASE_DIR / "workspace" / "allure-results"
