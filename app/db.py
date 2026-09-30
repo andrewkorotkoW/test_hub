@@ -147,15 +147,15 @@ SEED_USERS = [
 ]
 
 SEED_PROJECTS = [
-    ("bike_fit", "/Users/andreykorotkow/PycharmProjects/bike_fit", ".venv"),
-    ("Velo_bot", "/Users/andreykorotkow/PycharmProjects/Velo_bot", ".venv"),
+    ("bike_fit", str(settings.TH_PROJECTS_ROOT / "bike_fit"), ".venv"),
+    ("Velo_bot", str(settings.TH_PROJECTS_ROOT / "Velo_bot"), ".venv"),
 ]
 
 SUPERADMIN_LOGIN = "admin"
 SUPERADMIN_PASSWORD = "admin"
 
 VSHGU_PROJECT_NAME = "VSHGU"
-VSHGU_PROJECT_PATH = "/Users/andreykorotkow/PycharmProjects/auto_tests_vshgu"
+VSHGU_PROJECT_PATH = str(settings.TH_VSHGU_PATH)
 VSHGU_PROJECT_VENV = ".venv"
 VSHGU_STANDS = ("develop", "stage")
 VSHGU_MANUAL_ONLY_STAND = "stage"
