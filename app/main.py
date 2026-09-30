@@ -19,8 +19,23 @@ from .routers import (
 logger = logging.getLogger(__name__)
 
 
+def _check_prod_secret() -> None:
+    """TH_ENV=prod с незаменённым TH_SECRET подписывал бы сессионные cookie
+    (app/security.py::create_session_token) общеизвестным ключом — в отличие от
+    dev, где 'change-me' безобиден (локально/за launchd), в проде это позволяет
+    подделать сессию любого пользователя. Валим старт, а не логируем, чтобы
+    uvicorn не поднялся с дырой по умолчанию."""
+    if settings.TH_ENV == "prod" and settings.TH_SECRET == "change-me":
+        raise RuntimeError(
+            "TH_ENV=prod, но TH_SECRET не задан (используется дефолт 'change-me'). "
+            "Укажите в .env случайный TH_SECRET (например: python3 -c "
+            "'import secrets; print(secrets.token_urlsafe(32))') перед продовым запуском."
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _check_prod_secret()
     init_db()
 
     tg_application = None
