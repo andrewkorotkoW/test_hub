@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Карта покрытия v6 — Панель + Светофор</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+/* Токены — только из DESIGN.md (корень репозитория test_hub), без приблизительных значений. */
+:root{
+  --bg:#0f1223; --bg-sidebar:#151a2e; --surface:#1b2036; --surface-hover:#232945; --border:#262c47;
+  --text:#e7e9f5; --text-muted:#9298b8;
+  --accent:#14b8a6; --accent-text:#12141f;
+  --passed:#22c55e; --failed:#ff4d6d; --broken:#f59e0b; --skipped:#8b93a7; --xfail:#f5b642;
+  --grad-start:#7c5cff; --grad-mid:#ff4fa3; --grad-end:#38d6ff;
+  --shadow:0 8px 24px rgba(0,0,0,.35);
+  --font:"Golos Text",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --r-sm:6px; --r-md:8px; --r-lg:10px; --r-card:16px; --r-pill:999px;
+  --sp-xs:4px; --sp-sm:8px; --sp-md:12px; --sp-lg:16px; --sp-xl:22px; --sp-xxl:28px;
+}
+:root[data-theme="light"]{
+  --bg:#f5f6f8; --bg-sidebar:#ffffff; --surface:#ffffff; --surface-hover:#f3f4f6; --border:#e1e4e9;
+  --text:#1f2430; --text-muted:#6b7280;
+  --shadow:0 1px 3px rgba(15,23,42,.08);
+}
+*{box-sizing:border-box}
+html{background:var(--bg)}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;line-height:1.45}
+h1,h2,h3{margin:0}
+.num,code,.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.eyebrow{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);font-weight:600}
+
+/* ---------- панель управления макетами ---------- */
+.ctl{position:sticky;top:0;z-index:20;background:var(--surface);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+.ctl .title{font-weight:700;font-size:15px;margin-right:auto}
+.ctl .title small{display:block;font-weight:400;color:var(--text-muted);font-size:12px;margin-top:2px}
+.tabs{display:flex;gap:4px;background:var(--surface-hover);padding:4px;border-radius:var(--r-md)}
+.tabs button{border:0;background:transparent;color:var(--text-muted);font:inherit;font-weight:600;padding:7px 12px;border-radius:var(--r-sm);cursor:pointer}
+.tabs button[aria-current="true"]{background:var(--accent);color:var(--accent-text)}
+.tabs button:focus-visible,.ctl button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.theme-btn{border:1px solid var(--border);background:var(--surface);color:var(--text);font:inherit;padding:7px 12px;border-radius:var(--r-md);cursor:pointer}
+.swatches{display:flex;gap:6px;align-items:center}
+.swatches span{font-size:12px;color:var(--text-muted);margin-right:2px}
+.swatches button{width:20px;height:20px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0}
+.swatches button[aria-pressed="true"]{border-color:var(--text);box-shadow:0 0 0 2px var(--surface)}
+
+.variant{display:block;padding:26px 20px 40px;scroll-margin-top:64px}
+.variant+.variant{border-top:1px dashed var(--border)}
+.mock{max-width:1440px;margin:0 auto}
+.mock-head{display:flex;justify-content:space-between;align-items:baseline;gap:20px;margin:0 0 14px}
+.mock-head h2{font-size:18px;font-weight:700}
+.mock-head p{margin:0;color:var(--text-muted);max-width:70ch;font-size:13px}
+.frame{background:var(--bg);border:1px solid var(--border);border-radius:18px;overflow:hidden;box-shadow:var(--shadow)}
+
+/* ---------- шапка проекта + вкладки (по образцу ui/project.html) ---------- */
+.color-dot{width:14px;height:14px;border-radius:50%;background:var(--accent);display:inline-block;vertical-align:middle;border:2px solid var(--surface);box-shadow:0 0 0 1px var(--border)}
+.phead{display:flex;align-items:center;gap:12px;padding:16px 20px 0;background:var(--surface)}
+.phead h1{font-size:22px;font-weight:700}
+.ptabs{display:flex;gap:4px;padding:0 20px;border-bottom:1px solid var(--border);background:var(--surface)}
+.ptabs a{padding:12px 14px;color:var(--text-muted);text-decoration:none;font-weight:600;font-size:14px;border-bottom:2px solid transparent}
+.ptabs a.active{color:var(--accent);border-bottom-color:var(--accent)}
+
+/* ---------- общие элементы ---------- */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-card);padding:16px 18px}
+.cov-body{padding:18px 20px 24px;background:var(--bg)}
+.eyebrow-card{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);font-weight:600;margin-bottom:12px}
+.status-dot{width:7px;height:7px;border-radius:50%;display:inline-block;flex:0 0 auto}
+.status-dot.passed{background:var(--passed)}
+.status-dot.failed{background:var(--failed)}
+.status-dot.broken{background:var(--broken)}
+.status-dot.xfail{background:var(--xfail)}
+.status-dot.skipped{background:var(--skipped)}
+.status-dot.not_executed,.status-dot.not_covered,.status-dot.none{background:var(--text-muted);opacity:.5}
+
+/* ---------- KPI-ряд (референс IMG_2940 «Spending parameters», IMG_2929 gauge) ---------- */
+.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--sp-md);margin-bottom:var(--sp-lg)}
+.kpi-tile{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-card);padding:var(--sp-lg) 18px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:6px}
+.kpi-tile .lbl{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);font-weight:600}
+.kpi-tile .val{font-family:var(--mono);font-size:26px;font-weight:700}
+.kpi-tile .sub{font-size:12px;color:var(--text-muted)}
+.kpi-tile.gauge{flex-direction:row;align-items:center;gap:14px}
+.kpi-tile.gauge .g-text{display:flex;flex-direction:column;gap:2px}
+
+/* ---------- ряд маленьких колец (референс IMG_2940 «Spending parameters») ---------- */
+.ring-row{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:var(--sp-lg)}
+.ring-tile{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-card);padding:14px 12px;box-shadow:var(--shadow);display:flex;flex-direction:column;align-items:center;gap:8px;flex:1 1 108px;min-width:104px}
+.ring-wrap{position:relative;width:64px;height:64px}
+.ring-wrap .ring-val{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-weight:700;font-size:13px}
+.ring-tile .ring-cap{font-size:12px;color:var(--text-muted);text-align:center;max-width:96px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ring-tile .ring-sub{font-size:11px;color:var(--text-muted);font-family:var(--mono)}
+.ring-tile.kind .ring-cap{font-weight:700;color:var(--text);letter-spacing:.04em}
+
+/* ---------- heatmap «область × стенд» (референс IMG_2929) ---------- */
+.cov-grid{display:grid;grid-template-columns:1fr 380px;gap:var(--sp-md)}
+.heat-table{width:100%;border-collapse:collapse}
+.heat-table th{text-align:left;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);font-weight:600;padding:8px 10px;border-bottom:1px solid var(--border)}
+.heat-table th.stand-col{text-align:center}
+.heat-table td{padding:8px 10px;border-bottom:1px solid color-mix(in srgb, var(--border) 60%, transparent);vertical-align:middle}
+.heat-table td.area-cell{font-weight:600;white-space:nowrap}
+.heat-table td.area-cell .cnt{color:var(--text-muted);font-weight:400;font-family:var(--mono);font-size:12px;margin-left:6px}
+.heat-cell{display:flex;align-items:center;justify-content:center;border-radius:var(--r-sm);border-left:3px solid var(--border);padding:6px 4px;font-family:var(--mono);font-weight:700;font-size:13px}
+.heat-cell.st-passed{border-left-color:var(--passed)}
+.heat-cell.st-failed{border-left-color:var(--failed)}
+.heat-cell.st-xfail{border-left-color:var(--xfail)}
+.heat-cell.st-not_executed{border-left-color:var(--text-muted)}
+
+/* ---------- горизонтальные бары с числом внутри (референс IMG_2929) ---------- */
+.bars-list{display:flex;flex-direction:column;gap:10px}
+.bar-row{display:flex;align-items:center;gap:10px}
+.bar-row .bar-lbl{width:172px;flex:0 0 172px;font-size:12px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar-row .bar-track{flex:1;background:var(--surface-hover);border-radius:var(--r-sm);height:22px;position:relative}
+.bar-row .bar-fill{height:100%;border-radius:var(--r-sm);background:var(--accent);display:flex;align-items:center;justify-content:flex-end;padding:0 8px;min-width:30px}
+.bar-row .bar-fill span{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--accent-text)}
+
+/* ---------- Вариант E · карта продукта ---------- */
+.tile-layout{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:var(--sp-md);align-items:start}
+.tile-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;min-width:0}
+.tile{border-radius:var(--r-card);border:1px solid var(--border);border-left:3px solid var(--border);background:var(--surface);box-shadow:var(--shadow);padding:12px 12px;display:flex;gap:10px;align-items:center;cursor:pointer;text-align:left;font:inherit;color:var(--text)}
+.tile:hover{background:var(--surface-hover)}
+.tile.selected{outline:2px solid var(--accent);outline-offset:-2px}
+.tile.grey{opacity:.62}
+.tile.st-passed{border-left-color:var(--passed)}
+.tile.st-failed{border-left-color:var(--failed)}
+.tile.st-broken{border-left-color:var(--broken)}
+.tile.st-xfail{border-left-color:var(--xfail)}
+.tile.st-skipped{border-left-color:var(--skipped)}
+.tile.st-not_executed{border-left-color:var(--border)}
+.tile .tile-ring{display:block;position:relative;width:46px;height:46px;flex:0 0 auto}
+.tile .tile-ring .ring-val{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-weight:700;font-size:11px}
+.tile .tile-text{display:flex;flex-direction:column;gap:3px;min-width:0}
+.tile .tile-lbl{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--text-muted);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tile .tile-counts{font-size:12px;color:var(--text);font-family:var(--mono)}
+.tile .tile-counts b{font-weight:700}
+.tile-detail{position:sticky;top:78px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-card);box-shadow:var(--shadow);padding:16px 18px;max-height:640px;overflow:auto}
+.tile-detail h3{font-size:16px;margin-bottom:4px}
+.tile-detail .td-sub{font-size:12px;color:var(--text-muted);margin-bottom:12px}
+.td-item{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid color-mix(in srgb, var(--border) 60%, transparent);font-size:12.5px}
+.td-item:last-child{border-bottom:0}
+.td-item .td-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.td-item .td-kind{font-size:10px;color:var(--text-muted);border:1px solid var(--border);border-radius:var(--r-pill);padding:1px 6px;flex:0 0 auto}
+
+@media (prefers-reduced-motion:no-preference){.tabs button,.swatches button,.tile{transition:background .15s,outline .1s}.swatches button:hover{transform:scale(1.15)}}
+
+/* цвет статуса светофора — единственная функция, определяющая цвет во всём макете v3 */
+.st-green{ --st-color:var(--passed); }
+.st-yellow{ --st-color:var(--xfail); }
+.st-red{ --st-color:var(--failed); }
+.st-grey{ --st-color:var(--text-muted); }
+
+/* ================= Вариант G · светофор ================= */
+.g-summary{display:flex;flex-direction:column;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-card);box-shadow:var(--shadow);padding:16px 22px}
+.g-summary .g-line{font-size:15px}
+.g-summary .g-line b{font-family:var(--mono);font-weight:700}
+.g-track{display:flex;height:10px;border-radius:var(--r-pill);overflow:hidden;background:var(--surface-hover)}
+.g-track span{height:100%}
+.g-track .seg-green{background:var(--passed)}
+.g-track .seg-problem{background:var(--xfail)}
+.g-track .seg-grey{background:var(--text-muted);opacity:.55}
+
+.g-columns{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;flex:1;min-height:0}
+.g-col{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-card);box-shadow:var(--shadow);padding:14px 14px 10px;display:flex;flex-direction:column;min-height:0;height:100%}
+.g-col-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+.g-col-head .g-col-title{font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px}
+.g-col-head .g-col-count{font-family:var(--mono);font-size:20px;font-weight:700}
+.g-col-list{display:flex;flex-direction:column;gap:8px;overflow-y:auto;padding-right:2px;flex:1;min-height:0;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.g-col-list::-webkit-scrollbar{width:6px}
+.g-col-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:var(--r-pill)}
+.gcard{display:flex;gap:9px;align-items:flex-start;border:1px solid var(--border);border-left:3px solid var(--st-color);border-radius:var(--r-md);background:var(--surface-hover);padding:8px 10px}
+.gcard .gcard-dot{margin-top:5px}
+.gcard .gcard-body{min-width:0;flex:1}
+.gcard .gcard-title{font-weight:600;font-size:13px;display:flex;align-items:center;gap:8px;justify-content:space-between}
+.gcard .gcard-title .gcard-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gcard .gcard-tag{font-size:10.5px;color:var(--st-color);flex:0 0 auto;font-weight:700}
+.gcard .gcard-stats{font-size:12px;color:var(--text-muted);margin-top:2px;font-family:var(--mono)}
+
+
+/* v6: колонки светофора под шапкой панели — фиксированная высота, чтобы кадр был как у v3 */
+.cov-body.v6{display:flex;flex-direction:column;gap:16px}
+.g-columns{height:520px}
+</style></head><body>
+<div class="ctl"><div class="title">test_hub · карта покрытия, v6<small>Вариант K · шапка из «Панели» (D: KPI-плитки и кольца) + колонки «Светофора» (G) · данные прогона #39, develop</small></div><button class="theme-btn" id="theme">Тема: тёмная</button></div>
+<section class="variant vk" id="vk"><div class="mock">
+<div class="mock-head"><h2>Вариант K · Панель + Светофор</h2><p>Сверху шапка панели: KPI-плитки (страницы, маршруты, gauge, области без тестов) и ряд колец по API/UI/E2E и топ-разделам. Под ней вместо heatmap и баров — три колонки светофора: покрыто и проходит / есть проблемы / не покрыто.</p></div>
+<div class="frame" id="f-cov-k">
+ <div class="phead"><span class="color-dot"></span><h1>auto_tests_vshgu_cloude</h1></div>
+ <nav class="ptabs"><a href="#">Дашборд</a><a href="#">Запуск</a><a href="#">Расписания</a><a href="#">История</a><a href="#">Флаки</a><a href="#">Тест-кейсы</a><a href="#" class="active">Покрытие</a></nav>
+ <div class="cov-body v6">
+  <div><div class="eyebrow-card">KPI покрытия</div><div class="kpi-row" id="kpi-row"></div>
+  <div class="eyebrow-card">Покрытие по API / UI / E2E и топ-разделам</div><div class="ring-row" id="ring-row" style="margin-bottom:0"></div></div>
+  <div class="g-summary"><div class="g-line" id="g-line"></div><div class="g-track" id="g-track"></div></div>
+  <div class="g-columns" id="g-columns"></div>
+ </div>
+</div></div></section>
+<script id="v6-data" type="application/json">{"kpi": {"pages_total": 56, "pages_covered": 18, "routes_total": 595, "routes_covered": 84, "gauge_percent": 15.7, "areas_total": 78, "areas_zero": 54}, "kind_rings": [{"key": "api", "label": "API", "percent": 79.9, "total": 174}, {"key": "ui", "label": "UI", "percent": 79.7, "total": 118}, {"key": "e2e", "label": "E2E", "percent": 0, "total": 15}], "section_rings": [{"area": "programs", "label": "Программы", "percent": 92.9, "total_tests": 28, "api": 28, "ui": 0, "e2e": 0, "run_status": "skipped"}, {"area": "buk", "label": "БУК", "percent": 0, "total_tests": 22, "api": 15, "ui": 7, "e2e": 0, "run_status": "skipped"}, {"area": "notifications", "label": "Уведомления", "percent": 79.2, "total_tests": 21, "api": 19, "ui": 2, "e2e": 0, "run_status": "xfail"}, {"area": "cas", "label": "CAS (аутентификация)", "percent": 94.7, "total_tests": 19, "api": 15, "ui": 4, "e2e": 0, "run_status": "failed"}, {"area": "dictionaries", "label": "Справочники", "percent": 88.2, "total_tests": 19, "api": 14, "ui": 5, "e2e": 0, "run_status": "xfail"}, {"area": "e2e", "label": "Сквозные сценарии", "percent": 16.7, "total_tests": 18, "api": 3, "ui": 0, "e2e": 15, "run_status": "skipped"}], "g": {"sections_total": 35, "sections_covered": 26, "sections_green": 10, "sections_yellow": 13, "sections_red": 3, "sections_grey": 9, "covered_percent": 74.3}, "sections": [{"area": "programs", "label": "Программы", "status": "yellow", "run_status": "skipped", "total_tests": 28, "api": 28, "ui": 0, "e2e": 0, "detail_line": "28 тестов · API 28", "items": [{"kind": "api", "label": "test_assign_activity_to_user", "detail": "skipped"}, {"kind": "api", "label": "test_detach_activity_from_user", "detail": "skipped"}, {"kind": "api", "label": "test_assign_user_to_stream", "detail": "passed"}, {"kind": "api", "label": "test_assign_user_twice", "detail": "passed"}, {"kind": "api", "label": "test_create_module_dates_outside_stream", "detail": "passed"}, {"kind": "api", "label": "test_create_module_success", "detail": "passed"}]}, {"area": "buk", "label": "БУК", "status": "yellow", "run_status": "skipped", "total_tests": 22, "api": 15, "ui": 7, "e2e": 0, "detail_line": "22 теста · API 15 · UI 7", "items": [{"kind": "api", "label": "test_batch_two_users", "detail": "skipped"}, {"kind": "api", "label": "test_delete_unknown_not_found", "detail": "skipped"}, {"kind": "api", "label": "test_delete_unsync_idempotent", "detail": "skipped"}, {"kind": "api", "label": "test_manual_match_admin_rejected", "detail": "skipped"}, {"kind": "api", "label": "test_manual_match_by_user_id", "detail": "skipped"}, {"kind": "api", "label": "test_pending_then_put_corrects_email", "detail": "skipped"}]}, {"area": "notifications", "label": "Уведомления", "status": "yellow", "run_status": "xfail", "total_tests": 21, "api": 19, "ui": 2, "e2e": 0, "detail_line": "21 тест · API 19 · UI 2", "items": [{"kind": "api", "label": "test_delete_template_removes_it_from_list", "detail": "xfail"}, {"kind": "api", "label": "test_template_full_cycle", "detail": "passed"}, {"kind": "api", "label": "test_register_template_by_known_type[application_accepted]", "detail": "passed"}, {"kind": "api", "label": "test_register_template_by_known_type[application_rejected]", "detail": "passed"}, {"kind": "api", "label": "test_register_template_by_known_type[register_application]", "detail": "passed"}, {"kind": "api", "label": "test_register_template_by_known_type[user_verified_email]", "detail": "passed"}]}, {"area": "cas", "label": "CAS (аутентификация)", "status": "red", "run_status": "failed", "total_tests": 19, "api": 15, "ui": 4, "e2e": 0, "detail_line": "19 тестов · API 15 · UI 4", "items": [{"kind": "api", "label": "test_correction_sync", "detail": "passed"}, {"kind": "api", "label": "test_dismiss_assignments", "detail": "passed"}, {"kind": "api", "label": "test_dismiss_with_order_fails", "detail": "passed"}, {"kind": "api", "label": "test_sync_regular_program", "detail": "passed"}, {"kind": "api", "label": "test_sync_regular_stream", "detail": "passed"}, {"kind": "api", "label": "test_update_cas_user", "detail": "passed"}]}, {"area": "dictionaries", "label": "Справочники", "status": "yellow", "run_status": "xfail", "total_tests": 19, "api": 14, "ui": 5, "e2e": 0, "detail_line": "19 тестов · API 14 · UI 5", "items": [{"kind": "api", "label": "test_stream_created_with_new_dictionary_item_persists_reference", "detail": "passed"}, {"kind": "api", "label": "test_user_created_with_dictionary_region_persists_reference", "detail": "passed"}, {"kind": "api", "label": "test_create_and_find_by_name[learning_format]", "detail": "passed"}, {"kind": "api", "label": "test_create_and_find_by_name[program_department]", "detail": "passed"}, {"kind": "api", "label": "test_create_and_find_by_name[program_type]", "detail": "passed"}, {"kind": "api", "label": "test_create_and_find_by_name[tag]", "detail": "passed"}]}, {"area": "test_constructor", "label": "Конструктор тестов", "status": "red", "run_status": "failed", "total_tests": 18, "api": 0, "ui": 18, "e2e": 0, "detail_line": "18 тестов · UI 18", "items": [{"kind": "ui", "label": "test_admin_creates_test_and_sees_it_in_constructor_table", "detail": "passed"}, {"kind": "ui", "label": "test_admin_creates_test_with_additional_questions", "detail": "passed"}, {"kind": "ui", "label": "test_admin_creates_poll_and_sees_it_in_constructor_table", "detail": "passed"}, {"kind": "ui", "label": "test_admin_creates_question_theme_in_catalog", "detail": "passed"}, {"kind": "ui", "label": "test_admin_edits_question_theme_in_catalog", "detail": "passed"}, {"kind": "ui", "label": "test_admin_sees_additional_question_competition", "detail": "passed"}]}, {"area": "users", "label": "Пользователи", "status": "green", "run_status": "passed", "total_tests": 18, "api": 12, "ui": 6, "e2e": 0, "detail_line": "18 тестов · API 12 · UI 6", "items": [{"kind": "api", "label": "test_assign_teacher_role", "detail": "passed"}, {"kind": "api", "label": "test_examine_homework_flow", "detail": "passed"}, {"kind": "api", "label": "test_create_user_custom_birthdate", "detail": "passed"}, {"kind": "api", "label": "test_create_user_duplicate_email", "detail": "passed"}, {"kind": "api", "label": "test_create_user_password_lowercase_only", "detail": "passed"}, {"kind": "api", "label": "test_create_user_password_numbers_only", "detail": "passed"}]}, {"area": "e2e", "label": "Сквозные сценарии", "status": "yellow", "run_status": "skipped", "total_tests": 18, "api": 3, "ui": 0, "e2e": 15, "detail_line": "18 тестов · API 3 · E2E 15", "items": [{"kind": "api", "label": "test_e2e_poll_to_module", "detail": "passed"}, {"kind": "api", "label": "test_e2e_proctoring_to_module", "detail": "passed"}, {"kind": "api", "label": "test_e2e_test_to_module", "detail": "passed"}, {"kind": "e2e", "label": "test_e2e_lpd_stage", "detail": "skipped"}, {"kind": "e2e", "label": "test_create_lpd_anonymous", "detail": "skipped"}, {"kind": "e2e", "label": "test_create_lpd_anonymous", "detail": "skipped"}]}, {"area": "create_activity", "label": "Создание активности", "status": "yellow", "run_status": "skipped", "total_tests": 17, "api": 17, "ui": 0, "e2e": 0, "detail_line": "17 тестов · API 17", "items": [{"kind": "api", "label": "test_create_scorm_2004", "detail": "passed"}, {"kind": "api", "label": "test_e2e_tincan_full_flow", "detail": "passed"}, {"kind": "api", "label": "test_create_tincan", "detail": "passed"}, {"kind": "api", "label": "test_create_tincan_without_name", "detail": "passed"}, {"kind": "api", "label": "test_mass_delete_tincan", "detail": "passed"}, {"kind": "api", "label": "test_upload_archive", "detail": "passed"}]}, {"area": "learning_statistics", "label": "Статистика обучения", "status": "yellow", "run_status": "xfail", "total_tests": 16, "api": 2, "ui": 14, "e2e": 0, "detail_line": "16 тестов · API 2 · UI 14", "items": [{"kind": "api", "label": "test_get_course_row_filters_by_stream_id", "detail": "passed"}, {"kind": "api", "label": "test_get_course_row_type_programs_filter", "detail": "passed"}, {"kind": "ui", "label": "test_export_after_filter_reflects_filtered_data", "detail": "xfail"}, {"kind": "ui", "label": "test_export_content_matches_listener_table", "detail": "passed"}, {"kind": "ui", "label": "test_export_downloads_valid_xlsx", "detail": "passed"}, {"kind": "ui", "label": "test_map_filter_disabled_states_combo_and_reset", "detail": "passed"}]}, {"area": "knowledge_base", "label": "База знаний", "status": "red", "run_status": "failed", "total_tests": 13, "api": 1, "ui": 12, "e2e": 0, "detail_line": "13 тестов · API 1 · UI 12", "items": [{"kind": "api", "label": "test_create_course_material_full_cycle", "detail": "passed"}, {"kind": "ui", "label": "test_admin_sees_user_achievement_history", "detail": "passed"}, {"kind": "ui", "label": "test_admin_sees_user_in_knowledge_base_rating", "detail": "passed"}, {"kind": "ui", "label": "test_create_achievement", "detail": "passed"}, {"kind": "ui", "label": "test_create_achievement_material_count_for_type[audio]", "detail": "passed"}, {"kind": "ui", "label": "test_create_achievement_material_count_for_type[book]", "detail": "passed"}]}, {"area": "tickets", "label": "Обращения в техподдержку", "status": "yellow", "run_status": "xfail", "total_tests": 12, "api": 11, "ui": 1, "e2e": 0, "detail_line": "12 тестов · API 11 · UI 1", "items": [{"kind": "api", "label": "test_close_ticket", "detail": "passed"}, {"kind": "api", "label": "test_create_ticket", "detail": "passed"}, {"kind": "api", "label": "test_message_to_closed_ticket_is_rejected", "detail": "xfail"}, {"kind": "api", "label": "test_new_ticket_is_open_in_my_tickets", "detail": "passed"}, {"kind": "api", "label": "test_repeat_close_is_rejected", "detail": "xfail"}, {"kind": "api", "label": "test_add_message_and_order", "detail": "passed"}]}, {"area": "practical_tasks", "label": "Практические задания", "status": "yellow", "run_status": "xfail", "total_tests": 10, "api": 0, "ui": 10, "e2e": 0, "detail_line": "10 тестов · UI 10", "items": [{"kind": "ui", "label": "test_create_group_for_stream", "detail": "passed"}, {"kind": "ui", "label": "test_group_practical_task_flow", "detail": "passed"}, {"kind": "ui", "label": "test_assign_from_user_card", "detail": "passed"}, {"kind": "ui", "label": "test_complete_and_review_personal_assignment", "detail": "xfail"}, {"kind": "ui", "label": "test_add_listener_to_stream", "detail": "passed"}, {"kind": "ui", "label": "test_add_practical_task_to_schedule", "detail": "passed"}]}, {"area": "onboarding", "label": "Онбординг", "status": "yellow", "run_status": "xfail", "total_tests": 9, "api": 1, "ui": 8, "e2e": 0, "detail_line": "9 тестов · API 1 · UI 8", "items": [{"kind": "api", "label": "test_complete_all_onboarding", "detail": "passed"}, {"kind": "ui", "label": "test_knowledge_base_first_time_onboarding", "detail": "passed"}, {"kind": "ui", "label": "test_my_learning_first_time_onboarding", "detail": "passed"}, {"kind": "ui", "label": "test_personal_education_first_time_onboarding", "detail": "passed"}, {"kind": "ui", "label": "test_support_page_after_onboarding", "detail": "passed"}, {"kind": "ui", "label": "test_repeat_onboarding_knowledge_base", "detail": "xfail"}]}, {"area": "alpina_and_mif", "label": "Alpina и МИФ", "status": "yellow", "run_status": "skipped", "total_tests": 6, "api": 4, "ui": 2, "e2e": 0, "detail_line": "6 тестов · API 4 · UI 2", "items": [{"kind": "api", "label": "test_set_alpina_status", "detail": "passed"}, {"kind": "api", "label": "test_unset_alpina_status", "detail": "passed"}, {"kind": "api", "label": "test_set_mif_access", "detail": "passed"}, {"kind": "api", "label": "test_unset_mif_access", "detail": "passed"}, {"kind": "ui", "label": "test_alpina_access", "detail": "skipped"}, {"kind": "ui", "label": "test_mif_access", "detail": "skipped"}]}, {"area": "aos", "label": "АОС", "status": "yellow", "run_status": "xfail", "total_tests": 4, "api": 2, "ui": 2, "e2e": 0, "detail_line": "4 теста · API 2 · UI 2", "items": [{"kind": "api", "label": "test_create_aos_with_schedule_item", "detail": "passed"}, {"kind": "api", "label": "test_create_aos_without_name", "detail": "passed"}, {"kind": "ui", "label": "test_public_aos_pass", "detail": "passed"}, {"kind": "ui", "label": "test_user_complete_aos", "detail": "xfail"}]}, {"area": "certificates", "label": "Сертификаты", "status": "green", "run_status": "passed", "total_tests": 4, "api": 4, "ui": 0, "e2e": 0, "detail_line": "4 теста · API 4", "items": [{"kind": "api", "label": "test_assign_certificate_to_homework_and_user", "detail": "passed"}, {"kind": "api", "label": "test_assign_template_to_program", "detail": "passed"}, {"kind": "api", "label": "test_create_activity_template", "detail": "passed"}, {"kind": "api", "label": "test_create_program_template", "detail": "passed"}]}, {"area": "banner", "label": "Баннеры", "status": "green", "run_status": "passed", "total_tests": 3, "api": 2, "ui": 1, "e2e": 0, "detail_line": "3 теста · API 2 · UI 1", "items": [{"kind": "api", "label": "test_toggle_banner_off", "detail": "passed"}, {"kind": "api", "label": "test_toggle_banner_on", "detail": "passed"}, {"kind": "ui", "label": "test_info_banner_toggle_ui", "detail": "passed"}]}, {"area": "courses", "label": "Курсы", "status": "yellow", "run_status": "xfail", "total_tests": 3, "api": 0, "ui": 3, "e2e": 0, "detail_line": "3 теста · UI 3", "items": [{"kind": "ui", "label": "test_user_tincan_individual", "detail": "xfail"}, {"kind": "ui", "label": "test_create_course_and_view_in_ui", "detail": "passed"}, {"kind": "ui", "label": "test_user_open_tincan", "detail": "xfail"}]}, {"area": "game_session", "label": "Игровые сессии", "status": "green", "run_status": "passed", "total_tests": 2, "api": 0, "ui": 2, "e2e": 0, "detail_line": "2 теста · UI 2", "items": [{"kind": "ui", "label": "test_admin_check_activity_status", "detail": "passed"}, {"kind": "ui", "label": "test_activity_launch", "detail": "passed"}]}, {"area": "polls", "label": "Опросы", "status": "green", "run_status": "passed", "total_tests": 2, "api": 1, "ui": 1, "e2e": 0, "detail_line": "2 теста · API 1 · UI 1", "items": [{"kind": "api", "label": "test_full_poll_cycle", "detail": "passed"}, {"kind": "ui", "label": "test_ui_poll_flow", "detail": "passed"}]}, {"area": "proctoring", "label": "Прокторинг", "status": "green", "run_status": "passed", "total_tests": 2, "api": 1, "ui": 1, "e2e": 0, "detail_line": "2 теста · API 1 · UI 1", "items": [{"kind": "api", "label": "test_proctoring_cycle", "detail": "passed"}, {"kind": "ui", "label": "test_proctoring_ui_flow", "detail": "passed"}]}, {"area": "tests", "label": "Тесты (контроль знаний)", "status": "green", "run_status": "passed", "total_tests": 2, "api": 1, "ui": 1, "e2e": 0, "detail_line": "2 теста · API 1 · UI 1", "items": [{"kind": "api", "label": "test_full_cycle", "detail": "passed"}, {"kind": "ui", "label": "test_user_open_test_stream", "detail": "passed"}]}, {"area": "dashboards", "label": "Дашборды", "status": "green", "run_status": "passed", "total_tests": 1, "api": 0, "ui": 1, "e2e": 0, "detail_line": "1 тест · UI 1", "items": [{"kind": "ui", "label": "test_admin_checks_program_and_course_dashboards", "detail": "passed"}]}, {"area": "homework", "label": "Домашние задания", "status": "green", "run_status": "passed", "total_tests": 1, "api": 0, "ui": 1, "e2e": 0, "detail_line": "1 тест · UI 1", "items": [{"kind": "ui", "label": "test_homework_ui_flow", "detail": "passed"}]}, {"area": "streams", "label": "Потоки", "status": "green", "run_status": "passed", "total_tests": 1, "api": 1, "ui": 0, "e2e": 0, "detail_line": "1 тест · API 1", "items": [{"kind": "api", "label": "test_create_stream_forbidden_for_regular_user", "detail": "passed"}]}, {"area": "oauth", "label": "OAuth", "status": "grey", "run_status": "not_executed", "total_tests": 0, "api": 0, "ui": 0, "e2e": 0, "detail_line": "4 маршрута API в инвентаре, ни один не покрыт тестом", "items": [{"kind": "route", "label": "/api/v1/oauth/token", "detail": "POST"}, {"kind": "route", "label": "/api/v1/oauth/clients/{client}/authorize", "detail": "GET"}, {"kind": "route", "label": "/api/v1/oauth/logout", "detail": "GET"}, {"kind": "route", "label": "/api/v1/oauth/providers/{provider}/authorize", "detail": "GET"}]}, {"area": "materials", "label": "Материалы", "status": "grey", "run_status": "not_executed", "total_tests": 0, "api": 0, "ui": 0, "e2e": 0, "detail_line": "14 маршрутов API в инвентаре, ни один не покрыт тестом", "items": [{"kind": "route", "label": "/api/v1/materials/create/files", "detail": "POST"}, {"kind": "route", "label": "/api/v1/materials/create/url", "detail": "POST"}, {"kind": "route", "label": "/api/v1/materials/create/dir", "detail": "POST"}, {"kind": "route", "label": "/api/v1/materials/files", "detail": "GET"}, {"kind": "route", "label": "/api/v1/materials/files/{material}", "detail": "GET"}, {"kind": "route", "label": "/api/v1/materials/associate/{material}", "detail": "POST"}]}, {"area": "my-materials", "label": "Мои материалы", "status": "grey", "run_status": "not_executed", "total_tests": 0, "api": 0, "ui": 0, "e2e": 0, "detail_line": "6 маршрутов API в инвентаре, ни один не покрыт тестом", "items": [{"kind": "route", "label": "/api/v1/my-materials/delete-materials", "detail": "DELETE"}, {"kind": "route", "label": "/api/v1/my-materials/copyStreamFile/{streamFile}", "detail": "POST"}, {"kind": "route", "label": "/api/v1/my-materials/deleteByStreamFile/{streamFile}", "detail": "DELETE"}, {"kind": "route", "label": "/api/v1/my-materials", "detail": "GET"}, {"kind": "route", "label": "/api/v1/my-materials/{parentId}", "detail": "GET"}, {"kind": "route", "label": "/api/v1/my-materials/{individualFileId}/parents", "detail": "GET"}]}, {"area": "my-programs", "label": "Мои программы", "status": "grey", "run_status": "not_executed", "total_tests": 0, "api": 0, "ui": 0, "e2e": 0, "detail_line": "14 маршрутов API в инвентаре, ни один не покрыт тестом", "items": [{"kind": "route", "label": "/api/v1/my-programs", "detail": "GET"}, {"kind": "route", "label": "/api/v1/my-programs/{program_assignment}/modules", "detail": "GET"}, {"kind": "route", "label": "/api/v1/my-programs/{program_assignment}", "detail": "GET"}, {"kind": "route", "label": "/api/v1/my-programs/{program_assignment}/listeners", "detail": "GET"}, {"kind": "route", "label": "/api/v1/my-programs/{program_assignment}/managers", "detail": "GET"}, {"kind": "route", "label": "/api/v1/my-programs/{program_assignment}/academic-directors", "detail": "GET"}]}, {"area": "assignments", "label": "Назначения", "status": "grey", "run_status": "not_executed", "total_tests": 0, "api": 0, "ui": 0, "e2e": 0, "detail_line": "5 маршрутов API в инвентаре, ни один не покрыт тестом", "items": [{"kind": "route", "label": "/api/v1/assignments", "detail": "GET"}, {"kind": "route", "label": "/api/v1/assignments/{assignment}", "detail": "DELETE"}, {"kind": "route", "label": "/api/v1/assignments/{assignment}/change-state", "detail": "PUT"}, {"kind": "route", "label": "/api/v1/assignments/{assignmentUuid}/contents/{contentId}/launch", "detail": "GET"}, {"kind": "route", "label": "/api/v1/assignments/{assignmentUuid}/contents/{contentId}/guest/launch", "detail": "GET"}]}, {"area": "me", "label": "Профиль (me)", "status": "grey", "run_status": "not_executed", "total_tests": 0, "api": 0, "ui": 0, "e2e": 0, "detail_line": "4 маршрута API в инвентаре, ни один не покрыт тестом", "items": [{"kind": "route", "label": "/api/v1/me/change/password", "detail": "POST"}, {"kind": "route", "label": "/api/v1/me/documents", "detail": "GET"}, {"kind": "route", "label": "/api/v1/me/update", "detail": "PUT"}, {"kind": "route", "label": "/api/v1/me/agreements", "detail": "GET"}]}, {"area": "ratings", "label": "Рейтинги", "status": "grey", "run_status": "not_executed", "total_tests": 0, "api": 0, "ui": 0, "e2e": 0, "detail_line": "7 маршрутов API в инвентаре, ни один не покрыт тестом", "items": [{"kind": "route", "label": "/api/v1/ratings/change-status", "detail": "POST"}, {"kind": "route", "label": "/api/v1/ratings/export", "detail": "POST"}, {"kind": "route", "label": "/api/v1/ratings", "detail": "GET"}, {"kind": "route", "label": "/api/v1/ratings/my-review", "detail": "GET"}, {"kind": "route", "label": "/api/v1/ratings", "detail": "POST"}, {"kind": "route", "label": "/api/v1/ratings/{rating}", "detail": "GET"}]}, {"area": "tenants", "label": "Тенанты", "status": "grey", "run_status": "not_executed", "total_tests": 0, "api": 0, "ui": 0, "e2e": 0, "detail_line": "14 маршрутов API в инвентаре, ни один не покрыт тестом", "items": [{"kind": "route", "label": "/api/v1/tenants", "detail": "POST"}, {"kind": "route", "label": "/api/v1/tenants/main/move/tenant/global/{modelType}/{modelId}", "detail": "POST"}, {"kind": "route", "label": "/api/v1/tenants/copy/tenant/main/{modelType}/{modelId}", "detail": "POST"}, {"kind": "route", "label": "/api/v1/tenants/{tenantOrg}/users/add", "detail": "POST"}, {"kind": "route", "label": "/api/v1/tenants/{tenantOrg}/users/remove", "detail": "DELETE"}, {"kind": "route", "label": "/api/v1/tenants/{tenantOrg}/users/move", "detail": "POST"}]}, {"area": "experts", "label": "Эксперты", "status": "grey", "run_status": "not_executed", "total_tests": 0, "api": 0, "ui": 0, "e2e": 0, "detail_line": "14 маршрутов API в инвентаре, ни один не покрыт тестом", "items": [{"kind": "route", "label": "/api/v1/experts/schedule-items/{stream_schedule_item}", "detail": "GET"}, {"kind": "route", "label": "/api/v1/experts/users/{user}", "detail": "GET"}, {"kind": "route", "label": "/api/v1/experts/contents/{feedbackContent}/statistic", "detail": "GET"}, {"kind": "route", "label": "/api/v1/experts/performance-direction", "detail": "POST"}, {"kind": "route", "label": "/api/v1/experts/broad-topic", "detail": "POST"}, {"kind": "route", "label": "/api/v1/experts/performance-direction/{id}", "detail": "PUT"}]}]}</script>
+<script>
+;(function(){"use strict";
+var DATA=JSON.parse(document.getElementById("v6-data").textContent);
+function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+function pluralRu(n,one,few,many){var m=Math.abs(n)%100;if(m>=11&&m<=14)return many;var d=m%10;if(d===1)return one;if(d>=2&&d<=4)return few;return many;}
+function ringSvg(p,size,stroke,color){var r=(size-stroke)/2,off=100-Math.max(0,Math.min(100,p));return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'"><circle cx="'+size/2+'" cy="'+size/2+'" r="'+r+'" fill="none" stroke="var(--border)" stroke-width="'+stroke+'"/><circle cx="'+size/2+'" cy="'+size/2+'" r="'+r+'" fill="none" stroke="'+color+'" stroke-width="'+stroke+'" stroke-linecap="round" pathLength="100" stroke-dasharray="100" stroke-dashoffset="'+off+'" transform="rotate(-90 '+size/2+' '+size/2+')"/></svg>';}
+function ringTile(p,size,stroke,color){return '<div class="ring-wrap" style="width:'+size+'px;height:'+size+'px">'+ringSvg(p,size,stroke,color)+'<span class="ring-val">'+Math.round(p)+'%</span></div>';}
+function gaugeSvg(p,size,stroke,color){var cx=size/2,cy=size*0.62,r=size/2-stroke;var off=100-Math.max(0,Math.min(100,p));var d='M '+(cx-r)+' '+cy+' A '+r+' '+r+' 0 0 1 '+(cx+r)+' '+cy;return '<svg width="'+size+'" height="'+(size*0.62+stroke)+'" viewBox="0 0 '+size+' '+(size*0.62+stroke)+'"><path d="'+d+'" fill="none" stroke="var(--border)" stroke-width="'+stroke+'" stroke-linecap="round"/><path d="'+d+'" fill="none" stroke="'+color+'" stroke-width="'+stroke+'" stroke-linecap="round" pathLength="100" stroke-dasharray="100" stroke-dashoffset="'+off+'"/></svg>';}
+function pctColor(p){var r=Math.round(p);if(r>=80)return "var(--passed)";if(r>=50)return "var(--xfail)";return "var(--failed)";}
+var k=DATA.kpi;
+document.getElementById("kpi-row").innerHTML=''
+ +'<div class="kpi-tile"><span class="lbl">Страниц покрыто</span><span class="val">'+k.pages_covered+' / '+k.pages_total+'</span><span class="sub">'+Math.round(k.pages_covered/k.pages_total*100)+'% инвентаря UI-страниц</span></div>'
+ +'<div class="kpi-tile"><span class="lbl">Маршрутов покрыто</span><span class="val">'+k.routes_covered+' / '+k.routes_total+'</span><span class="sub">'+Math.round(k.routes_covered/k.routes_total*100)+'% инвентаря API</span></div>'
+ +'<div class="kpi-tile gauge">'+gaugeSvg(k.gauge_percent,108,12,"var(--accent)")+'<div class="g-text"><span class="val">'+k.gauge_percent+'%</span><span class="sub">% покрытия<br>(маршруты + страницы)</span></div></div>'
+ +'<div class="kpi-tile"><span class="lbl">Областей без тестов</span><span class="val">'+k.areas_zero+' / '+k.areas_total+'</span><span class="sub">области маршрутов, где не покрыт ни один</span></div>';
+var rh="";DATA.kind_rings.forEach(function(r){rh+='<div class="ring-tile kind">'+ringTile(r.percent,64,8,pctColor(r.percent))+'<span class="ring-cap">'+r.label+'</span><span class="ring-sub">'+r.total+' тестов</span></div>';});
+DATA.section_rings.forEach(function(r){rh+='<div class="ring-tile">'+ringTile(r.percent,64,8,pctColor(r.percent))+'<span class="ring-cap" title="'+esc(r.label)+'">'+esc(r.label)+'</span><span class="ring-sub">'+r.total_tests+' тестов</span></div>';});
+document.getElementById("ring-row").innerHTML=rh;
+var g=DATA.g,STATUS_WORD={green:"пройдено",yellow:"частично",red:"падает",grey:"нет тестов"};
+document.getElementById("g-line").innerHTML='<b>'+g.sections_covered+'</b> из <b>'+g.sections_total+'</b> разделов покрыты автотестами — <b>'+g.sections_green+'</b> проходят без замечаний, <b>'+(g.sections_yellow+g.sections_red)+'</b> требуют внимания, <b>'+g.sections_grey+'</b> совсем без тестов.';
+var total=g.sections_total||1,problem=g.sections_yellow+g.sections_red;
+document.getElementById("g-track").innerHTML='<span class="seg-green" style="width:'+(g.sections_green/total*100)+'%"></span><span class="seg-problem" style="width:'+(problem/total*100)+'%"></span><span class="seg-grey" style="width:'+(g.sections_grey/total*100)+'%"></span>';
+var GROUPS=[{key:"green",title:"Покрыто и проходит",statuses:["green"]},{key:"problem",title:"Есть проблемы",statuses:["red","yellow"]},{key:"grey",title:"Не покрыто",statuses:["grey"]}];
+var by={};DATA.sections.forEach(function(s){(by[s.status]=by[s.status]||[]).push(s);});var pr={red:0,yellow:1,green:2,grey:3};
+document.getElementById("g-columns").innerHTML=GROUPS.map(function(gr){var list=[];gr.statuses.forEach(function(st){(by[st]||[]).forEach(function(s){list.push(s);});});list.sort(function(a,b){return pr[a.status]-pr[b.status]||b.total_tests-a.total_tests;});
+ var cards=list.map(function(s){var stats=s.status==="grey"?(s.items.length?s.items.length+" "+pluralRu(s.items.length,"маршрут в инвентаре","маршрута в инвентаре","маршрутов в инвентаре"):"автотестов нет"):s.total_tests+" "+pluralRu(s.total_tests,"тест","теста","тестов")+(s.api?" · API "+s.api:"")+(s.ui?" · UI "+s.ui:"")+(s.e2e?" · E2E "+s.e2e:"");
+  return '<div class="gcard st-'+s.status+'"><span class="status-dot '+s.status+' gcard-dot"></span><div class="gcard-body"><div class="gcard-title"><span class="gcard-name">'+esc(s.label)+'</span><span class="gcard-tag">'+STATUS_WORD[s.status]+'</span></div><div class="gcard-stats">'+stats+'</div></div></div>';}).join("");
+ return '<div class="g-col"><div class="g-col-head"><span class="g-col-title"><span class="status-dot '+(gr.key==="problem"?"yellow":gr.key)+'"></span>'+gr.title+'</span><span class="g-col-count">'+list.length+'</span></div><div class="g-col-list">'+cards+'</div></div>';}).join("");
+var root=document.documentElement;function setTheme(t){root.setAttribute("data-theme",t);document.getElementById("theme").textContent="Тема: "+(t==="light"?"светлая":"тёмная");}
+document.getElementById("theme").addEventListener("click",function(){setTheme(root.getAttribute("data-theme")==="light"?"dark":"light");});
+var q=new URLSearchParams(location.search);setTheme(q.get("theme")||"dark");
+})();
+</script></body></html>
