@@ -87,6 +87,7 @@ class RunCreate(BaseModel):
     marker: Optional[str] = None
     repeat: int = Field(default=1, ge=1, le=20)
     confirm_manual: bool = False
+    label: Optional[str] = None
 
 
 class ShareLinkCreate(BaseModel):

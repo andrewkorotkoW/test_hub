@@ -597,8 +597,12 @@ def format_report(report: dict) -> str:
     status_ru = STATUS_RU.get(report["status"], report["status"])
     duration = report.get("duration")
     duration_str = f"{duration:.1f}с" if isinstance(duration, (int, float)) else "—"
+    label = report.get("label")
+    # Прогон сборки (см. этап 2 миссии 2026-10-01_coverage_k_and_test_sets.md)
+    # называем по имени сборки, а не по (обычно длинному) списку целей.
+    title_suffix = f", сборка {label}" if label else ""
     lines = [
-        f"Прогон #{report['id']} ({report.get('project')}) — {status_ru}",
+        f"Прогон #{report['id']} ({report.get('project')}{title_suffix}) — {status_ru}",
         _counts_line(report.get("counts") or {}),
         f"Длительность: {duration_str}",
     ]
