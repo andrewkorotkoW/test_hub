@@ -1,0 +1,42 @@
+# systemd unit для test_hub на Ubuntu (без Docker).
+#
+# Установка:
+#   sudo cp deploy/test_hub.service /etc/systemd/system/test_hub.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now test_hub
+# (deploy/install.sh делает это автоматически.)
+#
+# Обновление кода на уже развёрнутом сервере:
+#   cd /opt/test_hub && git pull && sudo systemctl restart test_hub
+# (см. также deploy/install.sh --update.)
+
+[Unit]
+Description=test_hub - QA test orchestration service
+After=network.target
+
+[Service]
+Type=simple
+# Сервисный пользователь/группа, от имени которых работает test_hub. Не root:
+# заведите отдельного непривилегированного пользователя (например,
+# `sudo useradd --system --home /opt/test_hub --shell /usr/sbin/nologin test_hub`,
+# это делает deploy/install.sh) и дайте ему права на WorkingDirectory и workspace/.
+User=test_hub
+Group=test_hub
+
+WorkingDirectory=/opt/test_hub
+# .env читается дважды: тут systemd подставляет переменные в окружение процесса,
+# а app/config.py дополнительно грузит тот же файл через python-dotenv — так
+# поведение не отличается от launchd-запуска на macOS.
+EnvironmentFile=/opt/test_hub/.env
+
+# Тот же entrypoint, что и под launchd на macOS (app/main.py сам читает
+# settings.TH_PORT/host из .env) — не дублируем host/port флагами uvicorn.
+ExecStart=/opt/test_hub/.venv/bin/python app/main.py
+
+Restart=on-failure
+RestartSec=5
+
+# Стандартный вывод/ошибки идут в journald: смотреть `journalctl -u test_hub -f`.
+
+[Install]
+WantedBy=multi-user.target
