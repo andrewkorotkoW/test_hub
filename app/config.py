@@ -21,6 +21,19 @@ def _parse_allowed_ids(raw: str) -> set[int]:
     return ids
 
 
+def _default_projects_root() -> Path:
+    # На машине владельца test_hub и соседние проекты (bike_fit, Velo_bot,
+    # auto_tests_vshgu — см. SEED_PROJECTS/VSHGU_PROJECT_PATH в app/db.py) лежат
+    # в одной родительской папке PycharmProjects. BASE_DIR.parent воспроизводит
+    # это только при обычном клонировании; если test_hub запущен из вложенного
+    # git worktree (см. README про worktree-сессии), PycharmProjects — один из
+    # более далёких предков, поэтому ищем его по имени, а не берём просто parent.
+    for candidate in (BASE_DIR, *BASE_DIR.parents):
+        if candidate.name == "PycharmProjects":
+            return candidate
+    return BASE_DIR.parent
+
+
 class Settings:
     TH_PORT: int = int(os.getenv("TH_PORT", "8700"))
     TH_SECRET: str = os.getenv("TH_SECRET", "change-me")
@@ -73,6 +86,13 @@ class Settings:
     # shutil.which("allure") и типичные каталоги установки — этого достаточно в обычном
     # терминале, но не для процесса под launchd/systemd с урезанным PATH (см. README).
     TH_ALLURE_BIN: str = os.getenv("TH_ALLURE_BIN", "")
+
+    # Корень, где лежат соседние с test_hub проекты (см. _default_projects_root
+    # выше и SEED_PROJECTS/VSHGU_PROJECT_PATH в app/db.py). В другом окружении
+    # (CI, чужая машина) без переопределения такие пути просто не существуют, и
+    # сиды по exists()-проверке пропускаются.
+    TH_PROJECTS_ROOT: Path = Path(os.getenv("TH_PROJECTS_ROOT", str(_default_projects_root())))
+    TH_VSHGU_PATH: Path = Path(os.getenv("TH_VSHGU_PATH", str(TH_PROJECTS_ROOT / "auto_tests_vshgu")))
 
 
 settings = Settings()
