@@ -56,6 +56,14 @@ class Settings:
     TH_FRAME_MAX_BYTES: int = int(os.getenv("TH_FRAME_MAX_BYTES", "2000000"))
     TH_FRAME_MAX_PER_RUN: int = int(os.getenv("TH_FRAME_MAX_PER_RUN", "500"))
 
+    # Видео теста, присылаемое плагином проекта тестов после его завершения
+    # (POST /api/runs/{id}/tests/{nodeid}/video, см. app/routers/runs.py) — лимит
+    # размера одного файла, в мегабайтах (сравнивается как TH_VIDEO_MAX_MB * 1024 * 1024).
+    TH_VIDEO_MAX_MB: int = int(os.getenv("TH_VIDEO_MAX_MB", "50"))
+    # workspace/runs/<run_id>/video/<hash>.webm — рядом с FRAMES_DIR, но отдельная
+    # ветка (кадры шагов и финальное видео теста не смешиваются на диске).
+    VIDEO_DIR: Path = BASE_DIR / "workspace" / "runs"
+
     # Ручная загрузка скриншота к шагу тест-кейса (POST .../testcases/{id}/steps/{n}/
     # attachments, см. app/routers/test_cases.py) — лимит размера одного PNG/JPG.
     TH_TESTCASE_ATTACHMENT_MAX_BYTES: int = int(os.getenv("TH_TESTCASE_ATTACHMENT_MAX_BYTES", "5000000"))

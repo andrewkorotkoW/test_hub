@@ -183,6 +183,13 @@ def isolated_frames_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "FRAMES_DIR", tmp_path / "frames")
 
 
+@pytest.fixture()
+def isolated_video_dir(tmp_path, monkeypatch):
+    """Как isolated_frames_dir выше, но для settings.VIDEO_DIR (видео теста POST
+    /api/runs/{id}/tests/{nodeid}/video, app/core/runner.py::video_dir)."""
+    monkeypatch.setattr(settings, "VIDEO_DIR", tmp_path / "video")
+
+
 async def register_project(client, name, path, venv=".venv"):
     resp = await client.post("/api/projects", json={"name": name, "path": str(path), "venv": venv})
     assert resp.status_code == 201, resp.text

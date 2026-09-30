@@ -1,18 +1,26 @@
+import base64
 import hashlib
 import json
+import logging
 import re
 import sqlite3
 from datetime import datetime
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile, WebSocket, WebSocketDisconnect, status
+from fastapi import (
+    APIRouter, Depends, File, Form, Header, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect,
+    status,
+)
 from fastapi.responses import Response
 
 from ..config import settings
-from ..core import allure_report, charts, runner
+from ..core import allure_report, charts, live, runner
 from ..core.ws import hub
 from ..db import get_connection
 from ..deps import get_current_user, get_db, require_roles
 from ..schemas import RunCreate
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["runs"])
 ws_router = APIRouter(tags=["runs-ws"])
@@ -178,6 +186,12 @@ async def list_run_tests(
             "SELECT DISTINCT nodeid FROM run_events WHERE run_id = ? AND kind = 'frame'", (run_id,)
         ).fetchall()
     }
+    video_nodeids = {
+        r["nodeid"]
+        for r in conn.execute(
+            "SELECT DISTINCT nodeid FROM run_test_videos WHERE run_id = ?", (run_id,)
+        ).fetchall()
+    }
 
     if row["status"] in ("running", "queued"):
         events = conn.execute(
@@ -200,6 +214,7 @@ async def list_run_tests(
                 "full_name": _nodeid_to_full_name(nodeid),
                 "status": test_status,
                 "has_frames": nodeid in frame_nodeids,
+                "has_video": nodeid in video_nodeids,
             }
             for nodeid, test_status in statuses.items()
         ]
@@ -217,6 +232,7 @@ async def list_run_tests(
             "full_name": t["name"],
             "status": t["status"],
             "has_frames": nodeid_by_full_name.get(t["name"], t["name"]) in frame_nodeids,
+            "has_video": nodeid_by_full_name.get(t["name"], t["name"]) in video_nodeids,
         }
         for t in results
     ]
@@ -389,6 +405,159 @@ def get_frame_file(
     if not path.is_file():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Frame not found")
     return Response(content=path.read_bytes(), media_type="image/png")
+
+
+def _require_run_token(conn: sqlite3.Connection, run_id: int, authorization: str | None) -> None:
+    """Общая проверка для /live и .../video (та же логика, что upload_frame выше):
+    401, если прогон не running или Bearer-токен не совпал с runner.check_run_token."""
+    row = conn.execute("SELECT status FROM runs WHERE id = ?", (run_id,)).fetchone()
+    if row is None or row["status"] != "running":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Run is not running")
+    if not runner.check_run_token(run_id, _bearer_token(authorization)):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid run token")
+
+
+@router.post("/runs/{run_id}/live", status_code=status.HTTP_204_NO_CONTENT)
+async def upload_live_frame(
+    run_id: int,
+    nodeid: str = Form(...),
+    ts: float = Form(...),
+    step: str = Form(""),
+    file: UploadFile = File(...),
+    authorization: str | None = Header(default=None),
+    conn: sqlite3.Connection = Depends(get_db),
+) -> Response:
+    """Живой кадр от плагина (контракт п.1, docs/missions/2026-10-01_live_stream.md)
+    — не пишется на диск, только в app/core/live.py (последний кадр на run_id) и
+    рассылается подписчикам WS, если не сработал троттлинг 5 кадров/с."""
+    _require_run_token(conn, run_id, authorization)
+    raw = await file.read()
+    if live.store_frame(run_id, nodeid, ts, step, raw):
+        await hub.broadcast(
+            run_id,
+            {
+                "type": "live",
+                "run_id": run_id,
+                "nodeid": nodeid,
+                "ts": ts,
+                "step": step,
+                "jpeg_b64": base64.b64encode(raw).decode("ascii"),
+            },
+        )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/runs/{run_id}/live.jpg")
+def get_live_frame(
+    run_id: int,
+    conn: sqlite3.Connection = Depends(get_db),
+    _user: sqlite3.Row = Depends(get_current_user),
+) -> Response:
+    """Последний живой кадр — авторизация обычной пользовательской сессией (как
+    get_frame_file, не токеном прогона). 404, если кадров не было или последний
+    протух (см. app/core/live.py::get_frame)."""
+    _get_run_or_404(conn, run_id)
+    frame = live.get_frame(run_id)
+    if frame is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No live frame")
+    return Response(content=frame["jpeg_bytes"], media_type="image/jpeg")
+
+
+@router.post("/runs/{run_id}/tests/{nodeid:path}/video", status_code=status.HTTP_201_CREATED)
+async def upload_test_video(
+    run_id: int,
+    nodeid: str,
+    file: UploadFile = File(...),
+    duration_ms: int = Form(...),
+    authorization: str | None = Header(default=None),
+    conn: sqlite3.Connection = Depends(get_db),
+) -> dict:
+    """Видео теста от плагина, после его завершения (контракт п.3) — токеном
+    прогона, как /live: видео тоже шлёт плагин во время прогона, прогон ещё
+    должен быть running. Повторная загрузка для того же (run_id, nodeid)
+    заменяет запись (тот же приём, что у вложений тест-кейсов, см.
+    app/routers/test_cases.py) — путь на диске детерминирован по _nodeid_hash,
+    поэтому файл просто перезаписывается."""
+    _require_run_token(conn, run_id, authorization)
+    raw = await file.read()
+    if len(raw) > settings.TH_VIDEO_MAX_MB * 1024 * 1024:
+        logger.warning(
+            "run %s: видео теста %s превышает TH_VIDEO_MAX_MB (%s МБ), отброшено",
+            run_id, nodeid, settings.TH_VIDEO_MAX_MB,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Video exceeds TH_VIDEO_MAX_MB ({settings.TH_VIDEO_MAX_MB} MB)",
+        )
+
+    dest = runner.video_dir(run_id) / f"{_nodeid_hash(nodeid)}.webm"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(raw)
+
+    conn.execute("DELETE FROM run_test_videos WHERE run_id = ? AND nodeid = ?", (run_id, nodeid))
+    conn.execute(
+        "INSERT INTO run_test_videos (run_id, nodeid, path, duration_ms, size, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (run_id, nodeid, str(dest), duration_ms, len(raw), datetime.now().isoformat(timespec="seconds")),
+    )
+    conn.commit()
+    return {"nodeid": nodeid, "duration_ms": duration_ms, "size": len(raw)}
+
+
+def _serve_video_with_range(path: Path, request: Request) -> Response:
+    """video/webm с поддержкой Range (без него перемотка в <video> не работает).
+    Файлы ограничены TH_VIDEO_MAX_MB (по умолчанию 50 МБ) — целиком читать
+    нужный диапазон в память безопасно, StreamingResponse тут не нужен."""
+    size = path.stat().st_size
+    range_header = request.headers.get("range")
+    if not range_header:
+        return Response(content=path.read_bytes(), media_type="video/webm", headers={"Accept-Ranges": "bytes"})
+
+    unit, _, range_spec = range_header.partition("=")
+    start_s, _, end_s = range_spec.partition("-")
+    try:
+        start = int(start_s) if start_s else 0
+        end = int(end_s) if end_s else size - 1
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_416_REQUESTED_RANGE_NOT_SATISFIABLE)
+    end = min(end, size - 1)
+    if unit != "bytes" or start > end or start >= size:
+        raise HTTPException(status_code=status.HTTP_416_REQUESTED_RANGE_NOT_SATISFIABLE)
+
+    with path.open("rb") as f:
+        f.seek(start)
+        chunk = f.read(end - start + 1)
+
+    return Response(
+        content=chunk,
+        status_code=status.HTTP_206_PARTIAL_CONTENT,
+        media_type="video/webm",
+        headers={
+            "Content-Range": f"bytes {start}-{end}/{size}",
+            "Accept-Ranges": "bytes",
+            "Content-Length": str(len(chunk)),
+        },
+    )
+
+
+@router.get("/runs/{run_id}/tests/{nodeid:path}/video")
+def get_run_test_video(
+    run_id: int,
+    nodeid: str,
+    request: Request,
+    conn: sqlite3.Connection = Depends(get_db),
+    _user: sqlite3.Row = Depends(get_current_user),
+) -> Response:
+    _get_run_or_404(conn, run_id)
+    row = conn.execute(
+        "SELECT path FROM run_test_videos WHERE run_id = ? AND nodeid = ?", (run_id, nodeid)
+    ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+    path = Path(row["path"])
+    if not path.is_file():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+    return _serve_video_with_range(path, request)
 
 
 def _ws_user(websocket: WebSocket) -> sqlite3.Row | None:

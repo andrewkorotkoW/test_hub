@@ -60,9 +60,11 @@ async def test_list_run_tests_while_running_uses_live_th_events(qa_client, db_pa
     items = {item["nodeid"]: item for item in resp.json()}
     assert items[nodeid_a] == {
         "nodeid": nodeid_a, "full_name": "tests.test_x#test_a", "status": "passed", "has_frames": True,
+        "has_video": False,
     }
     assert items[nodeid_b] == {
         "nodeid": nodeid_b, "full_name": "tests.test_x#test_b", "status": "running", "has_frames": False,
+        "has_video": False,
     }
 
 
@@ -94,6 +96,7 @@ async def test_list_run_tests_after_finish_falls_back_to_full_name_for_unknown_p
             "full_name": "tests.test_x#test_marked",
             "status": "passed",
             "has_frames": False,
+            "has_video": False,
         }
     ]
 
@@ -130,6 +133,7 @@ async def test_list_run_tests_after_finish_maps_allure_full_name_to_pytest_nodei
             "full_name": "tests.test_sample#test_ok",
             "status": "passed",
             "has_frames": False,
+            "has_video": False,
         }
     ]
 
@@ -213,6 +217,7 @@ async def test_list_run_tests_after_finish_has_frames_matches_by_pytest_nodeid(
             "full_name": "tests.test_sample.TestGroup#test_class_a",
             "status": "passed",
             "has_frames": True,
+            "has_video": False,
         }
     ]
 
