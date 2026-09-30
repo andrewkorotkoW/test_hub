@@ -11,6 +11,7 @@ import pytest
 from app.config import settings
 from app.core import live, runner
 from app.core.ws import hub
+from app.main import app, lifespan
 
 from .conftest import poll_until, register_project
 
@@ -199,6 +200,20 @@ async def test_live_jpg_404_when_no_frame_yet(
 async def test_live_jpg_404_unknown_run(qa_client, isolated_allure_dir, isolated_frames_dir):
     resp = await qa_client.get("/api/runs/999999/live.jpg")
     assert resp.status_code == 404
+
+
+async def test_lifespan_clears_stale_live_frames_on_server_startup(db_path, monkeypatch):
+    """Контракт «чистить... при старте сервера» (docs/missions/2026-10-01_live_stream.md):
+    app/main.py::lifespan вызывает live.clear_all() до открытия тела контекста — кадр,
+    оставшийся в памяти процесса от предыдущего запуска (или от предыдущего вызова
+    lifespan() в той же pytest-сессии, см. test_prod_startup.py), не должен быть виден
+    следующему запуску."""
+    monkeypatch.setattr(settings, "TH_TG_BOT_TOKEN", "")
+    live.store_frame(123, "tests/test_x.py::test_a", 1.0, "", _JPEG_BYTES)
+    assert live.get_frame(123) is not None
+
+    async with lifespan(app):
+        assert live.get_frame(123) is None
 
 
 async def test_live_jpg_expires_after_ttl(
