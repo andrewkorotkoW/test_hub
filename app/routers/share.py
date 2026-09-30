@@ -16,13 +16,14 @@ import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import FileResponse, HTMLResponse, Response
 
 from ..config import settings
-from ..core import allure_report, charts, runner
+from ..core import allure_report, charts, live, runner
 from ..deps import get_db, require_roles
 from ..schemas import ShareLink, ShareLinkCreate
+from .runs import _serve_video_with_range
 
 router = APIRouter(prefix="/api/runs", tags=["share"])
 public_router = APIRouter(prefix="/share", tags=["share-public"])
@@ -226,6 +227,38 @@ def public_share_report_png(token: str, conn: sqlite3.Connection = Depends(get_d
     # прогонов того же проекта/стенда (см. заголовок файла).
     png = charts.build_report_png(run_payload, [], results)
     return Response(content=png, media_type="image/png")
+
+
+@public_router.get("/{token}/live.jpg")
+def public_share_live_frame(token: str, conn: sqlite3.Connection = Depends(get_db)) -> Response:
+    """Последний живой кадр прогона со share-страницы (контракт, п.5 миссии
+    «Эфир») — без сессии, как и остальные публичные маршруты этого файла,
+    только по действующему токену share-ссылки. Та же логика 404, что и у
+    app/routers/runs.py::get_live_frame (кадров не было либо кадр протух)."""
+    share = _get_active_share_or_404(conn, token)
+    frame = live.get_frame(share["run_id"])
+    if frame is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No live frame")
+    return Response(content=frame["jpeg_bytes"], media_type="image/jpeg")
+
+
+@public_router.get("/{token}/tests/{nodeid:path}/video")
+def public_share_test_video(
+    token: str, nodeid: str, request: Request, conn: sqlite3.Connection = Depends(get_db)
+) -> Response:
+    """Видео теста со share-страницы (контракт, п.5) — тот же файл и та же
+    поддержка Range, что у app/routers/runs.py::get_run_test_video, только
+    доступ по токену share-ссылки вместо пользовательской сессии."""
+    share = _get_active_share_or_404(conn, token)
+    row = conn.execute(
+        "SELECT path FROM run_test_videos WHERE run_id = ? AND nodeid = ?", (share["run_id"], nodeid)
+    ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+    path = Path(row["path"])
+    if not path.is_file():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+    return _serve_video_with_range(path, request)
 
 
 @public_router.get("/{token}/allure")

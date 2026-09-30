@@ -4,10 +4,14 @@
 Гоняет реальный pytest на фикстурном проекте (см. tests/conftest.py::_FIXTURE_TESTS),
 как tests/test_run_report.py и tests/test_report_png.py.
 """
+import base64
 import io
+from urllib.parse import quote
 
+import pytest
 from httpx import ASGITransport, AsyncClient
 
+from app.core import live, runner
 from app.core.runner import mask_secrets
 from app.db import get_connection
 from app.main import app
@@ -310,3 +314,214 @@ def test_public_page_assets_are_root_relative(client_qa_and_run=None):
     html = Path(__file__).resolve().parents[1].joinpath("ui", "share.html").read_text(encoding="utf-8")
     assert 'href="/style.css"' in html and 'src="/share.js"' in html and 'src="/common.js"' in html
     assert 'href="style.css"' not in html and 'src="share.js"' not in html
+
+
+# ------------------------------------------------------------------ share без авторизации: видео и живой кадр
+# (контракт п.5, docs/missions/2026-10-01_live_stream.md — "Share-страница показывает
+# видео и последний живой кадр так же, как основное окно, без авторизации").
+_JPEG_BYTES = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+)
+_WEBM_BYTES = b"\x1aE\xdf\xa3" + b"\x00" * 64
+
+
+@pytest.fixture(autouse=True)
+def _clear_live_state_for_share_tests():
+    """Как tests/test_run_live.py::_clear_live_state — модульное состояние
+    app/core/live.py не привязано к db_path/tmp_path конкретного теста."""
+    live.clear_all()
+    yield
+    live.clear_all()
+
+
+async def _start_running_run_for_share(client, name, path):
+    await register_project(client, name, path)
+    resp = await client.post(f"/api/projects/{name}/runs", json={"target": "tests/test_slow.py"})
+    assert resp.status_code == 201, resp.text
+    run = resp.json()
+    assert run["status"] == "running"
+    run_id = run["id"]
+
+    async def token_ready():
+        return runner._run_tokens.get(run_id)
+
+    token = await poll_until(token_ready, timeout=5)
+    assert token, "раннер не выставил токен прогона (_run_tokens) вовремя"
+    return run_id, token
+
+
+async def _stop_run_for_share(client, run_id):
+    await client.post(f"/api/runs/{run_id}/cancel")
+
+    async def stopped():
+        rows = (await client.get(f"/api/runs/{run_id}/report")).json()
+        return rows if rows["status"] not in {"running", "queued"} else None
+
+    await poll_until(stopped, timeout=5)
+
+
+def _api_video_url(run_id, nodeid):
+    return f"/api/runs/{run_id}/tests/{quote(nodeid, safe='')}/video"
+
+
+def _share_video_url(token, nodeid):
+    return f"/share/{token}/tests/{quote(nodeid, safe='')}/video"
+
+
+async def test_public_share_live_jpg_without_session(
+    qa_client, isolated_allure_dir, isolated_frames_dir, slow_project_dir
+):
+    run_id, token_ = await _start_running_run_for_share(qa_client, "share_live_proj", slow_project_dir)
+    try:
+        upload = await qa_client.post(
+            f"/api/runs/{run_id}/live",
+            data={"nodeid": "tests/test_slow.py::test_hangs", "ts": "1.0", "step": "шаг"},
+            files={"file": ("live.jpg", _JPEG_BYTES, "image/jpeg")},
+            headers={"Authorization": f"Bearer {token_}"},
+        )
+        assert upload.status_code == 204
+
+        share_token = (
+            await qa_client.post(f"/api/runs/{run_id}/share", json={"expires": "30d"})
+        ).json()["token"]
+
+        async with _anon_client() as anon:
+            resp = await anon.get(f"/share/{share_token}/live.jpg")
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "image/jpeg"
+        assert resp.content == _JPEG_BYTES
+    finally:
+        await _stop_run_for_share(qa_client, run_id)
+
+
+async def test_public_share_live_jpg_404_without_frame(qa_client, isolated_allure_dir, runnable_project_dir):
+    run_id, _ = await _run_fixture_project(qa_client, "share_live_404_proj", runnable_project_dir)
+    token = (await qa_client.post(f"/api/runs/{run_id}/share", json={"expires": "30d"})).json()["token"]
+
+    async with _anon_client() as anon:
+        resp = await anon.get(f"/share/{token}/live.jpg")
+    assert resp.status_code == 404
+
+
+async def test_public_share_live_jpg_unknown_or_revoked_token_is_404(
+    qa_client, isolated_allure_dir, isolated_frames_dir, slow_project_dir
+):
+    run_id, token_ = await _start_running_run_for_share(qa_client, "share_live_bad_token_proj", slow_project_dir)
+    try:
+        await qa_client.post(
+            f"/api/runs/{run_id}/live",
+            data={"nodeid": "tests/test_slow.py::test_hangs", "ts": "1.0", "step": ""},
+            files={"file": ("live.jpg", _JPEG_BYTES, "image/jpeg")},
+            headers={"Authorization": f"Bearer {token_}"},
+        )
+        created = await qa_client.post(f"/api/runs/{run_id}/share", json={"expires": "30d"})
+        share_token = created.json()["token"]
+        await qa_client.delete(f"/api/runs/{run_id}/share/{share_token}")
+
+        async with _anon_client() as anon:
+            assert (await anon.get("/share/not-a-real-token/live.jpg")).status_code == 404
+            # отозванный токен — доступ к живому кадру пропадает вместе с остальным
+            assert (await anon.get(f"/share/{share_token}/live.jpg")).status_code == 404
+    finally:
+        await _stop_run_for_share(qa_client, run_id)
+
+
+async def test_public_share_video_without_session(
+    qa_client, isolated_allure_dir, isolated_frames_dir, isolated_video_dir, slow_project_dir
+):
+    run_id, token_ = await _start_running_run_for_share(qa_client, "share_video_proj", slow_project_dir)
+    nodeid = "tests/test_slow.py::test_hangs"
+    try:
+        upload = await qa_client.post(
+            _api_video_url(run_id, nodeid),
+            data={"duration_ms": "2500"},
+            files={"file": ("test.webm", _WEBM_BYTES, "video/webm")},
+            headers={"Authorization": f"Bearer {token_}"},
+        )
+        assert upload.status_code == 201, upload.text
+
+        share_token = (
+            await qa_client.post(f"/api/runs/{run_id}/share", json={"expires": "30d"})
+        ).json()["token"]
+
+        async with _anon_client() as anon:
+            full = await anon.get(_share_video_url(share_token, nodeid))
+            assert full.status_code == 200
+            assert full.headers["content-type"] == "video/webm"
+            assert full.content == _WEBM_BYTES
+
+            ranged = await anon.get(
+                _share_video_url(share_token, nodeid), headers={"Range": "bytes=2-5"}
+            )
+            assert ranged.status_code == 206
+            assert ranged.content == _WEBM_BYTES[2:6]
+            assert ranged.headers["content-range"] == f"bytes 2-5/{len(_WEBM_BYTES)}"
+    finally:
+        await _stop_run_for_share(qa_client, run_id)
+
+
+async def test_public_share_video_404_when_not_uploaded(qa_client, isolated_allure_dir, runnable_project_dir):
+    run_id, _ = await _run_fixture_project(qa_client, "share_video_404_proj", runnable_project_dir)
+    token = (await qa_client.post(f"/api/runs/{run_id}/share", json={"expires": "30d"})).json()["token"]
+
+    async with _anon_client() as anon:
+        resp = await anon.get(_share_video_url(token, "tests/test_sample.py::test_ok"))
+    assert resp.status_code == 404
+
+
+async def test_public_share_video_unknown_or_revoked_token_is_404(
+    qa_client, isolated_allure_dir, isolated_frames_dir, isolated_video_dir, slow_project_dir
+):
+    run_id, token_ = await _start_running_run_for_share(qa_client, "share_video_bad_token_proj", slow_project_dir)
+    nodeid = "tests/test_slow.py::test_hangs"
+    try:
+        await qa_client.post(
+            _api_video_url(run_id, nodeid),
+            data={"duration_ms": "1000"},
+            files={"file": ("test.webm", _WEBM_BYTES, "video/webm")},
+            headers={"Authorization": f"Bearer {token_}"},
+        )
+        created = await qa_client.post(f"/api/runs/{run_id}/share", json={"expires": "30d"})
+        share_token = created.json()["token"]
+        await qa_client.delete(f"/api/runs/{run_id}/share/{share_token}")
+
+        async with _anon_client() as anon:
+            assert (await anon.get(_share_video_url("not-a-real-token", nodeid))).status_code == 404
+            assert (await anon.get(_share_video_url(share_token, nodeid))).status_code == 404
+    finally:
+        await _stop_run_for_share(qa_client, run_id)
+
+
+async def test_public_share_video_scoped_to_own_run(
+    qa_client, isolated_allure_dir, isolated_frames_dir, isolated_video_dir, slow_project_dir
+):
+    """Share-ссылка прогона A не должна отдавать видео теста, загруженное только
+    в прогон B, даже если nodeid у обоих совпадает (тот же сценарий изоляции,
+    что и test_public_share_data_json_scoped_to_own_run выше, — запрос ищет
+    запись по run_test_videos.run_id из самой ссылки, не по nodeid глобально)."""
+    nodeid = "tests/test_slow.py::test_hangs"
+    run_a, token_a = await _start_running_run_for_share(qa_client, "share_video_scope_a", slow_project_dir)
+    try:
+        share_token = (
+            await qa_client.post(f"/api/runs/{run_a}/share", json={"expires": "30d"})
+        ).json()["token"]
+    finally:
+        await _stop_run_for_share(qa_client, run_a)
+
+    run_b, token_b = await _start_running_run_for_share(qa_client, "share_video_scope_b", slow_project_dir)
+    try:
+        upload_b = await qa_client.post(
+            _api_video_url(run_b, nodeid),
+            data={"duration_ms": "1000"},
+            files={"file": ("b.webm", _WEBM_BYTES, "video/webm")},
+            headers={"Authorization": f"Bearer {token_b}"},
+        )
+        assert upload_b.status_code == 201
+
+        # прогон A не грузил видео для этого nodeid — share-ссылка прогона A
+        # не должна найти запись, принадлежащую прогону B.
+        async with _anon_client() as anon:
+            resp = await anon.get(_share_video_url(share_token, nodeid))
+        assert resp.status_code == 404
+    finally:
+        await _stop_run_for_share(qa_client, run_b)
