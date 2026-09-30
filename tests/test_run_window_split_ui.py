@@ -280,10 +280,18 @@ async def test_split_card_api_shape_matches_what_project_js_reads(qa_client, iso
     assert set(frames[0].keys()) == {"step", "url"}
 
 
-async def test_split_card_api_old_run_without_markup_returns_empty_tests_list(qa_client, db_path):
+async def test_split_card_api_old_run_without_markup_returns_empty_tests_list(
+    qa_client, isolated_allure_dir, db_path
+):
     """Деградация: у старого прогона без [TH]-разметки (только kind='line') GET
     /tests возвращает пустой список -> detectMarkup()/refreshSplitTests() в
-    project.js оставляют hasMarkup=false, сплит и переключатель скрыты."""
+    project.js оставляют hasMarkup=false, сплит и переключатель скрыты.
+
+    Прогон finalized ("passed") -> list_run_tests читает allure_report.parse_results
+    из settings.ALLURE_RESULTS_DIR/<run_id> (см. app/routers/runs.py) — без изоляции
+    это общий workspace/allure-results репозитория, и run_id=1 (первая запись в
+    свежей тестовой БД) совпал бы с реальными результатами, оставшимися там от
+    ручного прогона/другого теста, ложно делая список тестов непустым."""
     conn = sqlite3.connect(db_path)
     try:
         run_id = _insert_run(conn, "any_proj", "passed")
