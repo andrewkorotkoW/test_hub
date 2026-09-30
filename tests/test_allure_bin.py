@@ -4,11 +4,15 @@
 PATH молча не находит allure и отдаёт 404 на публичной ссылке (см. tests/test_share.py::
 test_public_share_allure_without_cli_reports_unavailable для заглушки вместо 404).
 """
+import importlib.util
 import os
 import stat
+from pathlib import Path
 
 from app.config import settings
 from app.core import allure_report
+
+CONFIG_PATH = Path(__file__).resolve().parent.parent / "app" / "config.py"
 
 
 def _make_executable(path):
@@ -16,9 +20,23 @@ def _make_executable(path):
     path.chmod(path.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
 
 
+def _load_isolated_config(monkeypatch):
+    """Загружает app/config.py в отдельный, незакэшированный модуль (не app.config
+    из sys.modules) — иначе settings.TH_ALLURE_BIN уже вычислен один раз при самом
+    первом импорте app.config (до monkeypatch.delenv), а сам config.py вызывает
+    load_dotenv() при исполнении, так что даже reload молча подтянул бы значение
+    обратно из .env владельца репозитория. Поэтому load_dotenv тоже глушим."""
+    monkeypatch.setattr("dotenv.load_dotenv", lambda *a, **kw: None)
+    spec = importlib.util.spec_from_file_location("_test_isolated_app_config", CONFIG_PATH)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def test_th_allure_bin_defaults_to_empty(monkeypatch):
     monkeypatch.delenv("TH_ALLURE_BIN", raising=False)
-    assert settings.TH_ALLURE_BIN == ""
+    isolated = _load_isolated_config(monkeypatch)
+    assert isolated.settings.TH_ALLURE_BIN == ""
 
 
 def test_resolve_allure_bin_prefers_configured_path(tmp_path, monkeypatch):
