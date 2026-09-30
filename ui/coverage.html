@@ -20,34 +20,66 @@
     </div>
     <div id="page-error" class="error-box" hidden></div>
 
-    <!-- Схема продукта (v5): зоны -> узлы со светофором -> связи, по данным
-         GET /api/projects/{name}/product-map. Переключатель стенда общий с
-         разделом «Подробно» ниже (id="cov-stand-select" — тот же элемент). -->
-    <div class="card" id="pm-card">
+    <!-- Вид «Светофор» (v6/K, по умолчанию) и схема продукта (v5) — два вида
+         одной страницы «Покрытие», переключатель хранится в localStorage
+         (cov-view-mode, ui/coverage-traffic-logic.js::normalizeViewMode).
+         Стенд общий на оба вида и на раздел «Подробно» ниже (id="cov-stand-
+         select" — тот же элемент). -->
+    <div class="card" id="coverage-view-card">
       <div class="pm-toolbar">
-        <h2>Схема продукта</h2>
+        <h2 id="coverage-view-title">Светофор</h2>
+        <div class="chart-tree-layout-toggle" id="view-toggle" role="group" aria-label="Вид страницы покрытия">
+          <button type="button" id="view-toggle-traffic" class="active">Светофор</button>
+          <button type="button" id="view-toggle-scheme">Схема</button>
+        </div>
         <div class="field">
           <label for="cov-stand-select">Стенд</label>
           <select id="cov-stand-select"></select>
         </div>
       </div>
-      <div id="pm-message" class="hint-box" hidden></div>
-      <div class="pm-top">
-        <div class="pm-ring-box" id="pm-ring"></div>
-        <p class="pm-summary-text" id="pm-summary-text"></p>
+
+      <!-- вид «Светофор»: KPI-шапка + ряд колец + три колонки разделов -->
+      <div id="traffic-body">
+        <div class="kpi-row kpi-row-4" id="traffic-kpi-row"></div>
+        <div class="chart-rings-row" id="traffic-rings-row"></div>
+        <p class="traffic-summary-line" id="traffic-summary-line"></p>
+        <div class="traffic-columns" id="traffic-columns">
+          <div class="traffic-column">
+            <h3>Покрыто и проходит</h3>
+            <div class="traffic-column-body" id="traffic-col-ok"></div>
+          </div>
+          <div class="traffic-column">
+            <h3>Есть проблемы</h3>
+            <div class="traffic-column-body" id="traffic-col-problems"></div>
+          </div>
+          <div class="traffic-column">
+            <h3>Не покрыто</h3>
+            <div class="traffic-column-body" id="traffic-col-empty"></div>
+          </div>
+        </div>
       </div>
-      <div class="pm-canvas-scroll">
-        <svg class="pm-canvas-svg" id="pm-canvas-svg" preserveAspectRatio="xMidYMin meet">
-          <foreignObject width="100%" height="100%">
-            <div class="pm-canvas" id="pm-canvas" xmlns="http://www.w3.org/1999/xhtml"><p class="muted">Загрузка…</p></div>
-          </foreignObject>
-        </svg>
-      </div>
-      <div class="pm-legend">
-        <span class="pm-legend-item"><i class="green"></i>покрыто и проходит</span>
-        <span class="pm-legend-item"><i class="yellow"></i>частично (xfail/skipped)</span>
-        <span class="pm-legend-item"><i class="red"></i>есть падения</span>
-        <span class="pm-legend-item"><i class="grey"></i>тестов нет</span>
+
+      <!-- вид «Схема»: зоны -> узлы со светофором -> связи (карта покрытия v5),
+           по данным GET /api/projects/{name}/product-map. -->
+      <div id="scheme-body" hidden>
+        <div id="pm-message" class="hint-box" hidden></div>
+        <div class="pm-top">
+          <div class="pm-ring-box" id="pm-ring"></div>
+          <p class="pm-summary-text" id="pm-summary-text"></p>
+        </div>
+        <div class="pm-canvas-scroll">
+          <svg class="pm-canvas-svg" id="pm-canvas-svg" preserveAspectRatio="xMidYMin meet">
+            <foreignObject width="100%" height="100%">
+              <div class="pm-canvas" id="pm-canvas" xmlns="http://www.w3.org/1999/xhtml"><p class="muted">Загрузка…</p></div>
+            </foreignObject>
+          </svg>
+        </div>
+        <div class="pm-legend">
+          <span class="pm-legend-item"><i class="green"></i>покрыто и проходит</span>
+          <span class="pm-legend-item"><i class="yellow"></i>частично (xfail/skipped)</span>
+          <span class="pm-legend-item"><i class="red"></i>есть падения</span>
+          <span class="pm-legend-item"><i class="grey"></i>тестов нет</span>
+        </div>
       </div>
     </div>
     <div class="pm-tip" id="pm-tip" hidden></div>
@@ -189,6 +221,7 @@
 
   <script src="coverage-tree-logic.js"></script>
   <script src="coverage-areas-logic.js"></script>
+  <script src="coverage-traffic-logic.js"></script>
   <script src="coverage.js"></script>
 </body>
 </html>
