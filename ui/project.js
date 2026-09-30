@@ -113,6 +113,8 @@
   const cancelBtn = document.getElementById("cancel-run-btn");
   const logBox = document.getElementById("run-log");
   const runViewToggle = document.getElementById("run-view-toggle");
+  const runFollowToggle = document.getElementById("run-follow-toggle");
+  const runFollowCheckbox = document.getElementById("run-follow-checkbox");
   const runSplit = document.getElementById("run-split");
   const runTestsRail = document.getElementById("run-tests-rail");
   const runTestsCount = document.getElementById("run-tests-count");
@@ -353,6 +355,12 @@
   let hasMarkup = false;
   let viewMode = "split";
   let runSentryData = null;
+  // «Эфир»/«Видео» (docs/missions/2026-10-01_live_stream.md) — liveFrame держит только
+  // последний кадр прогона (сервер тоже хранит один на run_id, см. app/core/live.py),
+  // followEnabled — «Следить за прогоном», выключается кликом по тесту вручную (см.
+  // клик-хендлер run-tests-rail ниже) и снова включается чекбоксом run-follow-checkbox.
+  let liveFrame = null; // { nodeid, step, jpegB64, receivedAt }
+  let followEnabled = true;
 
   function showPageError(message) {
     pageError.textContent = message;
@@ -856,7 +864,13 @@
     pill.textContent = status;
     pill.dataset.status = status;
     pill.className = `status-pill ${status}`;
+    // «Следить за прогоном» имеет смысл только пока прогон реально идёт (п.2 миссии).
+    runFollowToggle.hidden = status !== "running";
   }
+
+  runFollowCheckbox.addEventListener("change", () => {
+    followEnabled = runFollowCheckbox.checked;
+  });
 
   function appendLog(line) {
     logBox.textContent += (logBox.textContent ? "\n" : "") + line;
@@ -964,8 +978,58 @@
     return `<div class="sentry-rows">${issues.map((i) => sentryIssueRowHtml(i, { withNewBadge: true })).join("")}</div>`;
   }
 
+  // «Эфир»/«Видео» (docs/missions/2026-10-01_live_stream.md, п.1-3) — какая из двух
+  // вкладок доступна для выбранного теста решает чистая функция RunLiveLogic.mediaTabForTest
+  // (ui/run-live-logic.js), здесь только собираем для неё текущее состояние.
+  function currentMediaTab() {
+    const t = selectedNodeid ? splitTestsByNodeid[selectedNodeid] : null;
+    if (!t) return null;
+    return RunLiveLogic.mediaTabForTest({
+      test: t,
+      runStatus: pill.dataset.status,
+      liveNodeid: liveFrame ? liveFrame.nodeid : null,
+    });
+  }
+
+  function renderLiveTab() {
+    if (!liveFrame || liveFrame.nodeid !== selectedNodeid) {
+      return `<div class="frame-shot"><b>Ждём первый кадр</b><span>Плагин ещё не прислал ни одного живого кадра для этого теста.</span></div>`;
+    }
+    const stale = RunLiveLogic.isLiveStale(liveFrame.receivedAt, Date.now());
+    return `
+      <div class="live-frame">
+        <div class="live-frame-head">
+          <span class="status-pill ${stale ? "unknown" : "running"}">${stale ? "нет сигнала" : "В эфире"}</span>
+          ${liveFrame.step ? `<span class="muted">${escapeHtml(liveFrame.step)}</span>` : ""}
+        </div>
+        <img class="live-frame-img" src="data:image/jpeg;base64,${liveFrame.jpegB64}" alt="Живой кадр теста">
+      </div>`;
+  }
+
+  function renderVideoTab() {
+    const t = selectedNodeid ? splitTestsByNodeid[selectedNodeid] : null;
+    if (!t || !t.has_video) {
+      return `<div class="frame-shot"><b>Видео нет</b><span>Плагин не записал видео для этого теста.</span></div>`;
+    }
+    const runId = runIdLabel.textContent;
+    const url = `/api/runs/${runId}/tests/${encodeURIComponent(selectedNodeid)}/video`;
+    const duration = t.video_duration_ms != null ? fmtDuration(t.video_duration_ms / 1000) : null;
+    return `
+      <div class="test-video">
+        <video controls src="${escapeHtml(url)}"></video>
+        <div class="test-video-meta">
+          ${duration ? `<span class="muted">${duration}</span>` : ""}
+          <a href="${escapeHtml(url)}" download class="video-download-link">Скачать</a>
+        </div>
+      </div>`;
+  }
+
   function renderWindowBody() {
-    if (activeWindowTab === "frame") {
+    if (activeWindowTab === "live") {
+      runWindowBody.innerHTML = renderLiveTab();
+    } else if (activeWindowTab === "video") {
+      runWindowBody.innerHTML = renderVideoTab();
+    } else if (activeWindowTab === "frame") {
       runWindowBody.innerHTML = renderFramesTab();
       attachFrameThumbHandlers();
     } else if (activeWindowTab === "console") {
@@ -980,16 +1044,31 @@
     }
   }
 
+  // Порядок и состав вкладок — RunLiveLogic.windowTabOrder (п.4 миссии): Эфир/Видео
+  // (если есть) первой, дальше неизменный хвост Кадры/Консоль/Запросы(/Sentry).
   function renderWindowTabs() {
     const reqCount = filterRequestLines(selectedTestLog).length;
     const sentryCount = runSentryData && runSentryData.connected ? (runSentryData.issues || []).length : 0;
-    runWindowTabsBox.innerHTML = `
-      <button type="button" data-tab="frame" aria-current="${activeWindowTab === "frame"}">Кадры${selectedTestFrames.length ? ` (${selectedTestFrames.length})` : ""}</button>
-      <button type="button" data-tab="console" aria-current="${activeWindowTab === "console"}">Консоль</button>
-      <button type="button" data-tab="req" aria-current="${activeWindowTab === "req"}">Запросы${reqCount ? ` (${reqCount})` : ""}</button>
-      ${canSeeSentry ? `<button type="button" data-tab="sentry" aria-current="${activeWindowTab === "sentry"}">Sentry${sentryCount ? ` (${sentryCount})` : ""}</button>` : ""}
-    `;
+    const order = RunLiveLogic.windowTabOrder(currentMediaTab(), canSeeSentry);
+    if (order.indexOf(activeWindowTab) === -1) activeWindowTab = order[0];
+    const LABELS = {
+      live: "Эфир",
+      video: "Видео",
+      frame: `Кадры${selectedTestFrames.length ? ` (${selectedTestFrames.length})` : ""}`,
+      console: "Консоль",
+      req: `Запросы${reqCount ? ` (${reqCount})` : ""}`,
+      sentry: `Sentry${sentryCount ? ` (${sentryCount})` : ""}`,
+    };
+    runWindowTabsBox.innerHTML = order
+      .map((key) => `<button type="button" data-tab="${key}" aria-current="${activeWindowTab === key}">${LABELS[key]}</button>`)
+      .join("");
   }
+
+  // Обновляет бейдж «нет сигнала» на вкладке «Эфир» даже без новых WS-сообщений —
+  // стухание кадра (RunLiveLogic.LIVE_STALE_MS) определяется временем, а не событием.
+  setInterval(() => {
+    if (activeWindowTab === "live" && !runWindowContent.hidden) renderWindowBody();
+  }, 1000);
 
   runWindowTabsBox.addEventListener("click", (ev) => {
     const btn = ev.target.closest("button[data-tab]");
@@ -999,7 +1078,12 @@
     renderWindowBody();
   });
 
-  async function selectTest(nodeid) {
+  // auto=true — вызов из handleTestStart через «Следить за прогоном» (п.2 миссии):
+  // на только что стартовавший ещё пустой (без live-кадров) тест сразу открываем
+  // «Эфир», не дожидаясь первого кадра — обычный клик решает вкладку через
+  // currentMediaTab(), как всегда.
+  async function selectTest(nodeid, opts) {
+    const auto = Boolean(opts && opts.auto);
     selectedNodeid = nodeid;
     runTestsRail.querySelectorAll(".test-row").forEach((row) => {
       row.classList.toggle("active", decodeURIComponent(row.dataset.nodeid) === nodeid);
@@ -1020,7 +1104,12 @@
       selectedTestLog = log;
       selectedTestFrames = frames;
     } catch { /* оставляем пустыми — покажем «нет вывода»/«кадров нет» */ }
-    activeWindowTab = selectedTestFrames.length ? "frame" : "console";
+    const t = splitTestsByNodeid[nodeid];
+    if (auto && t && t.status === "running" && pill.dataset.status === "running") {
+      activeWindowTab = "live";
+    } else {
+      activeWindowTab = currentMediaTab() || (selectedTestFrames.length ? "frame" : "console");
+    }
     renderWindowTabs();
     renderWindowBody();
   }
@@ -1028,6 +1117,10 @@
   runTestsRail.addEventListener("click", (ev) => {
     const row = ev.target.closest(".test-row[data-nodeid]");
     if (!row) return;
+    // Ручной клик по тесту выключает «Следить за прогоном» (п.2 миссии) — до
+    // следующего включения чекбокса пользователем.
+    followEnabled = false;
+    runFollowCheckbox.checked = false;
     selectTest(decodeURIComponent(row.dataset.nodeid));
   });
 
@@ -1068,7 +1161,7 @@
       splitTests = tests;
       splitTestsByNodeid = Object.fromEntries(tests.map((t) => [t.nodeid, t]));
       renderTestsRail();
-      if (selectedNodeid) updateWindowPill();
+      if (selectedNodeid) { updateWindowPill(); renderWindowTabs(); }
       if (!hasMarkup) hasMarkup = await detectMarkup(runId);
       applyViewMode();
     } catch { /* тесты по разметке недоступны — остаётся только «Весь лог» */ }
@@ -1094,6 +1187,10 @@
     renderTestsRail();
     applyViewMode();
     if (selectedNodeid === msg.nodeid) updateWindowPill();
+    // «Следить за прогоном» (п.2 миссии): стартовавший тест сам открывается в окне.
+    if (RunLiveLogic.shouldAutoSelectOnTestStart({ followEnabled, runStatus: pill.dataset.status })) {
+      selectTest(msg.nodeid, { auto: true });
+    }
   }
 
   function handleTestEnd(msg) {
@@ -1103,7 +1200,21 @@
     upsertSplitTest(msg.nodeid, { status: m ? m[1] : "unknown" });
     renderTestsRail();
     applyViewMode();
-    if (selectedNodeid === msg.nodeid) updateWindowPill();
+    if (selectedNodeid === msg.nodeid) {
+      updateWindowPill();
+      // Тест завершился — «Эфир» больше не актуален, renderWindowTabs сам переключит
+      // activeWindowTab на первую доступную вкладку (RunLiveLogic.windowTabOrder).
+      renderWindowTabs();
+      renderWindowBody();
+    }
+  }
+
+  function handleLiveEvent(msg) {
+    if (!msg.nodeid) return;
+    liveFrame = { nodeid: msg.nodeid, step: msg.step || "", jpegB64: msg.jpeg_b64, receivedAt: Date.now() };
+    if (selectedNodeid !== msg.nodeid) return;
+    renderWindowTabs();
+    if (activeWindowTab === "live") renderWindowBody();
   }
 
   function handleSplitLineEvent(msg) {
@@ -1135,6 +1246,9 @@
     hasMarkup = false;
     viewMode = "split";
     runSentryData = null;
+    liveFrame = null;
+    followEnabled = true;
+    runFollowCheckbox.checked = true;
     runTestsRail.innerHTML = "";
     runTestsCount.textContent = "";
     runWindowPlaceholder.hidden = false;
@@ -1270,6 +1384,8 @@
         handleTestEnd(msg);
       } else if (msg.type === "frame") {
         handleFrameEvent(msg);
+      } else if (msg.type === "live") {
+        handleLiveEvent(msg);
       } else if (msg.type === "status") {
         refreshReport(runId);
         refreshSplitTests(runId);
@@ -2437,6 +2553,9 @@
   const runParam = params.get("run");
   if (runParam) {
     await openRun(Number(runParam));
+    // Замечание владельца 30.09: страница оставалась наверху на дереве тестов —
+    // прокручиваем к самой карточке прогона.
+    runCard.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   // Глубокая ссылка со страницы «Покрытие» (схема продукта, ui/coverage.js

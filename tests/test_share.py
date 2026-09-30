@@ -219,7 +219,126 @@ async def test_public_share_data_json_scoped_to_own_run(qa_client, isolated_allu
     assert len(data["tests"]) == 5
     assert data["counts"]["passed"] == 3 and data["counts"]["failed"] == 2
     for test in data["tests"]:
-        assert set(test.keys()) == {"name", "status", "duration", "message"}
+        assert set(test.keys()) == {
+            "name", "status", "duration", "message", "nodeid", "has_video", "video_duration_ms",
+        }
+    # прогон уже завершён (_run_fixture_project ждёт этого) — эфира быть не может.
+    assert data["live_frame_url"] is None
+
+
+# ------------------------------------------------------------------ эфир/видео без авторизации (контракт п.5)
+async def _start_running_run(client, name, path):
+    from app.core import runner
+
+    await register_project(client, name, path)
+    resp = await client.post(f"/api/projects/{name}/runs", json={"target": "tests/test_slow.py"})
+    assert resp.status_code == 201, resp.text
+    run = resp.json()
+    assert run["status"] == "running"
+    run_id = run["id"]
+
+    async def token_ready():
+        return runner._run_tokens.get(run_id)
+
+    token = await poll_until(token_ready, timeout=5)
+    assert token, "раннер не выставил токен прогона (_run_tokens) вовремя"
+    return run_id, token
+
+
+async def _stop_run(client, run_id):
+    await client.post(f"/api/runs/{run_id}/cancel")
+
+    async def stopped():
+        rows = (await client.get(f"/api/runs/{run_id}/report")).json()
+        return rows if rows["status"] not in {"running", "queued"} else None
+
+    await poll_until(stopped, timeout=5)
+
+
+async def test_public_share_live_frame_url_only_while_running(
+    qa_client, isolated_allure_dir, isolated_frames_dir, slow_project_dir
+):
+    run_id, _token = await _start_running_run(qa_client, "share_live_flag_proj", slow_project_dir)
+    try:
+        token = (await qa_client.post(f"/api/runs/{run_id}/share", json={"expires": "30d"})).json()["token"]
+        async with _anon_client() as anon:
+            running_data = (await anon.get(f"/share/{token}/data.json")).json()
+        assert running_data["live_frame_url"] == f"/share/{token}/live.jpg"
+    finally:
+        await _stop_run(qa_client, run_id)
+
+    async with _anon_client() as anon:
+        finished_data = (await anon.get(f"/share/{token}/data.json")).json()
+    assert finished_data["live_frame_url"] is None
+
+
+async def test_public_share_live_jpg_serves_last_frame_without_auth(
+    qa_client, isolated_allure_dir, isolated_frames_dir, slow_project_dir
+):
+    from app.core import live
+
+    live.clear_all()
+    run_id, run_token = await _start_running_run(qa_client, "share_live_proj", slow_project_dir)
+    try:
+        token = (await qa_client.post(f"/api/runs/{run_id}/share", json={"expires": "30d"})).json()["token"]
+        jpeg = b"\xff\xd8\xff\xd9"
+        upload = await qa_client.post(
+            f"/api/runs/{run_id}/live",
+            data={"nodeid": "tests/test_slow.py::test_hangs", "ts": "1.0", "step": "шаг"},
+            files={"file": ("live.jpg", jpeg, "image/jpeg")},
+            headers={"Authorization": f"Bearer {run_token}"},
+        )
+        assert upload.status_code == 204
+
+        async with _anon_client() as anon:
+            resp = await anon.get(f"/share/{token}/live.jpg")
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "image/jpeg"
+        assert resp.content == jpeg
+    finally:
+        await _stop_run(qa_client, run_id)
+        live.clear_all()
+
+
+async def test_public_share_live_jpg_404_for_unknown_or_revoked_token(qa_client, isolated_allure_dir):
+    async with _anon_client() as anon:
+        resp = await anon.get("/share/not-a-real-token/live.jpg")
+    assert resp.status_code == 404
+
+
+async def test_public_share_test_video_served_with_range_without_auth(
+    qa_client, isolated_allure_dir, isolated_frames_dir, isolated_video_dir, slow_project_dir
+):
+    run_id, run_token = await _start_running_run(qa_client, "share_video_proj", slow_project_dir)
+    nodeid = "tests/test_slow.py::test_hangs"
+    webm = b"\x1aE\xdf\xa3" + b"\x00" * 32
+    try:
+        token = (await qa_client.post(f"/api/runs/{run_id}/share", json={"expires": "30d"})).json()["token"]
+        upload = await qa_client.post(
+            f"/api/runs/{run_id}/tests/{nodeid}/video",
+            data={"duration_ms": "1500"},
+            files={"file": ("test.webm", webm, "video/webm")},
+            headers={"Authorization": f"Bearer {run_token}"},
+        )
+        assert upload.status_code == 201, upload.text
+
+        async with _anon_client() as anon:
+            full = await anon.get(f"/share/{token}/tests/{nodeid}/video")
+            ranged = await anon.get(f"/share/{token}/tests/{nodeid}/video", headers={"Range": "bytes=0-3"})
+        assert full.status_code == 200
+        assert full.content == webm
+        assert ranged.status_code == 206
+        assert ranged.content == webm[0:4]
+    finally:
+        await _stop_run(qa_client, run_id)
+
+
+async def test_public_share_test_video_404_when_not_uploaded(qa_client, isolated_allure_dir, runnable_project_dir):
+    run_id, _ = await _run_fixture_project(qa_client, "share_video_missing_proj", runnable_project_dir)
+    token = (await qa_client.post(f"/api/runs/{run_id}/share", json={"expires": "30d"})).json()["token"]
+    async with _anon_client() as anon:
+        resp = await anon.get(f"/share/{token}/tests/tests/test_sample.py::test_ok/video")
+    assert resp.status_code == 404
 
 
 async def test_public_share_data_json_truncates_long_messages(qa_client, isolated_allure_dir, tmp_path):

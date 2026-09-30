@@ -63,17 +63,19 @@ def test_project_html_run_split_window_nested_inside_run_card():
 
 
 def test_project_js_renders_three_window_tabs_with_expected_data_attributes():
-    """Вкладки Кадры/Консоль/Запросы рендерятся JS-ом (renderWindowTabs), а не
-    статичной разметкой — проверяем сам шаблон в исходнике."""
+    """Вкладки Кадры/Консоль/Запросы(/Эфир/Видео/Sentry) рендерятся JS-ом
+    (renderWindowTabs) через порядок из RunLiveLogic.windowTabOrder (docs/missions/
+    2026-10-01_live_stream.md) — проверяем сам шаблон и словарь подписей в исходнике."""
     match = re.search(r"function renderWindowTabs\(\)\s*\{(.*?)\n  \}", PROJECT_JS, re.DOTALL)
     assert match, "не найдена функция renderWindowTabs() в ui/project.js"
     body = match.group(1)
-    assert 'data-tab="frame"' in body
-    assert 'data-tab="console"' in body
-    assert 'data-tab="req"' in body
-    assert "Кадры" in body
-    assert "Консоль" in body
-    assert "Запросы" in body
+    assert "RunLiveLogic.windowTabOrder(" in body
+    assert 'data-tab="${key}"' in body
+    assert "frame: `Кадры" in body
+    assert 'console: "Консоль"' in body
+    assert "req: `Запросы" in body
+    assert "live: " in body and "Эфир" in body
+    assert "video: " in body and "Видео" in body
 
 
 def test_project_js_window_tabs_click_handler_switches_active_tab_and_rerenders():
@@ -144,11 +146,13 @@ def test_project_js_handle_frame_event_marks_has_frames_and_appends_filmstrip():
 
 def test_project_js_rail_click_selects_test_and_loads_its_window():
     assert 'runTestsRail.addEventListener("click"' in PROJECT_JS
-    match = re.search(r"async function selectTest\(nodeid\)\s*\{(.*?)\n  \}", PROJECT_JS, re.DOTALL)
+    match = re.search(r"async function selectTest\(nodeid, opts\)\s*\{(.*?)\n  \}", PROJECT_JS, re.DOTALL)
     assert match, "не найдена selectTest()"
     body = match.group(1)
     assert "/tests/${encodeURIComponent(nodeid)}/log" in body
     assert "/tests/${encodeURIComponent(nodeid)}/frames" in body
+    # ручной клик по тесту выключает «Следить за прогоном» (п.2 миссии «Эфир»)
+    assert "followEnabled = false;" in PROJECT_JS
 
 
 # ------------------------------------------------------------------ 3. честная подпись «кадров нет»
@@ -261,7 +265,7 @@ async def test_split_card_api_shape_matches_what_project_js_reads(qa_client, iso
     assert items == [
         {
             "nodeid": nodeid, "full_name": "tests.ui.test_x#test_foo", "status": "passed", "has_frames": True,
-            "has_video": False,
+            "has_video": False, "video_duration_ms": None,
         }
     ]
     # поля, которые реально читает project.js (testRowHtml/upsertSplitTest/normalizeTestStatus) —

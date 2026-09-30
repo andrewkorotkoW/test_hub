@@ -68,7 +68,9 @@ async def test_list_run_tests_includes_has_video_flag(qa_client, db_path):
     assert resp.status_code == 200
     items = {item["nodeid"]: item for item in resp.json()}
     assert items[nodeid_a]["has_video"] is True
+    assert items[nodeid_a]["video_duration_ms"] == 1000
     assert items[nodeid_b]["has_video"] is False
+    assert items[nodeid_b]["video_duration_ms"] is None
 
 
 async def _start_running_run(client, name, path):
