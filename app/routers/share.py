@@ -23,7 +23,6 @@ from ..config import settings
 from ..core import allure_report, charts, live, runner
 from ..deps import get_db, require_roles
 from ..schemas import ShareLink, ShareLinkCreate
-from .runs import _serve_video_with_range
 
 router = APIRouter(prefix="/api/runs", tags=["share"])
 public_router = APIRouter(prefix="/share", tags=["share-public"])
@@ -31,6 +30,34 @@ public_router = APIRouter(prefix="/share", tags=["share-public"])
 UI_DIR = Path(__file__).resolve().parent.parent.parent / "ui"
 
 _EXPIRES_DELTA = {"7d": timedelta(days=7), "30d": timedelta(days=30), "never": None}
+
+
+def _nodeid_to_full_name(nodeid: str) -> str:
+    """pytest nodeid -> allure fullName. Своя копия — та же логика, что и в
+    app.routers.runs/app.core.flaky/app.core.xfail_registry (см. их докстринги
+    про "не тянуть межмодульную зависимость ради одной функции")."""
+    file_part, _, rest = nodeid.partition("::")
+    module = file_part[:-3] if file_part.endswith(".py") else file_part
+    module = module.replace("/", ".")
+    if not rest:
+        return module
+    segments = rest.split("::")
+    test = segments[-1].split("[")[0]
+    class_name = f".{segments[-2]}" if len(segments) > 1 else ""
+    return f"{module}{class_name}#{test}"
+
+
+def _full_name_index(tree: dict) -> dict[str, str]:
+    """allure fullName -> pytest nodeid по дереву тестов проекта — нужно, чтобы
+    отдать nodeid каждого теста в публичном отчёте (видео/кадры лежат под nodeid,
+    allure отдаёт только fullName, см. app.routers.runs::list_run_tests)."""
+    index: dict[str, str] = {}
+    for file_path, classes in tree.items():
+        for cls_name, tests in classes.items():
+            for test_name in tests:
+                nodeid = f"{file_path}::{cls_name}::{test_name}" if cls_name else f"{file_path}::{test_name}"
+                index.setdefault(_nodeid_to_full_name(nodeid), nodeid)
+    return index
 
 
 def _now_iso() -> str:
@@ -184,22 +211,40 @@ def public_share_page(token: str, conn: sqlite3.Connection = Depends(get_db)) ->
 
 
 @public_router.get("/{token}/data.json")
-def public_share_data(token: str, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+async def public_share_data(token: str, conn: sqlite3.Connection = Depends(get_db)) -> dict:
     share = _get_active_share_or_404(conn, token)
     run = _get_run_or_404(conn, share["run_id"])
     tests = allure_report.parse_results(runner.allure_dir(run["id"]))
     counts = (
         json.loads(run["counts"]) if run["counts"] and run["counts"] != "{}" else allure_report.counts_from_tests(tests)
     )
-    public_tests = [
-        {
+
+    # nodeid каждого теста — видео (п.3 контракта) и живой кадр адресуются по nodeid,
+    # allure отдаёт только fullName (та же развязка, что в app.routers.runs::list_run_tests).
+    project = conn.execute("SELECT path, venv FROM projects WHERE name = ?", (run["project"],)).fetchone()
+    nodeid_by_full_name: dict[str, str] = {}
+    if project is not None:
+        discovered = await runner.discover(project["path"], project["venv"])
+        nodeid_by_full_name = _full_name_index(discovered.get("tree") or {})
+    video_duration_by_nodeid = {
+        r["nodeid"]: r["duration_ms"]
+        for r in conn.execute(
+            "SELECT nodeid, duration_ms FROM run_test_videos WHERE run_id = ?", (run["id"],)
+        ).fetchall()
+    }
+
+    public_tests = []
+    for t in tests:
+        nodeid = nodeid_by_full_name.get(t["name"], t["name"])
+        public_tests.append({
             "name": t["name"],
+            "nodeid": nodeid,
             "status": t["status"],
             "duration": t["duration"],
             "message": (t["message"][:1500] if t["message"] else None),
-        }
-        for t in tests
-    ]
+            "has_video": nodeid in video_duration_by_nodeid,
+            "video_duration_ms": video_duration_by_nodeid.get(nodeid),
+        })
     report_dir = settings.ALLURE_REPORTS_DIR / str(run["id"])
     allure_ready = allure_report.ensure_static_report(runner.allure_dir(run["id"]), report_dir)
     return {
@@ -209,7 +254,40 @@ def public_share_data(token: str, conn: sqlite3.Connection = Depends(get_db)) ->
         "allure_available": allure_ready,
         "report_png_url": f"/share/{token}/report.png",
         "allure_url": f"/share/{token}/allure/index.html" if allure_ready else None,
+        # клиент сам решает, опрашивать ли — 404, пока кадров не было/прогон давно завершён
+        # (app/core/live.py::get_frame), как и у авторизованного окна прогона.
+        "live_frame_url": f"/share/{token}/live.jpg" if run["status"] == "running" else None,
     }
+
+
+@public_router.get("/{token}/live.jpg")
+def public_share_live_frame(token: str, conn: sqlite3.Connection = Depends(get_db)) -> Response:
+    """Последний живой кадр — тот же app/core/live.py, что и авторизованный
+    GET /api/runs/{id}/live.jpg (контракт п.5), но без Depends(get_current_user):
+    доступ уже проверен share-токеном."""
+    share = _get_active_share_or_404(conn, token)
+    frame = live.get_frame(share["run_id"])
+    if frame is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No live frame")
+    return Response(content=frame["jpeg_bytes"], media_type="image/jpeg")
+
+
+@public_router.get("/{token}/tests/{nodeid:path}/video")
+def public_share_test_video(
+    token: str, nodeid: str, request: Request, conn: sqlite3.Connection = Depends(get_db)
+) -> Response:
+    """Видео теста для share-страницы (контракт п.5) — тот же файл и та же
+    поддержка Range, что у GET /api/runs/{id}/tests/{nodeid}/video, без сессии."""
+    share = _get_active_share_or_404(conn, token)
+    row = conn.execute(
+        "SELECT path FROM run_test_videos WHERE run_id = ? AND nodeid = ?", (share["run_id"], nodeid)
+    ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+    path = Path(row["path"])
+    if not path.is_file():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+    return runner.serve_video_with_range(path, request)
 
 
 @public_router.get("/{token}/report.png")
@@ -227,38 +305,6 @@ def public_share_report_png(token: str, conn: sqlite3.Connection = Depends(get_d
     # прогонов того же проекта/стенда (см. заголовок файла).
     png = charts.build_report_png(run_payload, [], results)
     return Response(content=png, media_type="image/png")
-
-
-@public_router.get("/{token}/live.jpg")
-def public_share_live_frame(token: str, conn: sqlite3.Connection = Depends(get_db)) -> Response:
-    """Последний живой кадр прогона со share-страницы (контракт, п.5 миссии
-    «Эфир») — без сессии, как и остальные публичные маршруты этого файла,
-    только по действующему токену share-ссылки. Та же логика 404, что и у
-    app/routers/runs.py::get_live_frame (кадров не было либо кадр протух)."""
-    share = _get_active_share_or_404(conn, token)
-    frame = live.get_frame(share["run_id"])
-    if frame is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No live frame")
-    return Response(content=frame["jpeg_bytes"], media_type="image/jpeg")
-
-
-@public_router.get("/{token}/tests/{nodeid:path}/video")
-def public_share_test_video(
-    token: str, nodeid: str, request: Request, conn: sqlite3.Connection = Depends(get_db)
-) -> Response:
-    """Видео теста со share-страницы (контракт, п.5) — тот же файл и та же
-    поддержка Range, что у app/routers/runs.py::get_run_test_video, только
-    доступ по токену share-ссылки вместо пользовательской сессии."""
-    share = _get_active_share_or_404(conn, token)
-    row = conn.execute(
-        "SELECT path FROM run_test_videos WHERE run_id = ? AND nodeid = ?", (share["run_id"], nodeid)
-    ).fetchone()
-    if row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
-    path = Path(row["path"])
-    if not path.is_file():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
-    return _serve_video_with_range(path, request)
 
 
 @public_router.get("/{token}/allure")

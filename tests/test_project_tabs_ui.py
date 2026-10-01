@@ -120,9 +120,13 @@ def test_project_js_run_query_param_opens_run_card_unconditionally_on_load():
     match = re.search(
         r'const runParam = params\.get\("run"\);\s*\n\s*if \(runParam\) \{\s*\n\s*(.*?)\n\s*\}',
         PROJECT_JS,
+        re.DOTALL,
     )
     assert match, "не найден блок открытия прогона по query-параметру run= в ui/project.js"
     assert "await openRun(Number(runParam))" in match.group(1)
+    # замечание владельца 30.09: страница должна прокручиваться к карточке прогона,
+    # а не оставаться наверху на дереве тестов (docs/missions/2026-10-01_live_stream.md, п.5)
+    assert "runCard.scrollIntoView(" in match.group(1)
     # блок должен быть на верхнем уровне (2 пробела отступа — как остальной код
     # верхнего уровня project.js), а не внутри вложенной функции/обработчика
     assert re.search(r"\n  const runParam = params\.get\(\"run\"\);\n  if \(runParam\) \{\n", PROJECT_JS)

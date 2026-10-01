@@ -166,6 +166,9 @@
             <button type="button" data-view="split" aria-current="true">Сплит</button>
             <button type="button" data-view="log" aria-current="false">Весь лог</button>
           </div>
+          <label class="run-follow-toggle" id="run-follow-toggle" hidden>
+            <input type="checkbox" id="run-follow-checkbox" checked> Следить за прогоном
+          </label>
           <button id="share-run-btn" hidden>Поделиться</button>
           <button id="cancel-run-btn" class="danger" hidden>Отменить</button>
         </div>
@@ -464,6 +467,7 @@
   <script src="sections-tree-logic.js"></script>
   <script src="testcases-logic.js"></script>
   <script src="build-page-logic.js"></script>
+  <script src="run-live-logic.js"></script>
   <script src="project.js"></script>
 </body>
 </html>

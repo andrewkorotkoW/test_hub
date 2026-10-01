@@ -29,6 +29,8 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from fastapi import HTTPException, Request, Response, status
+
 from ..config import settings
 from ..db import get_connection
 from . import allure_report, flaky, test_cases, xfail_registry
@@ -162,6 +164,43 @@ def video_dir(run_id: int) -> Path:
     tests/{nodeid}/video в app/routers/runs.py), отдельно от frames_dir: кадры
     шагов идут в allure/тест-кейсы, видео — самостоятельная запись прогона."""
     return settings.VIDEO_DIR / str(run_id) / "video"
+
+
+def serve_video_with_range(path: Path, request: Request) -> Response:
+    """video/webm с поддержкой Range (без него перемотка в <video> не работает) —
+    общая для основного окна прогона (app/routers/runs.py) и публичной share-страницы
+    (app/routers/share.py), т.к. оба отдают один и тот же файл, только с разной
+    проверкой доступа перед вызовом."""
+    size = path.stat().st_size
+    range_header = request.headers.get("range")
+    if not range_header:
+        return Response(content=path.read_bytes(), media_type="video/webm", headers={"Accept-Ranges": "bytes"})
+
+    unit, _, range_spec = range_header.partition("=")
+    start_s, _, end_s = range_spec.partition("-")
+    try:
+        start = int(start_s) if start_s else 0
+        end = int(end_s) if end_s else size - 1
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_416_REQUESTED_RANGE_NOT_SATISFIABLE)
+    end = min(end, size - 1)
+    if unit != "bytes" or start > end or start >= size:
+        raise HTTPException(status_code=status.HTTP_416_REQUESTED_RANGE_NOT_SATISFIABLE)
+
+    with path.open("rb") as f:
+        f.seek(start)
+        chunk = f.read(end - start + 1)
+
+    return Response(
+        content=chunk,
+        status_code=status.HTTP_206_PARTIAL_CONTENT,
+        media_type="video/webm",
+        headers={
+            "Content-Range": f"bytes {start}-{end}/{size}",
+            "Accept-Ranges": "bytes",
+            "Content-Length": str(len(chunk)),
+        },
+    )
 
 
 # ------------------------------------------------------------------ обнаружение

@@ -13,8 +13,32 @@
   const reportRows = document.getElementById("report-rows");
   const statusFilter = document.getElementById("report-status-filter");
   const allureLink = document.getElementById("allure-link");
+  const liveFrameBox = document.getElementById("live-frame-box");
+  const liveFrameImg = document.getElementById("live-frame-img");
 
   let currentTests = [];
+  let liveTimer = null;
+  let liveObjectUrl = null;
+
+  // Живой кадр (docs/missions/2026-10-01_live_stream.md, п.5) — на share-странице нет
+  // сессии и WS-подключения (public_router без Depends(get_current_user)), поэтому
+  // вместо WS-сообщений просто опрашиваем /share/<token>/live.jpg раз в 2 с, пока он
+  // есть в data.json (сервер отдаёт его там же, только пока run.status == "running").
+  function startLivePolling(liveFrameUrl) {
+    liveFrameBox.hidden = false;
+    const tick = async () => {
+      try {
+        const resp = await fetch(`${liveFrameUrl}?t=${Date.now()}`);
+        if (!resp.ok) return;
+        const blob = await resp.blob();
+        if (liveObjectUrl) URL.revokeObjectURL(liveObjectUrl);
+        liveObjectUrl = URL.createObjectURL(blob);
+        liveFrameImg.src = liveObjectUrl;
+      } catch { /* сеть моргнула — попробуем на следующем тике */ }
+    };
+    tick();
+    liveTimer = setInterval(tick, 2000);
+  }
 
   function showError(message) {
     pageError.textContent = message;
@@ -51,7 +75,16 @@
     document.querySelectorAll(".report-detail-row").forEach((el) => el.remove());
     const detail = document.createElement("tr");
     detail.className = "report-detail-row";
-    detail.innerHTML = `<td colspan="3"><pre class="trace-pre">${escapeHtml(test.message || "Подробностей нет.")}</pre></td>`;
+    const videoHtml = test.has_video
+      ? `<div class="test-video">
+          <video controls src="${escapeHtml(test.video_url)}"></video>
+          <div class="test-video-meta">
+            ${test.video_duration_ms != null ? `<span class="muted">${fmtDuration(test.video_duration_ms / 1000)}</span>` : ""}
+            <a href="${escapeHtml(test.video_url)}" download class="video-download-link">Скачать</a>
+          </div>
+        </div>`
+      : "";
+    detail.innerHTML = `<td colspan="3">${videoHtml}<pre class="trace-pre">${escapeHtml(test.message || "Подробностей нет.")}</pre></td>`;
     tr.after(detail);
   });
 
@@ -96,7 +129,12 @@
       allureLink.hidden = false;
     }
 
-    currentTests = data.tests || [];
+    currentTests = (data.tests || []).map((t) => ({
+      ...t,
+      video_url: `/share/${encodeURIComponent(token)}/tests/${encodeURIComponent(t.nodeid)}/video`,
+    }));
     renderRows();
+
+    if (data.live_frame_url) startLivePolling(data.live_frame_url);
   })();
 })();

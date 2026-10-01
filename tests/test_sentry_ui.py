@@ -111,11 +111,13 @@ def test_render_sentry_tab_renders_rows_with_new_badge_enabled():
 
 
 def test_window_tabs_include_sentry_only_when_can_see_sentry():
+    """Sentry — последняя вкладка в RunLiveLogic.windowTabOrder(mediaTab, canSeeSentry)
+    (docs/missions/2026-10-01_live_stream.md, п.4) — только видящим её роли."""
     match = re.search(r"function renderWindowTabs\(\)\s*\{(.*?)\n  \}", PROJECT_JS, re.DOTALL)
     assert match, "не найдена функция renderWindowTabs() в ui/project.js"
     body = match.group(1)
-    assert 'canSeeSentry ? `<button type="button" data-tab="sentry"' in body
-    assert 'data-tab="sentry"' in body
+    assert "RunLiveLogic.windowTabOrder(currentMediaTab(), canSeeSentry)" in body
+    assert 'sentry: `Sentry' in body
 
 
 def test_render_window_body_dispatches_sentry_tab():

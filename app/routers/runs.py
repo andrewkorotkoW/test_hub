@@ -193,12 +193,13 @@ async def list_run_tests(
             "SELECT DISTINCT nodeid FROM run_events WHERE run_id = ? AND kind = 'frame'", (run_id,)
         ).fetchall()
     }
-    video_nodeids = {
-        r["nodeid"]
+    video_duration_by_nodeid = {
+        r["nodeid"]: r["duration_ms"]
         for r in conn.execute(
-            "SELECT DISTINCT nodeid FROM run_test_videos WHERE run_id = ?", (run_id,)
+            "SELECT nodeid, duration_ms FROM run_test_videos WHERE run_id = ?", (run_id,)
         ).fetchall()
     }
+    video_nodeids = set(video_duration_by_nodeid)
 
     if row["status"] in ("running", "queued"):
         events = conn.execute(
@@ -222,6 +223,7 @@ async def list_run_tests(
                 "status": test_status,
                 "has_frames": nodeid in frame_nodeids,
                 "has_video": nodeid in video_nodeids,
+                "video_duration_ms": video_duration_by_nodeid.get(nodeid),
             }
             for nodeid, test_status in statuses.items()
         ]
@@ -240,6 +242,7 @@ async def list_run_tests(
             "status": t["status"],
             "has_frames": nodeid_by_full_name.get(t["name"], t["name"]) in frame_nodeids,
             "has_video": nodeid_by_full_name.get(t["name"], t["name"]) in video_nodeids,
+            "video_duration_ms": video_duration_by_nodeid.get(nodeid_by_full_name.get(t["name"], t["name"])),
         }
         for t in results
     ]
@@ -511,42 +514,6 @@ async def upload_test_video(
     return {"nodeid": nodeid, "duration_ms": duration_ms, "size": len(raw)}
 
 
-def _serve_video_with_range(path: Path, request: Request) -> Response:
-    """video/webm с поддержкой Range (без него перемотка в <video> не работает).
-    Файлы ограничены TH_VIDEO_MAX_MB (по умолчанию 50 МБ) — целиком читать
-    нужный диапазон в память безопасно, StreamingResponse тут не нужен."""
-    size = path.stat().st_size
-    range_header = request.headers.get("range")
-    if not range_header:
-        return Response(content=path.read_bytes(), media_type="video/webm", headers={"Accept-Ranges": "bytes"})
-
-    unit, _, range_spec = range_header.partition("=")
-    start_s, _, end_s = range_spec.partition("-")
-    try:
-        start = int(start_s) if start_s else 0
-        end = int(end_s) if end_s else size - 1
-    except ValueError:
-        raise HTTPException(status_code=status.HTTP_416_REQUESTED_RANGE_NOT_SATISFIABLE)
-    end = min(end, size - 1)
-    if unit != "bytes" or start > end or start >= size:
-        raise HTTPException(status_code=status.HTTP_416_REQUESTED_RANGE_NOT_SATISFIABLE)
-
-    with path.open("rb") as f:
-        f.seek(start)
-        chunk = f.read(end - start + 1)
-
-    return Response(
-        content=chunk,
-        status_code=status.HTTP_206_PARTIAL_CONTENT,
-        media_type="video/webm",
-        headers={
-            "Content-Range": f"bytes {start}-{end}/{size}",
-            "Accept-Ranges": "bytes",
-            "Content-Length": str(len(chunk)),
-        },
-    )
-
-
 @router.get("/runs/{run_id}/tests/{nodeid:path}/video")
 def get_run_test_video(
     run_id: int,
@@ -564,7 +531,7 @@ def get_run_test_video(
     path = Path(row["path"])
     if not path.is_file():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
-    return _serve_video_with_range(path, request)
+    return runner.serve_video_with_range(path, request)
 
 
 def _ws_user(websocket: WebSocket) -> sqlite3.Row | None:
