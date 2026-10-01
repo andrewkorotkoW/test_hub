@@ -112,6 +112,14 @@ test("tourStepsForRole('superadmin'): включает все 8 шагов, вк
   assert.ok(steps.some(function (s) { return s.requireRole === "superadmin"; }));
 });
 
+// Шаг «Запуск тестов» (docs/missions/2026-10-01_live_stream.md) должен упоминать «Эфир» —
+// это единственное место тура, рассказывающее про новую вкладку живого эфира.
+test("TOUR_STEPS: шаг «Запуск тестов» (project.html#run) упоминает «Эфир»", function () {
+  var step = TOUR_STEPS.find(function (s) { return s.page === "project.html" && s.hash === "run"; });
+  assert.ok(step, "не найден шаг project.html#run");
+  assert.ok(step.text.indexOf("Эфир") !== -1, "текст шага не упоминает «Эфир»: " + step.text);
+});
+
 var failed = 0;
 tests.forEach(function (t) {
   try {
