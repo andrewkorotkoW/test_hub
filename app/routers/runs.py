@@ -97,7 +97,16 @@ def _run_payload(row: sqlite3.Row) -> dict:
         "requested_by": row["requested_by"],
         "counts": json.loads(row["counts"]) if row["counts"] else {},
         "label": row["label"],
+        "live": bool(row["live"]),
     }
+
+
+@router.get("/config")
+def get_config(_user: sqlite3.Row = Depends(get_current_user)) -> dict:
+    """Фронт формы запуска/страницы сборки сверяет число выбранных тестов с этим
+    лимитом до отправки (галочка «Эфир» недоступна при превышении) — сервер
+    дублирует ту же проверку в create_run, см. settings.TH_LIVE_MAX_TESTS."""
+    return {"live_max_tests": settings.TH_LIVE_MAX_TESTS}
 
 
 @router.get("/projects/{name}/tests")
@@ -124,10 +133,18 @@ async def create_run(
         ).fetchone()
         if not stand:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stand not found")
+    if body.live:
+        tree_data = await runner.discover(project["path"], project["venv"])
+        selected = runner.count_target_tests(tree_data.get("tree", {}), body.target)
+        if selected > settings.TH_LIVE_MAX_TESTS:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Эфир доступен для прогонов до {settings.TH_LIVE_MAX_TESTS} тестов, выбрано {selected}",
+            )
     try:
         run_id = await runner.submit_run(
             project["name"], body.stand, body.target, user["login"], body.marker, body.repeat,
-            confirm_manual=body.confirm_manual, label=body.label,
+            confirm_manual=body.confirm_manual, label=body.label, live=body.live,
         )
     except runner.ManualRunNotConfirmed as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc

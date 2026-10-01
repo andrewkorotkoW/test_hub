@@ -234,6 +234,31 @@ async def discover(project_path: str, venv: str) -> dict:
     return {"tree": tree}
 
 
+def count_target_tests(tree: dict, target: str) -> int:
+    """Сколько тестов выберет pytest для `target` (как submit_run передаёт его
+    в args pytest, см. _execute: пусто/"all" — все тесты, иначе построчно nodeid/
+    класс/файл). Используется серверной проверкой лимита TH_LIVE_MAX_TESTS эфира
+    (докс/missions/2026-10-01_live_stream.md, «Уточнение владельца 01.10») — тот же
+    принцип, что и у фронтовой проверки в форме запуска (задача 70165f07)."""
+    all_nodeids: list[str] = []
+    for file_path, classes in tree.items():
+        for cls_name, tests in classes.items():
+            for test_name in tests:
+                nodeid = f"{file_path}::{cls_name}::{test_name}" if cls_name else f"{file_path}::{test_name}"
+                all_nodeids.append(nodeid)
+    lines = [line.strip() for line in target.splitlines() if line.strip()] if target else []
+    if not lines or target == "all":
+        return len(all_nodeids)
+    selected: set[str] = set()
+    for nodeid in all_nodeids:
+        file_path = nodeid.split("::", 1)[0]
+        for line in lines:
+            if nodeid == line or nodeid.startswith(line + "::") or file_path == line:
+                selected.add(nodeid)
+                break
+    return len(selected)
+
+
 # ------------------------------------------------------------------ запуск прогонов
 def _get_project(conn: sqlite3.Connection, name: str) -> sqlite3.Row | None:
     return conn.execute("SELECT * FROM projects WHERE name = ?", (name,)).fetchone()
@@ -252,6 +277,7 @@ async def submit_run(
     repeat: int = 1,
     confirm_manual: bool = False,
     label: str | None = None,
+    live: bool = False,
 ) -> int:
     """Создаёт запись прогона (running, если для проекта нет активного, иначе queued)
     и, если она стартует сразу, запускает фоновую задачу исполнения. `repeat` > 1
@@ -282,10 +308,10 @@ async def submit_run(
             start_now = active is None
             now = datetime.now().isoformat(timespec="seconds")
             cur = conn.execute(
-                "INSERT INTO runs (project, stand, target, status, started, requested_by, counts, marker, repeat, label) "
-                "VALUES (?, ?, ?, ?, ?, ?, '{}', ?, ?, ?)",
+                "INSERT INTO runs (project, stand, target, status, started, requested_by, counts, marker, repeat, label, live) "
+                "VALUES (?, ?, ?, ?, ?, ?, '{}', ?, ?, ?, ?)",
                 (project_name, stand_name, target, "running" if start_now else "queued",
-                 now if start_now else None, requested_by, marker, repeat, label),
+                 now if start_now else None, requested_by, marker, repeat, label, int(live)),
             )
             conn.commit()
             run_id = cur.lastrowid
@@ -293,7 +319,7 @@ async def submit_run(
             conn.close()
 
     if start_now:
-        asyncio.create_task(_execute(run_id, project_name, stand_name, target, marker, repeat))
+        asyncio.create_task(_execute(run_id, project_name, stand_name, target, marker, repeat, live))
     return run_id
 
 
@@ -466,7 +492,10 @@ async def _advance_queue(project_name: str) -> None:
             conn.close()
     if nxt is not None:
         asyncio.create_task(
-            _execute(nxt["id"], project_name, nxt["stand"], nxt["target"], nxt["marker"], nxt["repeat"])
+            _execute(
+                nxt["id"], project_name, nxt["stand"], nxt["target"], nxt["marker"], nxt["repeat"],
+                bool(nxt["live"]),
+            )
         )
 
 
@@ -477,6 +506,7 @@ async def _execute(
     target: str,
     marker: str | None = None,
     repeat: int = 1,
+    live: bool = False,
 ) -> None:
     _current_nodeid[run_id] = None
 
@@ -514,6 +544,11 @@ async def _execute(
     env["TH_RUN_TOKEN"] = _run_tokens[run_id]
     env["TH_URL"] = th_public_url()
     env["TH_RUN_ID"] = str(run_id)
+    if live:
+        # Плагин проекта тестов включает трансляцию кадров (POST .../live) только
+        # когда видит TH_LIVE=1 — без него совсем не транслирует, см. контракт
+        # «Уточнение владельца 01.10» в docs/missions/2026-10-01_live_stream.md.
+        env["TH_LIVE"] = "1"
     if stand is not None:
         env["STAND_URL"] = stand["url"] or ""
         env["STAND_LOGIN"] = stand["login"] or ""

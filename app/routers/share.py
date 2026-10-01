@@ -151,6 +151,7 @@ def _public_run_payload(row: sqlite3.Row) -> dict:
         "started": row["started"],
         "finished": row["finished"],
         "duration": row["duration"],
+        "live": bool(row["live"]),
     }
 
 
