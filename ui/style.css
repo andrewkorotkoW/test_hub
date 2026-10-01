@@ -501,6 +501,15 @@ button.color-dot:hover { transform: scale(1.15); border-color: var(--text-muted)
 .run-follow-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); cursor: pointer; }
 .run-follow-toggle[hidden] { display: none; }
 
+/* галочка «Эфир» в форме запуска/странице «Сборка» (docs/missions/
+   2026-10-01_live_stream.md, «Уточнение владельца 01.10») — тот же паттерн, что у
+   .run-follow-toggle; лимит числа тестов красит подсказку в failed, а не отдельным
+   компонентом предупреждения. */
+.live-checkbox-row { display: flex; align-items: center; gap: 6px; font-size: 13px; margin: 10px 0; cursor: pointer; }
+.live-checkbox-row input[disabled] { cursor: not-allowed; }
+.live-checkbox-hint { margin: -6px 0 10px; font-size: 12px; }
+.live-checkbox-hint.limit-exceeded { color: var(--failed); }
+
 /* вкладка «Эфир» (docs/missions/2026-10-01_live_stream.md) — тот же контейнер, что
    у .frame-shot, но без пунктирной рамки: тут всегда есть либо кадр, либо заглушка. */
 .live-frame { display: flex; flex-direction: column; gap: 8px; }
