@@ -70,11 +70,6 @@ class Settings:
     # ветка (кадры шагов и финальное видео теста не смешиваются на диске).
     VIDEO_DIR: Path = BASE_DIR / "workspace" / "runs"
 
-    # Лимит числа тестов в прогоне с галочкой «Эфир» (docs/missions/
-    # 2026-10-01_live_stream.md, «Уточнение владельца 01.10») — форма запуска
-    # запрещает галочку при большем числе выбранных тестов, POST .../runs дублирует
-    # проверку на сервере (422).
-    TH_LIVE_MAX_TESTS: int = int(os.getenv("TH_LIVE_MAX_TESTS", "20"))
 
     # Ручная загрузка скриншота к шагу тест-кейса (POST .../testcases/{id}/steps/{n}/
     # attachments, см. app/routers/test_cases.py) — лимит размера одного PNG/JPG.
