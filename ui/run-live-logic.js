@@ -13,12 +13,15 @@
   // Сервер держит один живой кадр на прогон (app/core/live.py) — «Эфир» показывается только
   // для того теста, на который указывает последний кадр, и только пока сам тест ещё running
   // (test_end переключает на «Видео», если оно есть, иначе вкладка медиа пропадает совсем —
-  // например у API-тестов, за которыми плагин не снимал экран).
+  // например у API-тестов, за которыми плагин не снимал экран). runLive — флаг прогона
+  // (docs/missions/2026-10-01_live_stream.md, «Уточнение владельца 01.10»): без галочки
+  // «Эфир» плагин трансляцию вообще не запускает, но UI гейтит вкладку тем же флагом
+  // независимо от того, дошли ли кадры — видео пишется у всех прогонов без исключений.
   function mediaTabForTest(opts) {
     var o = opts || {};
     var test = o.test || {};
     var isTestRunning = test.status === "running";
-    if (o.runStatus === "running" && isTestRunning && o.liveNodeid && o.liveNodeid === test.nodeid) {
+    if (o.runLive && o.runStatus === "running" && isTestRunning && o.liveNodeid && o.liveNodeid === test.nodeid) {
       return "live";
     }
     if (test.has_video) return "video";
@@ -34,10 +37,12 @@
 
   // Слежение авто-выбирает стартовавший тест, только пока сам переключатель включён и
   // прогон ещё running (после финиша test_start уже не приходит, но проверка защищает и
-  // от устаревшего сообщения, долетевшего после завершения).
+  // от устаревшего сообщения, долетевшего после завершения). Переключатель существует
+  // только у прогонов с live=true (п.2 миссии, «Уточнение владельца 01.10») — followEnabled
+  // по умолчанию true даже когда его чекбокс скрыт, поэтому runLive гейтит явно здесь же.
   function shouldAutoSelectOnTestStart(opts) {
     var o = opts || {};
-    return Boolean(o.followEnabled) && o.runStatus === "running";
+    return Boolean(o.followEnabled) && Boolean(o.runLive) && o.runStatus === "running";
   }
 
   // Порядок вкладок теста (п.4 миссии): медиа-вкладка (Эфир/Видео, если есть) первой,
@@ -50,12 +55,47 @@
     return order;
   }
 
+  // Число тестов по списку целей (галочка «Эфир» в форме запуска и на странице
+  // «Сборка», docs/missions/2026-10-01_live_stream.md, «Уточнение владельца 01.10»):
+  // цель — путь к файлу/разделу (считается tests_count всех тестов дерева разделов,
+  // testsCountByTarget — GET .../sections, files[].target -> files[].tests_count) либо
+  // уже конкретный nodeid (файла с таким target нет — считается за 1 тест). Тот же
+  // приём, что и app/core/runner.py::count_targets на сервере, но по уже загруженному
+  // на странице дереву разделов, без похода за pytest --collect-only.
+  function countTargetTests(targets, testsCountByTarget) {
+    var map = testsCountByTarget || {};
+    var total = 0;
+    (targets || []).forEach(function (raw) {
+      var target = String(raw || "").trim();
+      if (!target) return;
+      total += Object.prototype.hasOwnProperty.call(map, target) ? map[target] : 1;
+    });
+    return total;
+  }
+
+  // Текст подсказки — дословно совпадает с 422 сервера (app/routers/runs.py::
+  // live_limit_message), чтобы форма и сервер не расходились в формулировке.
+  function liveLimitMessage(limit, count) {
+    return "Эфир доступен для прогонов до " + limit + " тестов, выбрано " + count;
+  }
+
+  // Состояние галочки «Эфир»: доступна, пока число тестов не превышает лимит.
+  function liveCheckboxState(count, limit) {
+    if (count > limit) {
+      return { disabled: true, hint: liveLimitMessage(limit, count) };
+    }
+    return { disabled: false, hint: "" };
+  }
+
   var api = {
     LIVE_STALE_MS: LIVE_STALE_MS,
     mediaTabForTest: mediaTabForTest,
     isLiveStale: isLiveStale,
     shouldAutoSelectOnTestStart: shouldAutoSelectOnTestStart,
     windowTabOrder: windowTabOrder,
+    countTargetTests: countTargetTests,
+    liveLimitMessage: liveLimitMessage,
+    liveCheckboxState: liveCheckboxState,
   };
 
   if (typeof module !== "undefined" && module.exports) {

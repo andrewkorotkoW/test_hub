@@ -16,11 +16,12 @@ function test(name, fn) {
 
 // ------------------------------------------------------------------ mediaTabForTest
 
-test("mediaTabForTest: running-тест с совпадающим liveNodeid при running-прогоне -> live", function () {
+test("mediaTabForTest: running-тест с совпадающим liveNodeid при running live-прогоне -> live", function () {
   var tab = Logic.mediaTabForTest({
     test: { nodeid: "t.py::a", status: "running", has_video: false },
     runStatus: "running",
     liveNodeid: "t.py::a",
+    runLive: true,
   });
   assert.strictEqual(tab, "live");
 });
@@ -30,6 +31,7 @@ test("mediaTabForTest: liveNodeid указывает на другой тест 
     test: { nodeid: "t.py::a", status: "running", has_video: false },
     runStatus: "running",
     liveNodeid: "t.py::b",
+    runLive: true,
   });
   assert.strictEqual(tab, null);
 });
@@ -39,15 +41,27 @@ test("mediaTabForTest: прогон уже не running -> live невозмож
     test: { nodeid: "t.py::a", status: "running", has_video: false },
     runStatus: "passed",
     liveNodeid: "t.py::a",
+    runLive: true,
   });
   assert.strictEqual(tab, null);
 });
 
-test("mediaTabForTest: тест завершился и есть видео -> video", function () {
+test("mediaTabForTest: прогон без флага live (runLive=false) -> не live, даже если liveNodeid совпал", function () {
+  var tab = Logic.mediaTabForTest({
+    test: { nodeid: "t.py::a", status: "running", has_video: false },
+    runStatus: "running",
+    liveNodeid: "t.py::a",
+    runLive: false,
+  });
+  assert.strictEqual(tab, null);
+});
+
+test("mediaTabForTest: тест завершился и есть видео -> video (не зависит от runLive)", function () {
   var tab = Logic.mediaTabForTest({
     test: { nodeid: "t.py::a", status: "passed", has_video: true },
     runStatus: "running",
     liveNodeid: null,
+    runLive: false,
   });
   assert.strictEqual(tab, "video");
 });
@@ -57,6 +71,7 @@ test("mediaTabForTest: тест завершился без видео и без
     test: { nodeid: "t.py::a", status: "passed", has_video: false },
     runStatus: "running",
     liveNodeid: null,
+    runLive: true,
   });
   assert.strictEqual(tab, null);
 });
@@ -66,6 +81,7 @@ test("mediaTabForTest: видео побеждает даже пока тест 
     test: { nodeid: "t.py::a", status: "running", has_video: true },
     runStatus: "running",
     liveNodeid: "t.py::b",
+    runLive: true,
   });
   assert.strictEqual(tab, "video");
 });
@@ -88,16 +104,28 @@ test("isLiveStale: прошло больше LIVE_STALE_MS -> нет сигна�
 
 // ------------------------------------------------------------------ shouldAutoSelectOnTestStart
 
-test("shouldAutoSelectOnTestStart: слежение включено и прогон running -> true", function () {
-  assert.strictEqual(Logic.shouldAutoSelectOnTestStart({ followEnabled: true, runStatus: "running" }), true);
+test("shouldAutoSelectOnTestStart: слежение включено, прогон running и live -> true", function () {
+  assert.strictEqual(
+    Logic.shouldAutoSelectOnTestStart({ followEnabled: true, runStatus: "running", runLive: true }), true
+  );
 });
 
 test("shouldAutoSelectOnTestStart: слежение выключено пользователем -> false", function () {
-  assert.strictEqual(Logic.shouldAutoSelectOnTestStart({ followEnabled: false, runStatus: "running" }), false);
+  assert.strictEqual(
+    Logic.shouldAutoSelectOnTestStart({ followEnabled: false, runStatus: "running", runLive: true }), false
+  );
 });
 
 test("shouldAutoSelectOnTestStart: прогон уже не running -> false, даже если следим", function () {
-  assert.strictEqual(Logic.shouldAutoSelectOnTestStart({ followEnabled: true, runStatus: "passed" }), false);
+  assert.strictEqual(
+    Logic.shouldAutoSelectOnTestStart({ followEnabled: true, runStatus: "passed", runLive: true }), false
+  );
+});
+
+test("shouldAutoSelectOnTestStart: прогон без флага live -> false, даже если следим и running", function () {
+  assert.strictEqual(
+    Logic.shouldAutoSelectOnTestStart({ followEnabled: true, runStatus: "running", runLive: false }), false
+  );
 });
 
 // ------------------------------------------------------------------ windowTabOrder
@@ -112,6 +140,52 @@ test("windowTabOrder: 'live' первой, Sentry видящим — после�
 
 test("windowTabOrder: 'video' первой, без Sentry", function () {
   assert.deepStrictEqual(Logic.windowTabOrder("video", false), ["video", "frame", "console", "req"]);
+});
+
+// ------------------------------------------------------------------ countTargetTests / liveCheckboxState
+
+test("countTargetTests: цель-файл считается по tests_count из дерева разделов", function () {
+  var count = Logic.countTargetTests(
+    ["tests/api/notifications/test_x.py"],
+    { "tests/api/notifications/test_x.py": 7 }
+  );
+  assert.strictEqual(count, 7);
+});
+
+test("countTargetTests: конкретный nodeid без записи в дереве считается за 1", function () {
+  var count = Logic.countTargetTests(
+    ["tests/api/notifications/test_x.py::test_y"],
+    { "tests/api/notifications/test_x.py": 7 }
+  );
+  assert.strictEqual(count, 1);
+});
+
+test("countTargetTests: несколько целей суммируются, пустые строки игнорируются", function () {
+  var count = Logic.countTargetTests(
+    ["tests/api/a.py", "", "tests/api/b.py::test_z"],
+    { "tests/api/a.py": 3 }
+  );
+  assert.strictEqual(count, 4);
+});
+
+test("countTargetTests: пустой список целей -> 0", function () {
+  assert.strictEqual(Logic.countTargetTests([], {}), 0);
+  assert.strictEqual(Logic.countTargetTests(null, {}), 0);
+});
+
+test("liveCheckboxState: число тестов не больше лимита -> доступна", function () {
+  var state = Logic.liveCheckboxState(20, 20);
+  assert.deepStrictEqual(state, { disabled: false, hint: "" });
+});
+
+test("liveCheckboxState: число тестов больше лимита -> недоступна с подсказкой", function () {
+  var state = Logic.liveCheckboxState(57, 20);
+  assert.strictEqual(state.disabled, true);
+  assert.strictEqual(state.hint, "Эфир доступен для прогонов до 20 тестов, выбрано 57");
+});
+
+test("liveLimitMessage: текст совпадает с форматом сервера (app/routers/runs.py::live_limit_message)", function () {
+  assert.strictEqual(Logic.liveLimitMessage(20, 57), "Эфир доступен для прогонов до 20 тестов, выбрано 57");
 });
 
 var failed = 0;

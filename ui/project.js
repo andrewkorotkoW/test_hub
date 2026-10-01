@@ -56,6 +56,14 @@
   // applyProjectColor в common.js). Меняют только qa/superadmin, остальным — индикатор.
   const colorPickerEl = document.getElementById("project-color-picker");
   const canEditColor = user.role === "qa" || user.role === "superadmin";
+  // Лимит галочки «Эфир» (docs/missions/2026-10-01_live_stream.md, «Уточнение владельца
+  // 01.10») — глобальный env TH_LIVE_MAX_TESTS (GET /api/config); 20 — тот же дефолт,
+  // что и на сервере, на случай, если запрос ниже ещё не успел выполниться.
+  let liveMaxTests = 20;
+  api("/api/config").then((cfg) => {
+    if (typeof cfg.live_max_tests === "number") liveMaxTests = cfg.live_max_tests;
+    updateLiveCheckboxState();
+  }).catch(() => { /* остаётся дефолт 20 */ });
   try {
     const projects = await api("/api/projects");
     const current = projects.find((p) => p.name === projectName);
@@ -94,6 +102,8 @@
   const sectionsSearchInput = document.getElementById("sections-search-input");
   const sectionsPresetsRow = document.getElementById("sections-presets-row");
   const manualTargetInput = document.getElementById("manual-target-input");
+  const liveCheckbox = document.getElementById("live-checkbox");
+  const liveCheckboxHint = document.getElementById("live-checkbox-hint");
   const runAllBtn = document.getElementById("run-all-btn");
   const runSelectedBtn = document.getElementById("run-selected-btn");
   const manualRunBlock = document.getElementById("manual-run-block");
@@ -361,6 +371,9 @@
   // клик-хендлер run-tests-rail ниже) и снова включается чекбоксом run-follow-checkbox.
   let liveFrame = null; // { nodeid, step, jpegB64, receivedAt }
   let followEnabled = true;
+  // «Эфир»/«Следить за прогоном» — только у прогонов с live=true (docs/missions/
+  // 2026-10-01_live_stream.md, «Уточнение владельца 01.10»); отдаётся в GET .../report.
+  let currentRunLive = false;
 
   function showPageError(message) {
     pageError.textContent = message;
@@ -759,6 +772,46 @@
     return sectionsPicker.targets().join("\n");
   }
 
+  function currentTargetLines() {
+    const manual = manualTargetInput.value.trim();
+    if (manual) return manual.split("\n").map((l) => l.trim()).filter(Boolean);
+    return sectionsPicker.targets();
+  }
+
+  // target -> tests_count по уже загруженному дереву разделов (GET .../sections) —
+  // тот же источник, что у BuildPageLogic.totalTestsCount, только по отдельным файлам,
+  // а не по разделу целиком (см. RunLiveLogic.countTargetTests).
+  function testsCountByTarget() {
+    const map = {};
+    (sectionsDataCache.kinds || []).forEach((k) => {
+      (k.areas || []).forEach((a) => {
+        (a.files || []).forEach((f) => { map[f.target] = f.tests_count; });
+      });
+    });
+    return map;
+  }
+
+  // Галочка «Эфир» (docs/missions/2026-10-01_live_stream.md, «Уточнение владельца
+  // 01.10») — доступность и подсказка пересчитываются при любом изменении выбора
+  // тестов (дерево разделов, пресеты, ручной ввод), до отправки прогона.
+  function updateLiveCheckboxState() {
+    const count = RunLiveLogic.countTargetTests(currentTargetLines(), testsCountByTarget());
+    const state = RunLiveLogic.liveCheckboxState(count, liveMaxTests);
+    liveCheckbox.disabled = state.disabled;
+    if (state.disabled) liveCheckbox.checked = false;
+    liveCheckboxHint.hidden = !state.hint;
+    liveCheckboxHint.textContent = state.hint;
+    liveCheckboxHint.classList.toggle("limit-exceeded", state.disabled);
+  }
+
+  manualTargetInput.addEventListener("input", updateLiveCheckboxState);
+  sectionsTreeBox.addEventListener("change", (ev) => {
+    if (ev.target.matches("input.tree-check")) updateLiveCheckboxState();
+  });
+  sectionsPresetsRow.addEventListener("click", (ev) => {
+    if (ev.target.closest(".sections-preset-btn")) updateLiveCheckboxState();
+  });
+
   // ---------------- «Сборка тестов»: страница запуска по ?set=<area>#run ----------------
   // Раздел = второй уровень дерева tests/api|ui/<area>|tests/e2e, то же понятие, что у
   // GET .../sections (app/core/sections.py) — используем уже загруженные им данные вместо
@@ -864,8 +917,9 @@
     pill.textContent = status;
     pill.dataset.status = status;
     pill.className = `status-pill ${status}`;
-    // «Следить за прогоном» имеет смысл только пока прогон реально идёт (п.2 миссии).
-    runFollowToggle.hidden = status !== "running";
+    // «Следить за прогоном» имеет смысл только пока прогон реально идёт и только для
+    // прогонов с галочкой «Эфир» (п.2 миссии, «Уточнение владельца 01.10»).
+    runFollowToggle.hidden = status !== "running" || !currentRunLive;
   }
 
   runFollowCheckbox.addEventListener("change", () => {
@@ -988,6 +1042,7 @@
       test: t,
       runStatus: pill.dataset.status,
       liveNodeid: liveFrame ? liveFrame.nodeid : null,
+      runLive: currentRunLive,
     });
   }
 
@@ -1188,7 +1243,7 @@
     applyViewMode();
     if (selectedNodeid === msg.nodeid) updateWindowPill();
     // «Следить за прогоном» (п.2 миссии): стартовавший тест сам открывается в окне.
-    if (RunLiveLogic.shouldAutoSelectOnTestStart({ followEnabled, runStatus: pill.dataset.status })) {
+    if (RunLiveLogic.shouldAutoSelectOnTestStart({ followEnabled, runStatus: pill.dataset.status, runLive: currentRunLive })) {
       selectTest(msg.nodeid, { auto: true });
     }
   }
@@ -1328,6 +1383,7 @@
   async function refreshReport(runId) {
     try {
       const payload = await api(`/api/runs/${runId}/report`);
+      currentRunLive = Boolean(payload.live);
       setPill(payload.status);
       cancelBtn.hidden = user.role === "customer" || !["queued", "running"].includes(payload.status);
       runLabelBadge.hidden = !payload.label;
@@ -1355,6 +1411,7 @@
     reportSection.hidden = true;
     reportChart.hidden = true;
     reportChart.removeAttribute("src");
+    currentRunLive = false;
     setPill("queued");
     resetSplitState();
 
@@ -1405,13 +1462,13 @@
     }
   });
 
-  async function submitRun(target, label = null) {
+  async function submitRun(target, label = null, live = false) {
     runAllBtn.disabled = true;
     runSelectedBtn.disabled = true;
     try {
       const run = await api(`/api/projects/${encodeURIComponent(projectName)}/runs`, {
         method: "POST",
-        json: { stand: standSelect.value || null, target, marker: markerSelect.value || null, label },
+        json: { stand: standSelect.value || null, target, marker: markerSelect.value || null, label, live },
       });
       await openRun(run.id);
       await loadHistory();
@@ -1431,7 +1488,7 @@
       alert("Отметьте хотя бы один раздел/файл или заполните ручное поле.");
       return;
     }
-    submitRun(target, isBuildMode ? buildLabel : null);
+    submitRun(target, isBuildMode ? buildLabel : null, liveCheckbox.checked && !liveCheckbox.disabled);
   });
 
   // ---------------- шаринг отчёта ----------------
@@ -1843,6 +1900,7 @@
           <span>${fmtDuration(r.duration)}</span>
           <span>${escapeHtml(r.requested_by || "—")}</span>
           ${r.label ? `<span class="badge-manual">сборка: ${escapeHtml(r.label)}</span>` : ""}
+          ${r.live ? `<span class="badge-manual">эфир</span>` : ""}
         </div>
         ${runsFeedBarHtml(r)}
         <div class="runs-feed-actions">
@@ -2016,7 +2074,7 @@
             <td>${r.id}</td>
             <td class="status-text ${escapeHtml(r.status)}">${escapeHtml(r.status)}</td>
             <td>${escapeHtml(r.stand || "—")}${isManualStandRun(r.stand) ? `<span class="badge-manual">ручной</span>` : ""}</td>
-            <td>${r.target === "all" ? "всё" : "выборочно"}${r.label ? ` <span class="badge-manual">сборка: ${escapeHtml(r.label)}</span>` : ""}</td>
+            <td>${r.target === "all" ? "всё" : "выборочно"}${r.label ? ` <span class="badge-manual">сборка: ${escapeHtml(r.label)}</span>` : ""}${r.live ? ` <span class="badge-manual">эфир</span>` : ""}</td>
             <td>${fmtDate(r.started)}</td>
             <td>${fmtDuration(r.duration)}</td>
             <td>${escapeHtml(r.requested_by || "—")}</td>
@@ -2546,6 +2604,7 @@
   await loadStands();
   await loadSections();
   initBuildMode();
+  updateLiveCheckboxState();
   await Promise.all([loadHistory(), loadFlaky(), loadSchedules(), loadTestcases(), loadSentryCard(), loadBuildRuns()]);
 
   // Глубокая ссылка из суперадминки (admin_all.html): project.html?name=...&run=<id>
