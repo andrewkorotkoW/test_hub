@@ -60,6 +60,12 @@ class Settings:
     # (POST /api/runs/{id}/tests/{nodeid}/video, см. app/routers/runs.py) — лимит
     # размера одного файла, в мегабайтах (сравнивается как TH_VIDEO_MAX_MB * 1024 * 1024).
     TH_VIDEO_MAX_MB: int = int(os.getenv("TH_VIDEO_MAX_MB", "50"))
+
+    # Эфир (живая трансляция UI-теста, POST .../runs с live=true) разрешён, только
+    # если в прогоне не больше TH_LIVE_MAX_TESTS тестов (владелец, 01.10) — иначе
+    # поток кадров/подписчики WS не выдержат. Число тестов считается через
+    # runner.discover, как для дерева. Это же значение отдаётся фронту (GET /api/config).
+    TH_LIVE_MAX_TESTS: int = int(os.getenv("TH_LIVE_MAX_TESTS", "20"))
     # workspace/runs/<run_id>/video/<hash>.webm — рядом с FRAMES_DIR, но отдельная
     # ветка (кадры шагов и финальное видео теста не смешиваются на диске).
     VIDEO_DIR: Path = BASE_DIR / "workspace" / "runs"

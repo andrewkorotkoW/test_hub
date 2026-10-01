@@ -88,6 +88,7 @@ class RunCreate(BaseModel):
     repeat: int = Field(default=1, ge=1, le=20)
     confirm_manual: bool = False
     label: Optional[str] = None
+    live: bool = False
 
 
 class ShareLinkCreate(BaseModel):
