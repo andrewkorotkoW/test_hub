@@ -1,0 +1,107 @@
+# Миссия: блок «Тесты по областям» на дашборде проекта — вариант E (три колонки, как в «Светофоре»)
+
+Записано 02.10.2026 по решению владельца. Сейчас блок «Тесты по областям» на дашборде проекта
+(`project.html`, вкладка «Дашборд») показывает одно одинокое кольцо `tests/api (16/31)` —
+деление идёт только по виду (api/ui/e2e), без разбивки по областям, и выглядит некрасиво. Решено
+заменить на тот же визуальный приём, что уже одобрен и реализован на странице «Покрытие», вид
+«Светофор» (`docs/missions/2026-10-01_coverage_k_and_test_sets.md`, `ui/coverage-traffic-logic.js`,
+`.traffic-*` в `ui/style.css`): три колонки по состоянию. Макеты для сравнения и утверждённый
+вариант — `docs/missions/redesign/areas_v1/` (`mockups.html`, `areas-e-*.jpg` — утверждён;
+`areas-a/c/d-*.jpg` — отклонены/не выбраны, оставлены для истории).
+
+## Важно: это НЕ покрытие, это последний прогон — семантика серой колонки другая
+
+Источник данных другой: не дерево всех тестов проекта с инвентарём маршрутов (как у «Покрытия»),
+а просто список тестов **последнего прогона** (`report.tests` из `GET /api/runs/{id}/report`,
+уже загружается в `renderDashboard` → `latestTests`, см. `ui/project.js` вокруг
+`renderAreaRings(latestTests)`). Поэтому **нельзя** переиспользовать
+`CoverageTrafficLogic.sectionBucket`/`assignColumns` как есть: там серая колонка — это
+`total === 0` (файлов тестов вообще нет). Здесь область вроде `mts_link` or `p2p` имеет много
+тестов, но все `skipped` (каркас есть, флага `*_READY` нет) — такую область нужно класть в
+серую «Не покрыто», а не в жёлтую «Есть проблемы», иначе теряется смысл (см. макет
+`areas-e-dark.jpg`: «Не покрыто» — МТС Линк, Взаимопроверка ПЗ, БУК, ЛПД, а не вперемешку с
+реальными частичными провалами). Писать отдельную маленькую функцию классификации под эту
+семантику (правило ниже), не трогать и не обобщать `coverage-traffic-logic.js` — он уже
+используется страницей «Покрытие», менять его семантику ради другого потребителя рискованно.
+
+## Этап 1. Новый модуль `ui/dashboard-areas-logic.js` (чистая логика, без DOM)
+
+По образцу уже существующих модулей (`ui/run-live-logic.js`, `ui/build-page-logic.js`,
+`ui/coverage-traffic-logic.js`) — IIFE с `module.exports` для node, `window.DashboardAreasLogic`
+для браузера; тесты в `tests/js/test_dashboard_areas_logic.js` + python-обёртка
+`tests/test_dashboard_areas_logic_js.py` (скопировать паттерн вызова node с существующего
+`tests/test_run_live_logic_js.py` или аналога).
+
+Функция `buildAreaSections(tests)`:
+- Вход — массив тестов последнего прогона, как в `report.tests`: `{name, status, duration, ...}`
+  (`name` — точечный allure fullName, `"tests.ui.onboarding.test_x.TestX#test_y"`, тот же формат,
+  что уже разбирает `areaKindFromFullName` в `project.js`).
+- Разбор имени: `parts = name.split("#")[0].split(".")`. `kind = parts[1]` (api/ui/e2e/other).
+  Для `kind === "e2e"` — один синтетический раздел, ключ `"__e2e__"`, подпись «Сквозные
+  сценарии» (та же константа/подход, что `E2E_SECTION_KEY`/`E2E_SECTION_LABEL` в
+  `coverage-traffic-logic.js` — можно буквально скопировать два имени, не require целый модуль).
+  Для `kind === "api"`/`"ui"` — область `parts[2]` (если есть), иначе `kind` (тест прямо в
+  `tests/api/test_x.py` без подпапки). `kind === "other"` — пропускать (не на одном дереве).
+- Статусы считать так же, как `renderAreaRings` сейчас: `passed`, `failed` (включает `broken`),
+  `xfail` (значение `xfailed`), `skipped` (включает `skipped`; `running`/прочее — тоже в
+  `skipped`, не заводить отдельную корзину ради одного живого теста на экране дашборда).
+- На выходе на каждую область: `{ key, label, total, passed, failed, xfail, skipped, api, ui,
+  e2e }` (`api`/`ui`/`e2e` — сколько тестов этой области каждого вида, для подписи в карточке,
+  как `"API 49 · UI 34"` в макете).
+
+Функция `classifySection(section)` (решает, в какую из трёх колонок попадает область):
+```
+if (section.failed > 0) return "red";
+if (section.passed === 0) return "grey";
+if (section.skipped > 0 || section.xfail > 0) return "yellow";
+return "green";
+```
+Группы фиксированные три: `green` → «Покрыто и проходит», `red`+`yellow` → «Есть проблемы»
+(красные внутри первыми, дальше как в исходном порядке), `grey` → «Не покрыто». Сортировка
+внутри каждой группы — по убыванию `total` (как в макете).
+
+Функция `sectionHref(projectName, section)` — `"project.html?name=" + encodeURIComponent(projectName)
++ "&set=" + encodeURIComponent(section.key) + "#run"` (тот же урл, что уже открывает страницу
+сборки, миссия 8762067a/`build-page-logic.js`; для `section.key === "__e2e__"` сборки нет — такая
+карточка не кликабельна, курсор обычный, как у пустых разделов на «Покрытии»).
+
+## Этап 2. Разметка и стили — переиспользовать `.traffic-*` из `ui/style.css`
+
+`ui/project.html`: в блоке `#area-rings-box` заменить `<h3>Тесты по областям</h3>
+<div id="area-rings-row" class="chart-rings-row">…</div>` на структуру по образцу
+`#traffic-columns`/`.traffic-column`/`.traffic-card` со страницы `coverage.html` (три `<div
+class="traffic-column">` с `<h3>` и счётчиком, внутри `.traffic-column-body` с карточками
+`.traffic-card` — скопировать разметку, не изобретать новую). Классы `.traffic-*` уже есть в
+`ui/style.css` (секция «покрытие: вид «Светофор»», ищется по `.traffic-columns`) — **не
+дублировать CSS**, только, если не хватает варианта стиля для подписи "API N · UI M" в карточке
+(в текущих `.traffic-card-sub` используется для процента — проверить, подходит ли, или добавить
+маленький модификатор). Добавить в `project.html` `<script src="dashboard-areas-logic.js">`
+рядом с остальными `*-logic.js` (после `build-page-logic.js`, до `project.js`).
+
+## Этап 3. Рендер в `ui/project.js`
+
+Заменить `renderAreaRings(tests)` на `renderAreaTrafficColumns(tests)`: вызывает
+`DashboardAreasLogic.buildAreaSections(tests)`, группирует через `classifySection`, рендерит
+карточки (точка-индикатор цвета, название, подпись `api/ui` счётчиком, дробь `passed/total`
+справа — как в `areas-e-dark.jpg`), вешает клик на некликабельные (`"__e2e__"`) не навешивать.
+Если `tests` пуст — то же сообщение, что сейчас («Нет данных последнего прогона»). Вызов в
+`renderDashboard` заменить на `renderAreaTrafficColumns(latestTests)` (было
+`renderAreaRings(latestTests)`). Старую `renderAreaRings`/`areaKindFromFullName` в project.js
+удалить, если нигде больше не используются (проверить — `areaKindFromFullName` может быть нужна
+только этой функции).
+
+## Проверки
+
+- Юнит-тесты модуля: разбор `name` на kind/область (api/ui/e2e/other), синтетический e2e-раздел,
+  правило трёх цветов (красный/жёлтый/зелёный/серый) на граничных случаях (всё skipped → grey;
+  один failed среди passed → red; xfail без failed → yellow; все passed → green; пустой список),
+  сортировка внутри колонки, `sectionHref` для обычной и e2e-области.
+- Ручная проверка на проекте VSHGU (прогон с данными есть, например #52): три колонки, числа
+  сходятся с `GET /api/runs/52/tests` (405 тестов, разбивка по областям — см. отчёт
+  `qa_analysis/cases/develop_run52_2026-10-01/` для сверки, если нужно). Клик по карточке с
+  тестами открывает сборку, клик по «Сквозные сценарии» ничего не делает. Обе темы (тёмная/
+  светлая), страница не разъезжается при длинной колонке «Есть проблемы» (скролл внутри колонки,
+  как на «Покрытии» — `.traffic-column-body` уже должен иметь `overflow`, проверить).
+- `pytest -q` зелёный, README не трогать (новых env-переменных нет).
+
+Сервер после merge перезапускает владелец.

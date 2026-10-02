@@ -1,0 +1,179 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Тесты по областям — макеты v1</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+/* Токены — только из DESIGN.md (корень репозитория test_hub), без приблизительных значений. */
+:root{
+  --bg:#0f1223; --bg-sidebar:#151a2e; --surface:#1b2036; --surface-hover:#232945; --border:#262c47;
+  --text:#e7e9f5; --text-muted:#9298b8;
+  --accent:#14b8a6; --accent-text:#12141f;
+  --passed:#22c55e; --failed:#ff4d6d; --broken:#f59e0b; --skipped:#8b93a7; --xfail:#f5b642;
+  --grad-start:#7c5cff; --grad-mid:#ff4fa3; --grad-end:#38d6ff;
+  --shadow:0 8px 24px rgba(0,0,0,.35);
+  --font:"Golos Text",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --r-sm:6px; --r-md:8px; --r-lg:10px; --r-card:16px; --r-pill:999px;
+  --sp-xs:4px; --sp-sm:8px; --sp-md:12px; --sp-lg:16px; --sp-xl:22px; --sp-xxl:28px;
+}
+:root[data-theme="light"]{
+  --bg:#f5f6f8; --bg-sidebar:#ffffff; --surface:#ffffff; --surface-hover:#f3f4f6; --border:#e1e4e9;
+  --text:#1f2430; --text-muted:#6b7280;
+  --shadow:0 1px 3px rgba(15,23,42,.08);
+}
+*{box-sizing:border-box}
+html{background:var(--bg)}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;line-height:1.45}
+h1,h2,h3{margin:0}
+.num,code,.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.eyebrow{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);font-weight:600}
+
+/* ---------- панель управления макетами ---------- */
+.ctl{position:sticky;top:0;z-index:20;background:var(--surface);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+.ctl .title{font-weight:700;font-size:15px;margin-right:auto}
+.ctl .title small{display:block;font-weight:400;color:var(--text-muted);font-size:12px;margin-top:2px}
+.tabs{display:flex;gap:4px;background:var(--surface-hover);padding:4px;border-radius:var(--r-md)}
+.tabs button{border:0;background:transparent;color:var(--text-muted);font:inherit;font-weight:600;padding:7px 12px;border-radius:var(--r-sm);cursor:pointer}
+.tabs button[aria-current="true"]{background:var(--accent);color:var(--accent-text)}
+.tabs button:focus-visible,.ctl button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.theme-btn{border:1px solid var(--border);background:var(--surface);color:var(--text);font:inherit;padding:7px 12px;border-radius:var(--r-md);cursor:pointer}
+.swatches{display:flex;gap:6px;align-items:center}
+.swatches span{font-size:12px;color:var(--text-muted);margin-right:2px}
+.swatches button{width:20px;height:20px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0}
+.swatches button[aria-pressed="true"]{border-color:var(--text);box-shadow:0 0 0 2px var(--surface)}
+
+.variant{display:block;padding:26px 20px 40px;scroll-margin-top:64px}
+.variant+.variant{border-top:1px dashed var(--border)}
+.mock{max-width:1440px;margin:0 auto}
+.mock-head{display:flex;justify-content:space-between;align-items:baseline;gap:20px;margin:0 0 14px}
+.mock-head h2{font-size:18px;font-weight:700}
+.mock-head p{margin:0;color:var(--text-muted);max-width:70ch;font-size:13px}
+.frame{background:var(--bg);border:1px solid var(--border);border-radius:18px;overflow:hidden;box-shadow:var(--shadow)}
+
+/* ---------- шапка проекта + вкладки (по образцу ui/project.html) ---------- */
+.color-dot{width:14px;height:14px;border-radius:50%;background:var(--accent);display:inline-block;vertical-align:middle;border:2px solid var(--surface);box-shadow:0 0 0 1px var(--border)}
+.phead{display:flex;align-items:center;gap:12px;padding:16px 20px 0;background:var(--surface)}
+.phead h1{font-size:22px;font-weight:700}
+.ptabs{display:flex;gap:4px;padding:0 20px;border-bottom:1px solid var(--border);background:var(--surface)}
+.ptabs a{padding:12px 14px;color:var(--text-muted);text-decoration:none;font-weight:600;font-size:14px;border-bottom:2px solid transparent}
+.ptabs a.active{color:var(--accent);border-bottom-color:var(--accent)}
+
+/* ---------- общие элементы ---------- */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-card);padding:16px 18px}
+.cov-body{padding:18px 20px 24px;background:var(--bg)}
+.eyebrow-card{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);font-weight:600;margin-bottom:12px}
+.status-dot{width:7px;height:7px;border-radius:50%;display:inline-block;flex:0 0 auto}
+.status-dot.passed{background:var(--passed)}
+.status-dot.failed{background:var(--failed)}
+.status-dot.broken{background:var(--broken)}
+.status-dot.xfail{background:var(--xfail)}
+.status-dot.skipped{background:var(--skipped)}
+.status-dot.not_executed,.status-dot.not_covered,.status-dot.none{background:var(--text-muted);opacity:.5}
+
+
+.frame{padding:22px 24px;max-width:1040px}
+.card-title{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);font-weight:700;margin-bottom:14px}
+.card-sub{font-size:12px;color:var(--text-muted);margin:-8px 0 14px}
+/* A — полосы */
+.bars{display:grid;grid-template-columns:190px 1fr 64px;row-gap:9px;column-gap:12px;align-items:center}
+.bar-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar-name small{display:block;font-weight:400;color:var(--text-muted);font-size:11px}
+.bar{display:flex;height:16px;border-radius:var(--r-pill);overflow:hidden;background:var(--surface-hover)}
+.bar span{height:100%}
+.seg-passed{background:var(--passed)} .seg-failed{background:var(--failed)} .seg-xfail{background:var(--xfail)} .seg-skipped{background:var(--skipped);opacity:.55}
+.bar-count{font-family:var(--mono);font-size:12px;color:var(--text-muted);text-align:right}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--text-muted);margin-top:14px} .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+/* B — плитки-кольца */
+.rings{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}
+.rtile{background:var(--surface-hover);border:1px solid var(--border);border-radius:var(--r-lg);padding:10px 8px;display:flex;flex-direction:column;align-items:center;gap:6px}
+.rtile .rw{position:relative;width:54px;height:54px} .rtile .rv{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:12px;font-weight:700}
+.rtile .rn{font-size:11.5px;font-weight:600;text-align:center;line-height:1.2} .rtile .rs{font-size:10.5px;color:var(--text-muted);font-family:var(--mono)}
+.rtile.grey{opacity:.6}
+/* C — treemap */
+.tm{position:relative;height:420px;border-radius:var(--r-lg);overflow:hidden}
+.tm .t{position:absolute;box-sizing:border-box;border:2px solid var(--bg);border-radius:6px;padding:6px 8px;overflow:hidden;color:#fff;font-weight:600;font-size:12.5px;line-height:1.2}
+.tm .t small{display:block;font-weight:500;opacity:.85;font-family:var(--mono);font-size:10.5px;margin-top:2px}
+.st-green{background:color-mix(in srgb,var(--passed) 78%,var(--surface))} .st-yellow{background:color-mix(in srgb,var(--xfail) 78%,var(--surface))} .st-red{background:color-mix(in srgb,var(--failed) 80%,var(--surface))} .st-grey{background:color-mix(in srgb,var(--skipped) 60%,var(--surface))}
+
+/* D — плотный список-таблица */
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{text-align:left;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);font-weight:700;padding:6px 10px;border-bottom:1px solid var(--border)}
+.tbl td{padding:7px 10px;border-bottom:1px solid color-mix(in srgb, var(--border) 55%, transparent);vertical-align:middle}
+.tbl tr:hover td{background:var(--surface-hover)}
+.tbl .nm{font-weight:600;white-space:nowrap}
+.tbl .nm small{display:block;font-weight:400;color:var(--text-muted);font-size:10.5px}
+.tbl .mini-bar{display:flex;height:8px;border-radius:var(--r-pill);overflow:hidden;background:var(--surface-hover);width:140px}
+.tbl .mini-bar span{height:100%}
+.tbl .cnt{font-family:var(--mono);color:var(--text-muted);text-align:right;white-space:nowrap}
+.tbl .dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:7px;flex:0 0 auto}
+/* E — группы как в «Светофоре» */
+.g-cols{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.g-col{background:var(--surface-hover);border:1px solid var(--border);border-radius:var(--r-lg);padding:12px 12px 8px;display:flex;flex-direction:column;min-height:0}
+.g-col-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.g-col-title{font-size:13px;font-weight:700;display:flex;align-items:center;gap:7px}
+.g-col-count{font-family:var(--mono);font-size:17px;font-weight:700}
+.g-list{display:flex;flex-direction:column;gap:6px;max-height:520px;overflow-y:auto}
+.gcard{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface);padding:7px 9px}
+.gcard .gc-name{font-size:12.5px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gcard .gc-cnt{font-size:11.5px;color:var(--text-muted);font-family:var(--mono)}
+
+</style></head><body>
+<div class="ctl"><div class="title">test_hub · блок «Тесты по областям» (дашборд проекта), v1<small>3 варианта · реальные данные прогона #52 (develop, 01.10.2026), 31 область</small></div><button class="theme-btn" id="theme">Тема: тёмная</button></div>
+<section class="variant" id="va"><div class="mock"><div class="mock-head"><h2>Вариант A · Полосы по областям</h2><p>Одна полоса на область: зелёный — прошли, красный — упали, жёлтый — известные дефекты, серый — пропущены. Отсортировано по числу тестов. Клик по строке — страница сборки этой области. Без колец и процентов — видно и объём, и состояние.</p></div>
+<div class="frame card"><div class="card-title">Тесты по областям</div><div class="card-sub">последний прогон #52 · develop · 405 тестов</div><div class="bars" id="bars"></div><div class="legend"><span><i style="background:var(--passed)"></i>прошли</span><span><i style="background:var(--failed)"></i>упали</span><span><i style="background:var(--xfail)"></i>известные дефекты</span><span><i style="background:var(--skipped)"></i>пропущены</span></div></div></div></section>
+<section class="variant" id="vb"><div class="mock"><div class="mock-head"><h2>Вариант B · Плитки с кольцами</h2><p>Как ряд колец в «Светофоре», но по всем областям: кольцо — доля прошедших среди исполненных, цвет — светофор. Области, где всё пропущено, приглушены. Компактно, но много одинаковых кружков.</p></div>
+<div class="frame card"><div class="card-title">Тесты по областям</div><div class="rings" id="rings"></div></div></div></section>
+<section class="variant" id="vc"><div class="mock"><div class="mock-head"><h2>Вариант C · Карта плиток (treemap)</h2><p>Площадь плитки — число тестов, цвет — состояние области (зелёный все прошли, жёлтый есть пропуски/дефекты, красный есть падения, серый не запускались). Крупное бросается в глаза, мелочь не мешает. Клик — сборка.</p></div>
+<div class="frame card"><div class="card-title">Тесты по областям</div><div class="tm" id="tm"></div></div></div></section>
+<section class="variant" id="vd"><div class="mock"><div class="mock-head"><h2>Вариант D · Плотный список-таблица</h2><p>Строка-таблица вместо толстой полосы: точка-индикатор состояния, название с разбивкой API/UI мелким шрифтом, тонкая мини-полоса (8px) и дробь справа. Ниже и спокойнее варианта A, читается как обычная таблица, строки кликабельны (переход на сборку).</p></div>
+<div class="frame card"><div class="card-title">Тесты по областям</div><div class="card-sub">последний прогон #52 · develop · 405 тестов</div>
+<table class="tbl"><thead><tr><th>Область</th><th>Статус</th><th style="text-align:right">Тестов</th></tr></thead><tbody id="tbl-body"></tbody></table>
+<div class="legend"><span><i style="background:var(--passed)"></i>прошли</span><span><i style="background:var(--failed)"></i>упали</span><span><i style="background:var(--xfail)"></i>известные дефекты</span><span><i style="background:var(--skipped)"></i>пропущены</span></div>
+</div></div></section>
+<section class="variant" id="ve"><div class="mock"><div class="mock-head"><h2>Вариант E · Три колонки, как в «Светофоре»</h2><p>Тот же приём, что на странице «Покрытие»: области разложены по трём колонкам — «Есть падения», «Есть дефекты/пропуски», «Полностью зелёные». Внутри карточки с числом тестов, без лишних графиков. Знакомый паттерн, но для дашборда проекта, а не для покрытия.</p></div>
+<div class="frame card"><div class="card-title">Тесты по областям</div><div class="g-cols" id="g-cols"></div></div></div></section>
+
+<script id="d" type="application/json">{"rows": [{"area": "mts_link", "total": 83, "passed": 0, "failed": 0, "skipped": 83, "xfailed": 0, "api": 49, "ui": 34, "e2e": 0}, {"area": "p2p", "total": 46, "passed": 0, "failed": 0, "skipped": 46, "xfailed": 0, "api": 36, "ui": 10, "e2e": 0}, {"area": "dictionaries", "total": 34, "passed": 30, "failed": 0, "skipped": 4, "xfailed": 0, "api": 29, "ui": 5, "e2e": 0}, {"area": "programs", "total": 28, "passed": 26, "failed": 0, "skipped": 2, "xfailed": 0, "api": 28, "ui": 0, "e2e": 0}, {"area": "knowledge_base", "total": 26, "passed": 23, "failed": 3, "skipped": 0, "xfailed": 0, "api": 1, "ui": 25, "e2e": 0}, {"area": "notifications", "total": 24, "passed": 19, "failed": 0, "skipped": 5, "xfailed": 0, "api": 22, "ui": 2, "e2e": 0}, {"area": "buk", "total": 22, "passed": 0, "failed": 0, "skipped": 22, "xfailed": 0, "api": 15, "ui": 7, "e2e": 0}, {"area": "users", "total": 21, "passed": 21, "failed": 0, "skipped": 0, "xfailed": 0, "api": 12, "ui": 9, "e2e": 0}, {"area": "cas", "total": 20, "passed": 18, "failed": 2, "skipped": 0, "xfailed": 0, "api": 15, "ui": 5, "e2e": 0}, {"area": "test_constructor", "total": 19, "passed": 17, "failed": 2, "skipped": 0, "xfailed": 0, "api": 0, "ui": 19, "e2e": 0}, {"area": "e2e", "total": 18, "passed": 3, "failed": 0, "skipped": 15, "xfailed": 0, "api": 3, "ui": 0, "e2e": 15}, {"area": "create_activity", "total": 17, "passed": 12, "failed": 0, "skipped": 5, "xfailed": 0, "api": 17, "ui": 0, "e2e": 0}, {"area": "learning_statistics", "total": 16, "passed": 13, "failed": 0, "skipped": 3, "xfailed": 0, "api": 2, "ui": 14, "e2e": 0}, {"area": "tickets", "total": 12, "passed": 8, "failed": 0, "skipped": 4, "xfailed": 0, "api": 11, "ui": 1, "e2e": 0}, {"area": "practical_tasks", "total": 11, "passed": 10, "failed": 0, "skipped": 1, "xfailed": 0, "api": 0, "ui": 11, "e2e": 0}, {"area": "onboarding", "total": 9, "passed": 6, "failed": 0, "skipped": 3, "xfailed": 0, "api": 1, "ui": 8, "e2e": 0}, {"area": "alpina_and_mif", "total": 6, "passed": 4, "failed": 0, "skipped": 2, "xfailed": 0, "api": 4, "ui": 2, "e2e": 0}, {"area": "certificates", "total": 4, "passed": 4, "failed": 0, "skipped": 0, "xfailed": 0, "api": 4, "ui": 0, "e2e": 0}, {"area": "courses", "total": 4, "passed": 0, "failed": 2, "skipped": 2, "xfailed": 0, "api": 0, "ui": 4, "e2e": 0}, {"area": "aos", "total": 4, "passed": 3, "failed": 0, "skipped": 1, "xfailed": 0, "api": 2, "ui": 2, "e2e": 0}, {"area": "banner", "total": 3, "passed": 3, "failed": 0, "skipped": 0, "xfailed": 0, "api": 2, "ui": 1, "e2e": 0}, {"area": "proctoring", "total": 2, "passed": 2, "failed": 0, "skipped": 0, "xfailed": 0, "api": 1, "ui": 1, "e2e": 0}, {"area": "tests", "total": 2, "passed": 2, "failed": 0, "skipped": 0, "xfailed": 0, "api": 1, "ui": 1, "e2e": 0}, {"area": "game_session", "total": 2, "passed": 2, "failed": 0, "skipped": 0, "xfailed": 0, "api": 0, "ui": 2, "e2e": 0}, {"area": "test_health", "total": 2, "passed": 2, "failed": 0, "skipped": 0, "xfailed": 0, "api": 2, "ui": 0, "e2e": 0}, {"area": "polls", "total": 2, "passed": 2, "failed": 0, "skipped": 0, "xfailed": 0, "api": 1, "ui": 1, "e2e": 0}, {"area": "test_user_lpd_flow", "total": 1, "passed": 0, "failed": 0, "skipped": 1, "xfailed": 0, "api": 0, "ui": 1, "e2e": 0}, {"area": "test_user_lpd_stream_flow", "total": 1, "passed": 0, "failed": 0, "skipped": 1, "xfailed": 0, "api": 0, "ui": 1, "e2e": 0}, {"area": "dashboards", "total": 1, "passed": 1, "failed": 0, "skipped": 0, "xfailed": 0, "api": 0, "ui": 1, "e2e": 0}, {"area": "streams", "total": 1, "passed": 1, "failed": 0, "skipped": 0, "xfailed": 0, "api": 1, "ui": 0, "e2e": 0}, {"area": "homework", "total": 1, "passed": 1, "failed": 0, "skipped": 0, "xfailed": 0, "api": 0, "ui": 1, "e2e": 0}], "ru": {"mts_link": "МТС Линк", "p2p": "Взаимопроверка ПЗ", "dictionaries": "Справочники", "programs": "Программы", "knowledge_base": "База знаний", "notifications": "Уведомления", "buk": "БУК", "users": "Пользователи", "cas": "КАС", "test_constructor": "Конструктор тестов", "e2e": "Сквозные сценарии", "create_activity": "Создание активности", "learning_statistics": "Статистика обучения", "tickets": "Техподдержка", "practical_tasks": "Практические задания", "onboarding": "Онбординг", "alpina_and_mif": "Альпина и МИФ", "certificates": "Сертификаты", "courses": "Курсы", "aos": "АОС", "banner": "Баннеры", "proctoring": "Прокторинг", "tests": "Тесты", "game_session": "Игровые сессии", "test_health": "Health", "polls": "Опросы", "test_user_lpd_flow": "ЛПД", "test_user_lpd_stream_flow": "ЛПД (поток)", "dashboards": "Дашборды", "streams": "Потоки"}}</script>
+<script>
+;(function(){const D=JSON.parse(document.getElementById('d').textContent);const rows=D.rows,RU=D.ru;const name=r=>RU[r.area]||r.area;
+const max=Math.max(...rows.map(r=>r.total));
+document.getElementById('bars').innerHTML=rows.map(r=>{const w=p=>(p/r.total*100).toFixed(1)+'%';const sub=[r.api?'API '+r.api:'',r.ui?'UI '+r.ui:'',r.e2e?'E2E '+r.e2e:''].filter(Boolean).join(' · ');
+return `<div class="bar-name" title="${r.area}">${name(r)}<small>${sub}</small></div><div class="bar" style="width:${(r.total/max*100).toFixed(1)}%"><span class="seg-passed" style="width:${w(r.passed)}"></span><span class="seg-failed" style="width:${w(r.failed)}"></span><span class="seg-xfail" style="width:${w(r.xfailed)}"></span><span class="seg-skipped" style="width:${w(r.skipped)}"></span></div><div class="bar-count">${r.passed}/${r.total}</div>`}).join('');
+function ring(p,size,st,color){const r=(size-st)/2,off=100-Math.max(0,Math.min(100,p));return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="var(--border)" stroke-width="${st}"/><circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="${color}" stroke-width="${st}" stroke-linecap="round" pathLength="100" stroke-dasharray="100" stroke-dashoffset="${off}" transform="rotate(-90 ${size/2} ${size/2})"/></svg>`}
+function status(r){if(r.failed)return'red';if(r.passed===0)return'grey';if(r.skipped||r.xfailed)return'yellow';return'green'}
+const col={green:'var(--passed)',yellow:'var(--xfail)',red:'var(--failed)',grey:'var(--skipped)'};
+document.getElementById('rings').innerHTML=rows.map(r=>{const ex=r.passed+r.failed;const p=ex?Math.round(r.passed/ex*100):0;const s=status(r);return `<div class="rtile ${s==='grey'?'grey':''}"><div class="rw">${ring(p,54,7,col[s])}<div class="rv">${ex?p+'%':'—'}</div></div><div class="rn">${name(r)}</div><div class="rs">${r.passed}/${r.total}</div></div>`}).join('');
+// squarified treemap (Bruls et al.)
+function squarify(data,x,y,w,h){const out=[];let items=data.slice().sort((a,b)=>b.v-a.v);const total=items.reduce((a,b)=>a+b.v,0);const scale=w*h/total;items=items.map(i=>({...i,a:i.v*scale}));
+function worst(row,len){const s=row.reduce((a,b)=>a+b.a,0);const mx=Math.max(...row.map(i=>i.a)),mn=Math.min(...row.map(i=>i.a));return Math.max(len*len*mx/(s*s),s*s/(len*len*mn))}
+let cx=x,cy=y,cw=w,ch=h,row=[];
+function flush(){const s=row.reduce((a,b)=>a+b.a,0);if(cw>=ch){const rw=s/ch;let yy=cy;row.forEach(i=>{const ih=i.a/rw;out.push({...i,x:cx,y:yy,w:rw,h:ih});yy+=ih});cx+=rw;cw-=rw}else{const rh=s/cw;let xx=cx;row.forEach(i=>{const iw=i.a/rh;out.push({...i,x:xx,y:cy,w:iw,h:rh});xx+=iw});cy+=rh;ch-=rh}row=[]}
+items.forEach(it=>{const len=Math.min(cw,ch);if(row.length&&worst(row.concat([it]),len)>worst(row,len)){flush()}row.push(it)});if(row.length)flush();return out}
+const W=990,H=420;const out=squarify(rows.map(r=>({r,v:r.total})),0,0,W,H);
+document.getElementById('tm').innerHTML=out.map(t=>`<div class="t st-${status(t.r)}" style="left:${t.x}px;top:${t.y}px;width:${t.w}px;height:${t.h}px" title="${name(t.r)}: ${t.r.passed}/${t.r.total}">${t.w>70&&t.h>26?name(t.r):''}${t.w>90&&t.h>40?`<small>${t.r.passed}/${t.r.total}</small>`:''}</div>`).join('');
+
+// D — таблица
+function statusDot(r){const s=status(r);return `<span class="dot" style="background:${col[s]}"></span>`}
+document.getElementById('tbl-body').innerHTML = rows.map(r=>{
+  const w=p=>(p/r.total*100).toFixed(1)+'%';
+  const sub=[r.api?'API '+r.api:'',r.ui?'UI '+r.ui:'',r.e2e?'E2E '+r.e2e:''].filter(Boolean).join(' · ');
+  return `<tr><td><div class="nm">${name(r)}<small>${sub}</small></div></td>
+  <td>${statusDot(r)}<div class="mini-bar"><span style="background:var(--passed);width:${w(r.passed)}"></span><span style="background:var(--failed);width:${w(r.failed)}"></span><span style="background:var(--xfail);width:${w(r.xfailed)}"></span><span style="background:var(--skipped);opacity:.55;width:${w(r.skipped)}"></span></div></td>
+  <td class="cnt">${r.passed}/${r.total}</td></tr>`;
+}).join('');
+// E — три колонки
+const GROUPS=[
+  {key:'green',title:'Покрыто и проходит',statuses:['green']},
+  {key:'problem',title:'Есть проблемы',statuses:['red','yellow']},
+  {key:'grey',title:'Не покрыто',statuses:['grey']},
+];
+const byStatus={red:[],yellow:[],green:[],grey:[]};
+rows.forEach(r=>byStatus[status(r)].push(r));
+document.getElementById('g-cols').innerHTML = GROUPS.map(g=>{
+  let list=[]; g.statuses.forEach(st=>list=list.concat(byStatus[st]));
+  list=list.sort((a,b)=>{const pr={red:0,yellow:1,green:2,grey:3};return pr[status(a)]-pr[status(b)]||b.total-a.total});
+  const cards=list.map(r=>`<div class="gcard"><span class="dot" style="background:${col[status(r)]}"></span><span class="gc-name">${name(r)}</span><span class="gc-cnt">${r.passed}/${r.total}</span></div>`).join('');
+  const dotColor = g.key==='problem' ? col.yellow : col[g.key];
+  return `<div class="g-col"><div class="g-col-head"><span class="g-col-title"><span class="dot" style="background:${dotColor}"></span>${g.title}</span><span class="g-col-count">${list.length}</span></div><div class="g-list">${cards}</div></div>`;
+}).join('');
+const root=document.documentElement;function setTheme(t){root.setAttribute('data-theme',t);document.getElementById('theme').textContent='Тема: '+(t==='light'?'светлая':'тёмная')}
+document.getElementById('theme').addEventListener('click',()=>setTheme(root.getAttribute('data-theme')==='light'?'dark':'light'));setTheme(new URLSearchParams(location.search).get('theme')||'dark');})();
+</script></body></html>
