@@ -175,7 +175,7 @@ async def test_project_html_chart_and_list_ids_present_exactly_once(client):
     ids = [
         "status-donut-chart",
         "status-donut-center",
-        "area-rings-row",
+        "area-traffic-columns",
         "passfail-bar-chart",
         "duration-area-chart",
         "longest-tests-list",
