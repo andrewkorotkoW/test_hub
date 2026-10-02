@@ -59,7 +59,20 @@
           </div>
           <div class="chart-box" id="area-rings-box">
             <h3>Тесты по областям</h3>
-            <div id="area-rings-row" class="chart-rings-row"><p class="muted">Загрузка…</p></div>
+            <div class="traffic-columns" id="area-traffic-columns">
+              <div class="traffic-column">
+                <h3>Покрыто и проходит <span class="muted" id="area-traffic-count-ok"></span></h3>
+                <div class="traffic-column-body" id="area-traffic-col-ok"><p class="muted">Загрузка…</p></div>
+              </div>
+              <div class="traffic-column">
+                <h3>Есть проблемы <span class="muted" id="area-traffic-count-problems"></span></h3>
+                <div class="traffic-column-body" id="area-traffic-col-problems"></div>
+              </div>
+              <div class="traffic-column">
+                <h3>Не покрыто <span class="muted" id="area-traffic-count-empty"></span></h3>
+                <div class="traffic-column-body" id="area-traffic-col-empty"></div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -473,6 +486,7 @@
   <script src="sections-tree-logic.js"></script>
   <script src="testcases-logic.js"></script>
   <script src="build-page-logic.js"></script>
+  <script src="dashboard-areas-logic.js"></script>
   <script src="run-live-logic.js"></script>
   <script src="project.js"></script>
 </body>

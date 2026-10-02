@@ -983,6 +983,18 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 .traffic-card-title { flex: 1 1 auto; font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .traffic-card-sub { font-size: 12px; margin-top: 4px; }
 
+/* блок «Тесты по областям» на дашборде проекта (ui/project.js, renderAreaTrafficColumns) —
+   те же три колонки .traffic-column, что выше, но строки плоские, без рамки/фона карточки
+   (решение владельца 02.10: docs/missions/2026-10-02_dashboard_areas_traffic.md, этап 2). */
+.area-row { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--border); }
+.area-row:last-child { border-bottom: none; }
+.area-row.clickable { cursor: pointer; }
+.area-row.clickable:hover { background: var(--surface-hover); }
+.area-row-body { flex: 1 1 auto; min-width: 0; }
+.area-row-title { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.area-row-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.area-row-count { flex: 0 0 auto; font-size: 12px; color: var(--text-muted); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
 .pm-tip {
   position: fixed; z-index: 50; background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); box-shadow: var(--shadow-card); padding: 12px 14px; width: 270px;

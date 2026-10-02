@@ -1576,7 +1576,13 @@
   // GET .../runs (история, DESC по id), GET .../flaky, GET .../xfail, GET /api/runs/{id}/report.
   const dashboardError = document.getElementById("dashboard-error");
   const kpiRow = document.getElementById("kpi-row");
-  const areaRingsRow = document.getElementById("area-rings-row");
+  const areaTrafficColOk = document.getElementById("area-traffic-col-ok");
+  const areaTrafficColProblems = document.getElementById("area-traffic-col-problems");
+  const areaTrafficColEmpty = document.getElementById("area-traffic-col-empty");
+  const areaTrafficCountOk = document.getElementById("area-traffic-count-ok");
+  const areaTrafficCountProblems = document.getElementById("area-traffic-count-problems");
+  const areaTrafficCountEmpty = document.getElementById("area-traffic-count-empty");
+  const areaTrafficColumns = document.getElementById("area-traffic-columns");
   const longestTestsList = document.getElementById("longest-tests-list");
   const runsFeedBox = document.getElementById("runs-feed");
   const DASH_SPARK_N = 10;
@@ -1809,50 +1815,70 @@
     });
   }
 
-  const AREA_KIND_LABELS = { api: "tests/api", ui: "tests/ui", e2e: "e2e" };
-
-  // Тесты отчёта прогона хранят allure fullName (dot-путь + "#test", см.
-  // app/core/allure_report.py), а не nodeid со слэшами, поэтому дерево->область
-  // из ui/coverage-areas-logic.js (splitFilePath, слэши) сюда не подходит напрямую
-  // — минимальная своя разборка по конвенции tests.<api|ui|e2e>.<...>.
-  function areaKindFromFullName(name) {
-    const parts = String(name || "").split("#")[0].split(".");
-    for (let i = 0; i < parts.length; i++) {
-      if (parts[i] === "api" || parts[i] === "ui" || parts[i] === "e2e") return parts[i];
-    }
-    return "other";
+  // Блок «Тесты по областям» на дашборде — три колонки «Светофора» по данным
+  // последнего прогона (не дерево покрытия), см.
+  // docs/missions/2026-10-02_dashboard_areas_traffic.md, этапы 1-3 и
+  // ui/dashboard-areas-logic.js (разбор allure fullName, классификация, группировка).
+  function areaRowSubLabel(section) {
+    const parts = [];
+    if (section.api) parts.push(`API ${section.api}`);
+    if (section.ui) parts.push(`UI ${section.ui}`);
+    if (section.e2e) parts.push(`E2E ${section.e2e}`);
+    return parts.join(" · ");
   }
 
-  function renderAreaRings(tests) {
-    if (!tests || !tests.length) {
-      areaRingsRow.innerHTML = `<p class="muted">Нет данных последнего прогона.</p>`;
-      return;
-    }
-    const buckets = { api: { passed: 0, total: 0 }, ui: { passed: 0, total: 0 }, e2e: { passed: 0, total: 0 } };
-    tests.forEach((t) => {
-      const kind = areaKindFromFullName(t.name);
-      if (!buckets[kind]) return;
-      buckets[kind].total += 1;
-      if (t.status === "passed") buckets[kind].passed += 1;
-    });
-    const kinds = ["api", "ui", "e2e"].filter((k) => buckets[k].total > 0);
-    if (!kinds.length) {
-      areaRingsRow.innerHTML = `<p class="muted">Тесты вне tests/api, tests/ui, e2e не размечены по областям.</p>`;
-      return;
-    }
-    const colors = { api: "var(--gradient-start)", ui: "var(--gradient-mid)", e2e: "var(--gradient-end)" };
-    areaRingsRow.innerHTML = kinds.map((k) => {
-      const b = buckets[k];
-      const percent = b.total ? Math.round((b.passed / b.total) * 100) : null;
-      return `
-        <div class="chart-ring">
-          ${ringSvgAnimated(percent, colors[k])}
-          <div class="chart-ring-label">${escapeHtml(AREA_KIND_LABELS[k])} (${b.passed}/${b.total})</div>
+  function areaRowHtml(section) {
+    const color = DashboardAreasLogic.classifySection(section);
+    const href = DashboardAreasLogic.sectionHref(projectName, section);
+    return `
+      <div class="area-row${href ? " clickable" : ""}"
+           ${href ? `data-href="${escapeHtml(href)}" tabindex="0" role="link"` : ""}>
+        <span class="traffic-card-dot traffic-dot-${color}"></span>
+        <div class="area-row-body">
+          <div class="area-row-title">${escapeHtml(section.label)}</div>
+          <div class="area-row-sub">${escapeHtml(areaRowSubLabel(section))}</div>
         </div>
-      `;
-    }).join("");
-    animateRings(areaRingsRow);
+        <span class="area-row-count">${section.passed}/${section.total}</span>
+      </div>
+    `;
   }
+
+  function areaColumnHtml(sections) {
+    return sections.length ? sections.map(areaRowHtml).join("") : `<p class="muted">Пока пусто.</p>`;
+  }
+
+  function renderAreaTrafficColumns(tests) {
+    if (!tests || !tests.length) {
+      areaTrafficColOk.innerHTML = `<p class="muted">Нет данных последнего прогона.</p>`;
+      areaTrafficColProblems.innerHTML = "";
+      areaTrafficColEmpty.innerHTML = "";
+      areaTrafficCountOk.textContent = "";
+      areaTrafficCountProblems.textContent = "";
+      areaTrafficCountEmpty.textContent = "";
+      return;
+    }
+    const sections = DashboardAreasLogic.buildAreaSections(tests);
+    const columns = DashboardAreasLogic.groupSections(sections);
+    areaTrafficColOk.innerHTML = areaColumnHtml(columns.ok);
+    areaTrafficColProblems.innerHTML = areaColumnHtml(columns.problems);
+    areaTrafficColEmpty.innerHTML = areaColumnHtml(columns.uncovered);
+    areaTrafficCountOk.textContent = columns.ok.length;
+    areaTrafficCountProblems.textContent = columns.problems.length;
+    areaTrafficCountEmpty.textContent = columns.uncovered.length;
+  }
+
+  areaTrafficColumns.addEventListener("click", (ev) => {
+    const row = ev.target.closest(".area-row[data-href]");
+    if (!row) return;
+    window.location.href = row.dataset.href;
+  });
+  areaTrafficColumns.addEventListener("keydown", (ev) => {
+    if (ev.key !== "Enter" && ev.key !== " ") return;
+    const row = ev.target.closest(".area-row[data-href]");
+    if (!row) return;
+    ev.preventDefault();
+    window.location.href = row.dataset.href;
+  });
 
   function renderLongestTests(tests) {
     const withDuration = (tests || [])
@@ -1928,7 +1954,7 @@
   });
 
   // ---------------- известные дефекты (xfail) по областям ----------------
-  // xfail_registry.test — тот же allure fullName, что и в areaKindFromFullName выше;
+  // xfail_registry.test — тот же allure fullName, что разбирает DashboardAreasLogic выше;
   // область — сегмент после api/ui (копия app.core.stats._section_of_full_name без
   // префикса раздела, только сам подкаталог — см. пилюли в докс/missions redesign v2).
   function xfailAreaLabel(fullName) {
@@ -2053,7 +2079,7 @@
       } else {
         renderDonutChart(null);
       }
-      renderAreaRings(latestTests);
+      renderAreaTrafficColumns(latestTests);
       renderLongestTests(latestTests);
       renderRunsFeed(runs);
     } catch (err) {
