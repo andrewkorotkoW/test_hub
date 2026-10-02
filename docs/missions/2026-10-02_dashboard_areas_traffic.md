@@ -65,25 +65,36 @@ return "green";
 сборки, миссия 8762067a/`build-page-logic.js`; для `section.key === "__e2e__"` сборки нет — такая
 карточка не кликабельна, курсор обычный, как у пустых разделов на «Покрытии»).
 
-## Этап 2. Разметка и стили — переиспользовать `.traffic-*` из `ui/style.css`
+## Этап 2. Разметка и стили — колонки без рамок-карточек (уточнение владельца 02.10)
+
+Владелец дважды отверг стиль «рамка-карточка» на строку (вариант B с кольцами в плитках, затем
+карточки в E) — строки должны быть плоским списком внутри колонки, без фона/рамки на каждой,
+только разделительная линия и подсветка при наведении (как у строк таблицы, не как у плиток.
+Сравнить с вариантом D из макета: `docs/missions/redesign/areas_v1/areas-d-dark.jpg` — именно
+такая плотность строки, но без таблицы с заголовками, это просто список внутри колонки).
 
 `ui/project.html`: в блоке `#area-rings-box` заменить `<h3>Тесты по областям</h3>
-<div id="area-rings-row" class="chart-rings-row">…</div>` на структуру по образцу
-`#traffic-columns`/`.traffic-column`/`.traffic-card` со страницы `coverage.html` (три `<div
-class="traffic-column">` с `<h3>` и счётчиком, внутри `.traffic-column-body` с карточками
-`.traffic-card` — скопировать разметку, не изобретать новую). Классы `.traffic-*` уже есть в
-`ui/style.css` (секция «покрытие: вид «Светофор»», ищется по `.traffic-columns`) — **не
-дублировать CSS**, только, если не хватает варианта стиля для подписи "API N · UI M" в карточке
-(в текущих `.traffic-card-sub` используется для процента — проверить, подходит ли, или добавить
-маленький модификатор). Добавить в `project.html` `<script src="dashboard-areas-logic.js">`
-рядом с остальными `*-logic.js` (после `build-page-logic.js`, до `project.js`).
+<div id="area-rings-row" class="chart-rings-row">…</div>` на три `<div class="traffic-column">`
+(переиспользовать класс-контейнер колонки и `.traffic-column h3`/заголовок со счётчиком — они
+подходят без изменений) **с новым классом строки `.area-row` вместо `.traffic-card`** (строка
+без рамки/фона, только нижний бордер `1px solid var(--border)` на разделитель, `padding` по
+вертикали, `:hover` — `background: var(--surface-hover)`, `cursor: pointer` только если область
+кликабельна). Внутри строки: точка-индикатор цвета (переиспользовать
+`.traffic-card-dot`/`.traffic-dot-*` — это маленький кружок, не рамка, годится как есть), затем
+название, затем справа дробь `passed/total` (`font-family: var(--mono)`, `color:
+var(--text-muted)`). Новый класс `.area-row` добавить в `ui/style.css` рядом с `.traffic-*`
+(секция «покрытие: вид «Светофор»»); `.traffic-card`/`.traffic-card-sub`/`.traffic-card-head`
+саму не трогать — она по-прежнему нужна странице «Покрытие», это для неё отдельный новый класс,
+не замена. Добавить в `project.html` `<script src="dashboard-areas-logic.js">` рядом с
+остальными `*-logic.js` (после `build-page-logic.js`, до `project.js`).
 
 ## Этап 3. Рендер в `ui/project.js`
 
 Заменить `renderAreaRings(tests)` на `renderAreaTrafficColumns(tests)`: вызывает
 `DashboardAreasLogic.buildAreaSections(tests)`, группирует через `classifySection`, рендерит
-карточки (точка-индикатор цвета, название, подпись `api/ui` счётчиком, дробь `passed/total`
-справа — как в `areas-e-dark.jpg`), вешает клик на некликабельные (`"__e2e__"`) не навешивать.
+строки (точка-индикатор цвета, название, подпись `api/ui` счётчиком мелким шрифтом под
+названием, дробь `passed/total` справа) без рамки/фона — см. уточнение в этапе 2; клик вешать
+на все строки, кроме некликабельных (`"__e2e__"`).
 Если `tests` пуст — то же сообщение, что сейчас («Нет данных последнего прогона»). Вызов в
 `renderDashboard` заменить на `renderAreaTrafficColumns(latestTests)` (было
 `renderAreaRings(latestTests)`). Старую `renderAreaRings`/`areaKindFromFullName` в project.js
