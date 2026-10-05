@@ -57,7 +57,9 @@ TEMPLATE_FILE = "TEMPLATE.md"
 UPDATE_MARK = "<!-- обновить -->"
 
 HEADING_RE = re.compile(r"^### (TC-[A-Za-z0-9_]+-\d+)\s+(.+)$")
-CASE_ID_RE = re.compile(r"TC-[A-Z0-9]+-\d+")
+# Тот же алфавит, что у HEADING_RE: области вида TC-HELPDESK_GROUPS-001 (с «_») —
+# иначе ручной кейс без автотеста получает case_id=None и молча пропускается импортом.
+CASE_ID_RE = re.compile(r"TC-[A-Za-z0-9_]+-\d+")
 AUTOTEST_RE = re.compile(r"^-\s*Автотест:\s*(\S+)\s*$")
 META_RE = re.compile(r"^-\s*Приоритет:\s*(\S+)\s+Тип:\s*(\S+)\s+Роли:\s*(.*)$")
 PRECONDITION_RE = re.compile(r"^-\s*Предусловия:\s*(.*)$")

@@ -151,6 +151,23 @@ def test_parse_area_file_parses_requirement_line(tmp_path):
     assert cases[0]["case_id"] == "TC-REQ-1"
 
 
+def test_parse_area_file_case_id_allows_underscore_in_area(tmp_path):
+    """TC-HELPDESK_GROUPS-001: область с «_» (как TC-TEST_CONSTRUCTOR-… в auto_tests_vshgu).
+    Раньше CASE_ID_RE не допускала «_», и ручной кейс без автотеста терял case_id →
+    import_drafts его пропускал (05.10.2026, 15 из 48 кейсов helpdesk не импортировались)."""
+    md = tmp_path / "groups.md"
+    md.write_text(
+        "### TC-HELPDESK_GROUPS-001 Создание группы\n\n"
+        "- Приоритет: medium Тип: ui Роли: admin\n\n"
+        "| # | Шаг | Ожидаемый результат |\n|---|---|---|\n| 1 | Открыть «Группы» | Список |\n",
+        encoding="utf-8",
+    )
+    cases = test_cases.parse_area_file(md)
+    assert cases[0]["case_id"] == "TC-HELPDESK_GROUPS-001"
+    assert cases[0]["nodeid"] is None
+    assert test_cases._case_key(cases[0]) == "TC-HELPDESK_GROUPS-001"
+
+
 # ------------------------------------------------------------------ import_drafts(): upsert по (project, case_key)
 
 def test_import_drafts_imports_manual_cases_without_nodeid_too(db_path, vshgu_like_project_dir):
