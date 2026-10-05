@@ -112,24 +112,6 @@ function applyProjectColor(color) {
 
 // Рисует ряд из 9 точек палитры в container. editable=true — точки кликабельны
 // (вызывают onPick(hex)); иначе — просто индикатор текущего цвета.
-function renderColorPicker(container, { color, editable = false, onPick } = {}) {
-  if (!container) return;
-  container.innerHTML = PROJECT_COLOR_PALETTE.map((hex) => {
-    const active = hex === color ? " color-dot-active" : "";
-    const tag = editable ? "button" : "span";
-    const typeAttr = editable ? ' type="button"' : "";
-    return `<${tag}${typeAttr} class="color-dot${active}" style="background:${hex}" data-color="${hex}" title="${hex}" aria-label="${hex}"></${tag}>`;
-  }).join("");
-  if (editable && onPick) {
-    container.querySelectorAll(".color-dot").forEach((dot) => {
-      dot.addEventListener("click", (ev) => {
-        ev.preventDefault();
-        ev.stopPropagation();
-        onPick(dot.dataset.color);
-      });
-    });
-  }
-}
 
 // ---------- Chart.js: общие хелперы для площадных/столбчатых графиков ----------
 // Используются project.js (дашборд проекта) и stats.js (динамика по разделам) —

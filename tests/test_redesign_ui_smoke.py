@@ -201,7 +201,8 @@ async def test_project_html_coverage_and_xfail_links_are_nav_buttons(client):
     2026-10-05_dashboard_color_picker_and_nav_buttons.md, пункт 2."""
     resp = await client.get("/project.html")
     html = resp.text
-    assert re.search(r'<a[^>]+id="coverage-link"[^>]+class="nav-button"', html)
+    # «Покрытие» — заливкой (nav-button primary), «Известные дефекты» — контурная (nav-button)
+    assert re.search(r'<a[^>]+id="coverage-link"[^>]+class="nav-button primary"', html)
     assert re.search(r'<a[^>]+id="xfail-link"[^>]+class="nav-button"', html)
 
 
