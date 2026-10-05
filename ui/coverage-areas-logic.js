@@ -14,6 +14,12 @@
 (function (globalRoot) {
   "use strict";
 
+  // Карта русских подписей разделов живёт в sections-tree-logic.js (общая для
+  // дерева разделов на «Запуске»/«Расписаниях» и для этой страницы) — не дублируем.
+  var SectionsTreeLogic = (typeof module !== "undefined" && module.exports)
+    ? require("./sections-tree-logic.js")
+    : globalRoot.SectionsTreeLogic;
+
   // Цвета ячеек treemap и сегментов статус-полосы таблицы областей — фиксированы
   // постановкой задачи, держать в синхроне с --tm-* переменными в ui/style.css.
   var STATUS_COLORS = {
@@ -28,14 +34,10 @@
   var KIND_ORDER = ["api", "ui", "e2e"];
 
   // Русские подписи известных разделов (папка второго уровня tests/api|ui/<область>) —
-  // переиспользуются страницей «Покрытие: Светофор» (coverage-traffic-logic.js). Для
+  // переиспользуются страницей «Покрытие: Светофор» (coverage-traffic-logic.js) и
+  // деревом разделов на «Запуске»/«Расписаниях» (sections-tree-logic.js). Для
   // остальных папок — фоллбек на имя папки как есть, ничего не выдумываем.
-  var AREA_LABELS_RU = {
-    auth: "Авторизация",
-    catalog: "Каталог",
-    users: "Пользователи",
-    orders: "Заказы",
-  };
+  var AREA_LABELS_RU = SectionsTreeLogic.AREA_LABELS_RU;
 
   function statusKey(raw) {
     if (raw === "passed") return "passed";
