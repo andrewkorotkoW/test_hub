@@ -102,12 +102,128 @@
     return targets;
   }
 
+  // Русские подписи известных разделов (папка второго уровня tests/api|ui/<область>) —
+  // общая карта для дерева разделов («Запуск»/«Расписания») и страницы «Покрытие»
+  // (coverage-areas-logic.js переиспользует её же, не дублирует). Для остальных
+  // папок — фоллбек humanizeSnakeCase, ничего не выдумываем.
+  var AREA_LABELS_RU = {
+    auth: "Авторизация",
+    catalog: "Каталог",
+    users: "Пользователи",
+    orders: "Заказы",
+  };
+
+  // snake_case/kebab-case -> "Snake case": подчёркивания и дефисы в пробелы,
+  // заглавная первая буква, остальное без изменений (единообразно с AREA_LABELS_RU,
+  // где подписи — одно слово с заглавной буквы).
+  function humanizeSnakeCase(raw) {
+    var s = String(raw || "").replace(/[-_]+/g, " ").trim();
+    if (!s) return s;
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  }
+
+  // Человекочитаемое имя области (raw — area.area из дерева, например "notifications").
+  function areaLabel(raw) {
+    return AREA_LABELS_RU[raw] || humanizeSnakeCase(raw);
+  }
+
+  // Человекочитаемое имя файла: без пути (file.name может содержать вложенные
+  // подпапки области, см. app/core/sections.py::_scan_files), без префикса test_
+  // и суффикса .py. Оригинальное имя/путь — в title у label в разметке (DOM-код).
+  function fileLabel(rawName) {
+    var base = String(rawName || "");
+    var slashIdx = base.lastIndexOf("/");
+    if (slashIdx !== -1) base = base.slice(slashIdx + 1);
+    base = base.replace(/\.py$/, "").replace(/^test_/, "");
+    return humanizeSnakeCase(base);
+  }
+
+  function kindNodeKey(kindNode) {
+    return "kind:" + kindNode.kind;
+  }
+
+  function areaNodeKey(kindNode, area) {
+    return "area:" + kindNode.kind + ":" + area.area;
+  }
+
+  function kindAllFiles(kindNode) {
+    var files = [];
+    (kindNode.areas || []).forEach(function (area) {
+      (area.files || []).forEach(function (file) { files.push(file); });
+    });
+    return files;
+  }
+
+  function countChecked(files, checkedTargets) {
+    var checked = checkedTargets instanceof Set ? checkedTargets : new Set(checkedTargets || []);
+    return (files || []).filter(function (f) { return checked.has(f.target); }).length;
+  }
+
+  // Строка итога под пресетами: сколько файлов отмечено всего и по каждому виду.
+  function countCheckedByKind(data, checkedTargets) {
+    var out = { total: 0, api: 0, ui: 0, e2e: 0 };
+    (data.kinds || []).forEach(function (kindNode) {
+      var count = countChecked(kindAllFiles(kindNode), checkedTargets);
+      out[kindNode.kind] = count;
+      out.total += count;
+    });
+    return out;
+  }
+
+  // Какие узлы (ключи kindNodeKey/areaNodeKey) принудительно раскрыть, пока в
+  // поиске есть непустой запрос — все kind/area, у которых после фильтрации
+  // остался хотя бы один файл (т.е. был показан filterSectionsTree).
+  function expandedKeysForQuery(data, query) {
+    var q = String(query || "").trim();
+    if (!q) return [];
+    var filtered = filterSectionsTree(data, q);
+    var keys = [];
+    filtered.kinds.forEach(function (kindNode) {
+      keys.push(kindNodeKey(kindNode));
+      kindNode.areas.forEach(function (area) {
+        if (area.area != null) keys.push(areaNodeKey(kindNode, area));
+      });
+    });
+    return keys;
+  }
+
+  // Порядок видов (kinds) для пресета: выбранный вид (api/ui/e2e) — первым,
+  // остальные — следом в исходном порядке. 'all'/'smoke' порядок не меняют —
+  // смотри presetLeafTargets про семантику smoke (маркер, не раздел ФС).
+  function sortKindsForPreset(kinds, preset) {
+    if (preset !== "api" && preset !== "ui" && preset !== "e2e") return (kinds || []).slice();
+    var match = (kinds || []).filter(function (k) { return k.kind === preset; });
+    var rest = (kinds || []).filter(function (k) { return k.kind !== preset; });
+    return match.concat(rest);
+  }
+
+  // Какой узел раскрыть при выборе пресета: сам выбранный вид (api/ui/e2e)
+  // целиком, остальное сворачивается (вызывающий код сбрасывает набор раскрытых
+  // узлов и берёт только то, что вернула эта функция). 'all'/'smoke' ничего
+  // специально не раскрывают — весь список и так помечен целиком.
+  function expandedKeysForPreset(kinds, preset) {
+    if (preset !== "api" && preset !== "ui" && preset !== "e2e") return [];
+    return (kinds || []).filter(function (k) { return k.kind === preset; }).map(kindNodeKey);
+  }
+
   var api = {
     matchesQuery: matchesQuery,
     filterSectionsTree: filterSectionsTree,
     allLeafTargets: allLeafTargets,
     presetLeafTargets: presetLeafTargets,
     collectTargets: collectTargets,
+    AREA_LABELS_RU: AREA_LABELS_RU,
+    humanizeSnakeCase: humanizeSnakeCase,
+    areaLabel: areaLabel,
+    fileLabel: fileLabel,
+    kindNodeKey: kindNodeKey,
+    areaNodeKey: areaNodeKey,
+    kindAllFiles: kindAllFiles,
+    countChecked: countChecked,
+    countCheckedByKind: countCheckedByKind,
+    expandedKeysForQuery: expandedKeysForQuery,
+    sortKindsForPreset: sortKindsForPreset,
+    expandedKeysForPreset: expandedKeysForPreset,
   };
 
   if (typeof module !== "undefined" && module.exports) {

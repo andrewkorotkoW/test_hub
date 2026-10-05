@@ -387,18 +387,27 @@ button.color-dot:hover { transform: scale(1.15); border-color: var(--text-muted)
 /* ---------- test tree ---------- */
 .test-tree { max-height: 460px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; }
 .tree-file { margin-bottom: 4px; }
-.tree-file summary { cursor: pointer; padding: 4px 2px; border-radius: 6px; }
-.tree-file summary:hover { background: #f3f4f6; }
-.tree-file summary label { font-weight: 600; }
 .tree-classes { margin-left: 20px; margin-top: 4px; }
 .tree-class { margin-bottom: 4px; }
-.tree-class > label { font-weight: 600; color: var(--text-muted); }
 .tree-tests { margin-left: 20px; display: flex; flex-direction: column; gap: 2px; margin-top: 2px; }
 .tree-tests label { font-weight: 400; font-size: 13px; }
 .tree-meta { margin-left: 8px; font-size: 12px; }
+/* Заголовок раскрывающегося узла (раздел tests/api|ui|e2e или область внутри
+   него) — свой аккордеон на div/role=button, не <details>/<summary>: чекбокс
+   выбора лежит внутри того же заголовка рядом с названием, и не должен сам
+   переключать раскрытие (см. setupTreeEvents в project.js). */
+.tree-node-head { display: flex; align-items: center; gap: 6px; cursor: pointer; padding: 4px 2px; border-radius: 6px; }
+.tree-node-head:hover { background: var(--surface-hover); }
+.tree-node-head .tree-chev { display: inline-block; width: 14px; flex: 0 0 auto; color: var(--text-muted); transition: transform .12s; }
+.tree-file.open > .tree-node-head .tree-chev, .tree-class.open > .tree-node-head .tree-chev { transform: rotate(90deg); }
+.tree-node-title { font-weight: 600; }
+.tree-class .tree-node-title { color: var(--text-muted); }
+.tree-node-head .tree-meta { margin-left: 0; }
 
 /* ---------- дерево разделов (project.js: sections-tree-logic.js) ---------- */
 .sections-search-field { max-width: 320px; margin-bottom: 12px; }
+.sections-summary-line { font-size: 13px; margin: 2px 0 10px; }
+.sections-preset-btn.active { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
 .manual-target-spoiler { margin: 4px 0 12px; }
 .manual-target-spoiler summary { cursor: pointer; color: var(--accent); font-size: 13px; font-weight: 600; }
 .manual-target-spoiler textarea { margin-top: 8px; }
@@ -1430,7 +1439,7 @@ a.sentry-row:hover { background: var(--surface-hover); }
   .stand-row select { max-width: 100%; }
   .run-buttons button { flex: 1 1 auto; }
   .test-tree { max-height: 55vh; padding: 6px 6px; font-size: 13px; }
-  .tree-file summary label, .tree-class > label, .tree-tests label { word-break: break-all; }
+  .tree-node-title, .tree-tests label { word-break: break-all; }
   .tree-classes { margin-left: 12px; }
   .tree-tests { margin-left: 12px; }
   .run-log { font-size: 11px; max-height: 40vh; }
