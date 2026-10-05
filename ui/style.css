@@ -312,6 +312,20 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
 /* ---------- projects list ---------- */
 .page-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
 .page-head h1 { margin: 0; }
+.page-head-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.nav-button {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.nav-button:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
 
 /* ---------- палитра цвета проекта (renderColorPicker в common.js) ---------- */
 .color-picker { display: flex; align-items: center; gap: 6px; margin-right: auto; }

@@ -186,12 +186,23 @@ async def test_project_html_chart_and_list_ids_present_exactly_once(client):
         assert html.count(f'id="{i}"') == 1, f"id={i} должен встречаться ровно один раз"
 
 
-async def test_project_html_has_project_color_picker(client):
-    """ui/project.js рендерит палитру цвета проекта (renderColorPicker(), common.js)
-    в этот контейнер — см. app/schemas.py::PROJECT_COLOR_PALETTE."""
+async def test_project_html_has_no_project_color_picker(client):
+    """Палитру цвета проекта убрали из шапки project.html (миссия 2026-10-05) — цвет
+    по-прежнему задаётся на карточке проекта в projects.html, но на странице проекта
+    выбора цвета больше нет."""
     resp = await client.get("/project.html")
     html = resp.text
-    assert html.count('id="project-color-picker"') == 1
+    assert 'id="project-color-picker"' not in html
+
+
+async def test_project_html_coverage_and_xfail_links_are_nav_buttons(client):
+    """«Покрытие» и «Известные дефекты» в шапке project.html оформлены как полноценные
+    кнопки (класс nav-button, ui/style.css), а не мелким текстом — см. миссию
+    2026-10-05_dashboard_color_picker_and_nav_buttons.md, пункт 2."""
+    resp = await client.get("/project.html")
+    html = resp.text
+    assert re.search(r'<a[^>]+id="coverage-link"[^>]+class="nav-button"', html)
+    assert re.search(r'<a[^>]+id="xfail-link"[^>]+class="nav-button"', html)
 
 
 # ---------------------------------------------------- дефолт светлой темы без вспышки
