@@ -53,9 +53,7 @@
   renderActiveTab();
 
   // Цвет проекта: акцент кнопок/сайдбара/графиков (--accent, --gradient-*, см.
-  // applyProjectColor в common.js). Меняют только qa/superadmin, остальным — индикатор.
-  const colorPickerEl = document.getElementById("project-color-picker");
-  const canEditColor = user.role === "qa" || user.role === "superadmin";
+  // applyProjectColor в common.js). Меняется в карточке проекта на projects.html.
   // Лимит галочки «Эфир» (docs/missions/2026-10-01_live_stream.md, «Уточнение владельца
   // 01.10») — глобальный env TH_LIVE_MAX_TESTS (GET /api/config); 20 — тот же дефолт,
   // что и на сервере, на случай, если запрос ниже ещё не успел выполниться.
@@ -69,20 +67,6 @@
     const current = projects.find((p) => p.name === projectName);
     const projectColor = current ? current.color : PROJECT_COLOR_PALETTE[0];
     applyProjectColor(projectColor);
-    const onPickColor = async (color) => {
-      try {
-        const updated = await api(`/api/projects/${encodeURIComponent(projectName)}/color`, {
-          method: "PUT",
-          json: { color },
-        });
-        applyProjectColor(updated.color);
-        renderColorPicker(colorPickerEl, { color: updated.color, editable: canEditColor, onPick: onPickColor });
-      } catch (err) {
-        pageError.textContent = `Не удалось изменить цвет: ${err.message}`;
-        pageError.hidden = false;
-      }
-    };
-    renderColorPicker(colorPickerEl, { color: projectColor, editable: canEditColor, onPick: onPickColor });
   } catch { /* без цвета проекта остаётся дефолтный акцент из style.css */ }
 
   const standSelect = document.getElementById("stand-select");
