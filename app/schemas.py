@@ -89,6 +89,7 @@ class RunCreate(BaseModel):
     confirm_manual: bool = False
     label: Optional[str] = None
     live: bool = False
+    mobile: bool = False
 
 
 class ShareLinkCreate(BaseModel):

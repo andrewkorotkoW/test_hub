@@ -98,6 +98,7 @@ def _run_payload(row: sqlite3.Row) -> dict:
         "counts": json.loads(row["counts"]) if row["counts"] else {},
         "label": row["label"],
         "live": bool(row["live"]),
+        "mobile": bool(row["mobile"]),
     }
 
 
@@ -144,7 +145,7 @@ async def create_run(
     try:
         run_id = await runner.submit_run(
             project["name"], body.stand, body.target, user["login"], body.marker, body.repeat,
-            confirm_manual=body.confirm_manual, label=body.label, live=body.live,
+            confirm_manual=body.confirm_manual, label=body.label, live=body.live, mobile=body.mobile,
         )
     except runner.ManualRunNotConfirmed as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc

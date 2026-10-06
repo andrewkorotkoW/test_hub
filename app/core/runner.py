@@ -278,6 +278,7 @@ async def submit_run(
     confirm_manual: bool = False,
     label: str | None = None,
     live: bool = False,
+    mobile: bool = False,
 ) -> int:
     """Создаёт запись прогона (running, если для проекта нет активного, иначе queued)
     и, если она стартует сразу, запускает фоновую задачу исполнения. `repeat` > 1
@@ -288,7 +289,9 @@ async def submit_run(
     этап 2); только подписывает прогон, на исполнение не влияет. `live` — галочка
     «Эфир» (docs/missions/2026-10-01_live_stream.md, «Уточнение владельца 01.10»):
     лимит числа тестов проверяет вызывающий код (app/routers/runs.py, до insert),
-    здесь только передаётся в _execute как env TH_LIVE.
+    здесь только передаётся в _execute как env TH_LIVE. `mobile` — галочка «Мобильный
+    (Pixel 7)» (docs/missions/2026-10-06_mobile_frame.md): передаётся в _execute как
+    env MOBILE; если `label` не передан, подставляется «Мобильный (Pixel 7)».
 
     Если стенд найден и manual_only=1 (см. ManualRunNotConfirmed), запуск требует
     confirm_manual=True от живого пользователя — сервисная учётка бота (settings
@@ -310,11 +313,13 @@ async def submit_run(
             ).fetchone()
             start_now = active is None
             now = datetime.now().isoformat(timespec="seconds")
+            if label is None and mobile:
+                label = "Мобильный (Pixel 7)"
             cur = conn.execute(
-                "INSERT INTO runs (project, stand, target, status, started, requested_by, counts, marker, repeat, label, live) "
-                "VALUES (?, ?, ?, ?, ?, ?, '{}', ?, ?, ?, ?)",
+                "INSERT INTO runs (project, stand, target, status, started, requested_by, counts, marker, repeat, label, live, mobile) "
+                "VALUES (?, ?, ?, ?, ?, ?, '{}', ?, ?, ?, ?, ?)",
                 (project_name, stand_name, target, "running" if start_now else "queued",
-                 now if start_now else None, requested_by, marker, repeat, label, int(live)),
+                 now if start_now else None, requested_by, marker, repeat, label, int(live), int(mobile)),
             )
             conn.commit()
             run_id = cur.lastrowid
@@ -322,7 +327,7 @@ async def submit_run(
             conn.close()
 
     if start_now:
-        asyncio.create_task(_execute(run_id, project_name, stand_name, target, marker, repeat, live))
+        asyncio.create_task(_execute(run_id, project_name, stand_name, target, marker, repeat, live, mobile))
     return run_id
 
 
@@ -497,7 +502,7 @@ async def _advance_queue(project_name: str) -> None:
         asyncio.create_task(
             _execute(
                 nxt["id"], project_name, nxt["stand"], nxt["target"], nxt["marker"], nxt["repeat"],
-                bool(nxt["live"]),
+                bool(nxt["live"]), bool(nxt["mobile"]),
             )
         )
 
@@ -510,6 +515,7 @@ async def _execute(
     marker: str | None = None,
     repeat: int = 1,
     live: bool = False,
+    mobile: bool = False,
 ) -> None:
     _current_nodeid[run_id] = None
 
@@ -552,6 +558,10 @@ async def _execute(
         # когда видит TH_LIVE=1 — без него совсем не транслирует, см. контракт
         # «Уточнение владельца 01.10» в docs/missions/2026-10-01_live_stream.md.
         env["TH_LIVE"] = "1"
+    if mobile:
+        # Профиль Pixel 7 (docs/missions/2026-10-06_mobile_frame.md): плагин проекта
+        # тестов переключает viewport/touch/user-agent только когда видит MOBILE=1.
+        env["MOBILE"] = "1"
     if stand is not None:
         env["STAND_URL"] = stand["url"] or ""
         env["STAND_LOGIN"] = stand["login"] or ""
