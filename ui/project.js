@@ -89,6 +89,7 @@
   const manualTargetInput = document.getElementById("manual-target-input");
   const liveCheckbox = document.getElementById("live-checkbox");
   const liveCheckboxHint = document.getElementById("live-checkbox-hint");
+  const mobileCheckbox = document.getElementById("mobile-checkbox");
   const runAllBtn = document.getElementById("run-all-btn");
   const runSelectedBtn = document.getElementById("run-selected-btn");
   const manualRunBlock = document.getElementById("manual-run-block");
@@ -103,6 +104,7 @@
   const runCard = document.getElementById("run-card");
   const runIdLabel = document.getElementById("run-id-label");
   const runLabelBadge = document.getElementById("run-label-badge");
+  const runDeviceBadge = document.getElementById("run-device-badge");
   const pill = document.getElementById("run-status-pill");
   const shareBtn = document.getElementById("share-run-btn");
   const cancelBtn = document.getElementById("cancel-run-btn");
@@ -355,11 +357,66 @@
   // последний кадр прогона (сервер тоже хранит один на run_id, см. app/core/live.py),
   // followEnabled — «Следить за прогоном», выключается кликом по тесту вручную (см.
   // клик-хендлер run-tests-rail ниже) и снова включается чекбоксом run-follow-checkbox.
-  let liveFrame = null; // { nodeid, step, jpegB64, receivedAt }
+  let liveFrame = null; // { nodeid, step, jpegB64, receivedAt, ts }
   let followEnabled = true;
   // «Эфир»/«Следить за прогоном» — только у прогонов с live=true (docs/missions/
   // 2026-10-01_live_stream.md, «Уточнение владельца 01.10»); отдаётся в GET .../report.
   let currentRunLive = false;
+  // Рамка телефона (docs/missions/2026-10-06_mobile_frame.md, п.3-4) — отдаётся тем же
+  // payload-полем mobile, что и live.
+  let currentRunMobile = false;
+
+  const PHONE_FRAME_OFF_KEY = "th_phone_frame_off";
+  function isPhoneFrameOff() {
+    try { return localStorage.getItem(PHONE_FRAME_OFF_KEY) === "1"; } catch { return false; }
+  }
+  function setPhoneFrameOff(off) {
+    try { localStorage.setItem(PHONE_FRAME_OFF_KEY, off ? "1" : "0"); } catch { /* localStorage недоступен */ }
+  }
+
+  // Оборачивает готовую разметку кадра эфира/видео в рамку Pixel 7 (412×915) у
+  // прогонов с run.mobile; переключатель «Без рамки» всегда рядом (можно выключить
+  // рамку и включить обратно), desktop-прогоны (currentRunMobile=false) — без изменений
+  // (п.3 миссии).
+  function maybePhoneFrame(innerHtml, timeText) {
+    if (!currentRunMobile) return innerHtml;
+    const off = isPhoneFrameOff();
+    const toggleRow = `
+      <div class="phone-frame-toggle-row">
+        <button type="button" class="phone-frame-toggle-btn">${off ? "Показать рамку" : "Без рамки"}</button>
+      </div>`;
+    if (!RunLiveLogic.phoneFrameEnabled(currentRunMobile, off)) return toggleRow + innerHtml;
+    return `${toggleRow}
+      <div class="phone-frame-wrap">
+        <div class="phone-frame">
+          <div class="phone-frame-statusbar">${escapeHtml(timeText || "")}</div>
+          <div class="phone-frame-screen">${innerHtml}</div>
+        </div>
+      </div>`;
+  }
+
+  // После вставки разметки — применяет масштаб (RunLiveLogic.phoneFrameScale) по
+  // высоте уже отрендеренной панели и навешивает клик на переключатель «Без рамки».
+  function applyPhoneFrameSizing() {
+    const frame = runWindowBody.querySelector(".phone-frame");
+    if (frame) {
+      const panelHeight = runWindowBody.clientHeight || 480;
+      const scale = RunLiveLogic.phoneFrameScale(panelHeight);
+      frame.style.height = `${RunLiveLogic.PHONE_FRAME_HEIGHT * scale}px`;
+    }
+    const toggleBtn = runWindowBody.querySelector(".phone-frame-toggle-btn");
+    if (toggleBtn) {
+      toggleBtn.addEventListener("click", () => {
+        setPhoneFrameOff(!isPhoneFrameOff());
+        renderWindowBody();
+      });
+    }
+  }
+
+  function frameTimeText(frame) {
+    if (!frame || frame.ts == null) return "";
+    return new Date(frame.ts * 1000).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  }
 
   function showPageError(message) {
     pageError.textContent = message;
@@ -924,6 +981,12 @@
     if (ev.target.closest(".sections-preset-btn")) updateLiveCheckboxState();
   });
 
+  // Галочка «Мобильный» (docs/missions/2026-10-06_mobile_frame.md, п.2) включает
+  // «Эфир» автоматически, но не блокирует её ручное выключение после этого.
+  mobileCheckbox.addEventListener("change", () => {
+    if (mobileCheckbox.checked) liveCheckbox.checked = true;
+  });
+
   // ---------------- «Сборка тестов»: страница запуска по ?set=<area>#run ----------------
   // Раздел = второй уровень дерева tests/api|ui/<area>|tests/e2e, то же понятие, что у
   // GET .../sections (app/core/sections.py) — используем уже загруженные им данные вместо
@@ -1160,35 +1223,45 @@
 
   function renderLiveTab() {
     if (!liveFrame || liveFrame.nodeid !== selectedNodeid) {
-      return `<div class="frame-shot"><b>Ждём первый кадр</b><span>Плагин ещё не прислал ни одного живого кадра для этого теста.</span></div>`;
+      return maybePhoneFrame(
+        `<div class="frame-shot"><b>Ждём первый кадр</b><span>Плагин ещё не прислал ни одного живого кадра для этого теста.</span></div>`,
+        frameTimeText(liveFrame)
+      );
     }
     const stale = RunLiveLogic.isLiveStale(liveFrame.receivedAt, Date.now());
-    return `
-      <div class="live-frame">
+    return maybePhoneFrame(
+      `<div class="live-frame">
         <div class="live-frame-head">
           <span class="status-pill ${stale ? "unknown" : "running"}">${stale ? "нет сигнала" : "В эфире"}</span>
           ${liveFrame.step ? `<span class="muted">${escapeHtml(liveFrame.step)}</span>` : ""}
         </div>
         <img class="live-frame-img" src="data:image/jpeg;base64,${liveFrame.jpegB64}" alt="Живой кадр теста">
-      </div>`;
+      </div>`,
+      frameTimeText(liveFrame)
+    );
   }
 
   function renderVideoTab() {
     const t = selectedNodeid ? splitTestsByNodeid[selectedNodeid] : null;
     if (!t || !t.has_video) {
-      return `<div class="frame-shot"><b>Видео нет</b><span>Плагин не записал видео для этого теста.</span></div>`;
+      return maybePhoneFrame(
+        `<div class="frame-shot"><b>Видео нет</b><span>Плагин не записал видео для этого теста.</span></div>`,
+        frameTimeText(liveFrame)
+      );
     }
     const runId = runIdLabel.textContent;
     const url = `/api/runs/${runId}/tests/${encodeURIComponent(selectedNodeid)}/video`;
     const duration = t.video_duration_ms != null ? fmtDuration(t.video_duration_ms / 1000) : null;
-    return `
-      <div class="test-video">
+    return maybePhoneFrame(
+      `<div class="test-video">
         <video controls src="${escapeHtml(url)}"></video>
         <div class="test-video-meta">
           ${duration ? `<span class="muted">${duration}</span>` : ""}
           <a href="${escapeHtml(url)}" download class="video-download-link">Скачать</a>
         </div>
-      </div>`;
+      </div>`,
+      frameTimeText(liveFrame)
+    );
   }
 
   function renderWindowBody() {
@@ -1209,6 +1282,7 @@
         ? renderConsoleBox(reqLines)
         : `<p class="muted">HTTP-строк в выводе этого теста нет.</p>`;
     }
+    applyPhoneFrameSizing();
   }
 
   // Порядок и состав вкладок — RunLiveLogic.windowTabOrder (п.4 миссии): Эфир/Видео
@@ -1378,7 +1452,7 @@
 
   function handleLiveEvent(msg) {
     if (!msg.nodeid) return;
-    liveFrame = { nodeid: msg.nodeid, step: msg.step || "", jpegB64: msg.jpeg_b64, receivedAt: Date.now() };
+    liveFrame = { nodeid: msg.nodeid, step: msg.step || "", jpegB64: msg.jpeg_b64, receivedAt: Date.now(), ts: msg.ts };
     if (selectedNodeid !== msg.nodeid) return;
     renderWindowTabs();
     if (activeWindowTab === "live") renderWindowBody();
@@ -1496,10 +1570,12 @@
     try {
       const payload = await api(`/api/runs/${runId}/report`);
       currentRunLive = Boolean(payload.live);
+      currentRunMobile = Boolean(payload.mobile);
       setPill(payload.status);
       cancelBtn.hidden = user.role === "customer" || !["queued", "running"].includes(payload.status);
       runLabelBadge.hidden = !payload.label;
       if (payload.label) runLabelBadge.textContent = `сборка: ${payload.label}`;
+      runDeviceBadge.hidden = !payload.mobile;
       renderReport(payload, runId);
       return payload;
     } catch (err) {
@@ -1518,12 +1594,14 @@
     runCard.hidden = false;
     runIdLabel.textContent = runId;
     runLabelBadge.hidden = true;
+    runDeviceBadge.hidden = true;
     shareBtn.hidden = !canShare;
     logBox.textContent = "";
     reportSection.hidden = true;
     reportChart.hidden = true;
     reportChart.removeAttribute("src");
     currentRunLive = false;
+    currentRunMobile = false;
     setPill("queued");
     resetSplitState();
 
@@ -1574,13 +1652,13 @@
     }
   });
 
-  async function submitRun(target, label = null, live = false) {
+  async function submitRun(target, label = null, live = false, mobile = false) {
     runAllBtn.disabled = true;
     runSelectedBtn.disabled = true;
     try {
       const run = await api(`/api/projects/${encodeURIComponent(projectName)}/runs`, {
         method: "POST",
-        json: { stand: standSelect.value || null, target, marker: markerSelect.value || null, label, live },
+        json: { stand: standSelect.value || null, target, marker: markerSelect.value || null, label, live, mobile },
       });
       await openRun(run.id);
       await loadHistory();
@@ -1600,7 +1678,7 @@
       alert("Отметьте хотя бы один раздел/файл или заполните ручное поле.");
       return;
     }
-    submitRun(target, isBuildMode ? buildLabel : null, liveCheckbox.checked && !liveCheckbox.disabled);
+    submitRun(target, isBuildMode ? buildLabel : null, liveCheckbox.checked && !liveCheckbox.disabled, mobileCheckbox.checked);
   });
 
   // ---------------- шаринг отчёта ----------------
@@ -2039,6 +2117,7 @@
           <span>${escapeHtml(r.requested_by || "—")}</span>
           ${r.label ? `<span class="badge-manual">сборка: ${escapeHtml(r.label)}</span>` : ""}
           ${r.live ? `<span class="badge-manual">эфир</span>` : ""}
+          ${r.mobile ? `<span class="badge-manual">Pixel 7</span>` : ""}
         </div>
         ${runsFeedBarHtml(r)}
         <div class="runs-feed-actions">
@@ -2212,7 +2291,7 @@
             <td>${r.id}</td>
             <td class="status-text ${escapeHtml(r.status)}">${escapeHtml(r.status)}</td>
             <td>${escapeHtml(r.stand || "—")}${isManualStandRun(r.stand) ? `<span class="badge-manual">ручной</span>` : ""}</td>
-            <td>${r.target === "all" ? "всё" : "выборочно"}${r.label ? ` <span class="badge-manual">сборка: ${escapeHtml(r.label)}</span>` : ""}${r.live ? ` <span class="badge-manual">эфир</span>` : ""}</td>
+            <td>${r.target === "all" ? "всё" : "выборочно"}${r.label ? ` <span class="badge-manual">сборка: ${escapeHtml(r.label)}</span>` : ""}${r.live ? ` <span class="badge-manual">эфир</span>` : ""}${r.mobile ? ` <span class="badge-manual">Pixel 7</span>` : ""}</td>
             <td>${fmtDate(r.started)}</td>
             <td>${fmtDuration(r.duration)}</td>
             <td>${escapeHtml(r.requested_by || "—")}</td>

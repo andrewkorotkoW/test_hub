@@ -6,6 +6,7 @@
   <title>Test Hub — отчёт прогона</title>
   <link rel="stylesheet" href="/style.css">
   <script src="/common.js"></script>
+  <script src="/run-live-logic.js"></script>
 </head>
 <body>
   <header class="site-header">
@@ -24,13 +25,7 @@
       </div>
       <p class="muted" id="run-meta"></p>
 
-      <div id="live-frame-box" class="live-frame" hidden>
-        <div class="live-frame-head">
-          <span id="live-frame-badge" class="status-pill running">В эфире</span>
-          <span class="muted">обновляется автоматически, пока прогон идёт</span>
-        </div>
-        <img id="live-frame-img" class="live-frame-img" alt="Живой кадр прогона">
-      </div>
+      <div id="live-frame-area"></div>
 
       <img id="report-chart" class="report-chart" alt="График отчёта прогона" hidden>
 

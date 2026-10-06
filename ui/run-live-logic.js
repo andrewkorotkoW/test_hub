@@ -87,6 +87,28 @@
     return { disabled: false, hint: "" };
   }
 
+  // Рамка телефона (docs/missions/2026-10-06_mobile_frame.md, п.3): портрет Pixel 7,
+  // 412×915 в CSS-пикселях — те же числа, что в профиле стенда auto_tests_vshgu.
+  var PHONE_FRAME_WIDTH = 412;
+  var PHONE_FRAME_HEIGHT = 915;
+
+  // Рамка показывается только у мобильных прогонов (run.mobile), и только пока
+  // пользователь не выключил её вручную переключателем «Без рамки» (его состояние
+  // хранится в localStorage вызывающим кодом и приходит сюда уже как boolean).
+  function phoneFrameEnabled(runMobile, noFrameOverride) {
+    return Boolean(runMobile) && !noFrameOverride;
+  }
+
+  // Масштаб кадра/видео внутри рамки по доступной высоте панели: рамка не должна
+  // вызывать вертикальный (а значит и горизонтальный, т.к. ширина считается от высоты)
+  // скролл панели — поэтому масштаб ограничен сверху единицей (рамка не растягивается
+  // больше своего натурального размера 412×915).
+  function phoneFrameScale(panelHeightPx) {
+    var height = Number(panelHeightPx) || 0;
+    if (height <= 0) return 1;
+    return Math.min(1, height / PHONE_FRAME_HEIGHT);
+  }
+
   var api = {
     LIVE_STALE_MS: LIVE_STALE_MS,
     mediaTabForTest: mediaTabForTest,
@@ -96,6 +118,10 @@
     countTargetTests: countTargetTests,
     liveLimitMessage: liveLimitMessage,
     liveCheckboxState: liveCheckboxState,
+    PHONE_FRAME_WIDTH: PHONE_FRAME_WIDTH,
+    PHONE_FRAME_HEIGHT: PHONE_FRAME_HEIGHT,
+    phoneFrameEnabled: phoneFrameEnabled,
+    phoneFrameScale: phoneFrameScale,
   };
 
   if (typeof module !== "undefined" && module.exports) {

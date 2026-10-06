@@ -188,6 +188,34 @@ test("liveLimitMessage: текст совпадает с форматом сер
   assert.strictEqual(Logic.liveLimitMessage(20, 57), "Эфир доступен для прогонов до 20 тестов, выбрано 57");
 });
 
+// ------------------------------------------------------------------ phoneFrameEnabled / phoneFrameScale
+
+test("phoneFrameEnabled: run.mobile=true и рамка не выключена вручную -> true", function () {
+  assert.strictEqual(Logic.phoneFrameEnabled(true, false), true);
+});
+
+test("phoneFrameEnabled: run.mobile=true, но пользователь включил «Без рамки» -> false", function () {
+  assert.strictEqual(Logic.phoneFrameEnabled(true, true), false);
+});
+
+test("phoneFrameEnabled: desktop-прогон (run.mobile=false) -> false даже без override", function () {
+  assert.strictEqual(Logic.phoneFrameEnabled(false, false), false);
+});
+
+test("phoneFrameScale: высота панели больше натуральной рамки -> масштаб не растягивается больше 1", function () {
+  assert.strictEqual(Logic.phoneFrameScale(2000), 1);
+});
+
+test("phoneFrameScale: высота панели меньше натуральной рамки -> масштаб пропорционально меньше 1", function () {
+  assert.strictEqual(Logic.phoneFrameScale(Logic.PHONE_FRAME_HEIGHT / 2), 0.5);
+});
+
+test("phoneFrameScale: нулевая/отрицательная/нечисловая высота -> запасной масштаб 1", function () {
+  assert.strictEqual(Logic.phoneFrameScale(0), 1);
+  assert.strictEqual(Logic.phoneFrameScale(-10), 1);
+  assert.strictEqual(Logic.phoneFrameScale(undefined), 1);
+});
+
 var failed = 0;
 tests.forEach(function (t) {
   try {
