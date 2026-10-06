@@ -226,6 +226,32 @@ async def test_public_share_data_json_scoped_to_own_run(qa_client, isolated_allu
     assert data["live_frame_url"] is None
 
 
+async def test_public_share_data_json_has_mobile_flag(qa_client, isolated_allure_dir, runnable_project_dir):
+    """data.json::run.mobile (docs/missions/2026-10-06_mobile_frame.md, п.3) — ui/share.js
+    решает, рисовать ли .phone-frame, по этому полю (его нет у live, появилось только для
+    задачи мобильной рамки)."""
+    await register_project(qa_client, "share_mobile_proj", runnable_project_dir)
+    create_resp = await qa_client.post(
+        f"/api/projects/share_mobile_proj/runs",
+        json={"target": "tests/test_sample.py", "mobile": True},
+    )
+    assert create_resp.status_code == 201, create_resp.text
+    run_id = create_resp.json()["id"]
+
+    async def finished():
+        rows = (await qa_client.get("/api/projects/share_mobile_proj/runs")).json()
+        row = next(r for r in rows if r["id"] == run_id)
+        return row if row["status"] in {"passed", "failed"} else None
+
+    assert await poll_until(finished, timeout=15) is not None
+
+    token = (await qa_client.post(f"/api/runs/{run_id}/share", json={"expires": "30d"})).json()["token"]
+    async with _anon_client() as anon:
+        resp = await anon.get(f"/share/{token}/data.json")
+    assert resp.status_code == 200
+    assert resp.json()["run"]["mobile"] is True
+
+
 # ------------------------------------------------------------------ эфир/видео без авторизации (контракт п.5)
 async def _start_running_run(client, name, path):
     from app.core import runner

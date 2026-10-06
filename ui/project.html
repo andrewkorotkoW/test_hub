@@ -165,6 +165,11 @@
           <span class="muted">— живая трансляция браузера в окне прогона</span>
         </label>
         <p id="live-checkbox-hint" class="muted live-checkbox-hint" hidden></p>
+        <label class="live-checkbox-row" id="mobile-checkbox-row" for="mobile-checkbox">
+          <input type="checkbox" id="mobile-checkbox">
+          Мобильный (Pixel 7)
+        </label>
+        <p class="muted live-checkbox-hint">Прогон в мобильной вёрстке: viewport 412×915, touch, мобильный user-agent.</p>
         <div class="run-buttons" id="run-buttons-row">
           <button id="run-all-btn" class="primary">Запустить всё</button>
           <button id="run-selected-btn">Запустить выбранное</button>
@@ -180,7 +185,7 @@
       </div>
 
       <div class="card" id="run-card" hidden>
-        <h2>Прогон #<span id="run-id-label"></span><span id="run-label-badge" class="badge-manual" hidden></span></h2>
+        <h2>Прогон #<span id="run-id-label"></span><span id="run-label-badge" class="badge-manual" hidden></span><span id="run-device-badge" class="badge-manual" hidden>Устройство: Pixel 7</span></h2>
         <div class="run-status-bar">
           <span id="run-status-pill" class="status-pill queued" data-status="queued">queued</span>
           <div class="run-view-toggle" id="run-view-toggle" hidden>
