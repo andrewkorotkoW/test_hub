@@ -46,6 +46,7 @@ class StandCreate(BaseModel):
     login: Optional[str] = None
     sentry_project: Optional[str] = None
     sentry_environment: Optional[str] = None
+    workers: Optional[int] = Field(default=None, ge=0, le=16)
 
 
 class StandUpdate(BaseModel):
@@ -54,6 +55,7 @@ class StandUpdate(BaseModel):
     login: Optional[str] = None
     sentry_project: Optional[str] = None
     sentry_environment: Optional[str] = None
+    workers: Optional[int] = Field(default=None, ge=0, le=16)
 
 
 class StandManualOnlyUpdate(BaseModel):

@@ -38,9 +38,11 @@
           <input id="stand-login" placeholder="Логин (необязательно)">
           <input id="stand-sentry-project" placeholder="Sentry project (необязательно)">
           <input id="stand-sentry-environment" placeholder="Sentry environment (необязательно)">
+          <input id="stand-workers" type="number" min="0" max="16" step="1" value="0" placeholder="Потоки (pytest -n)">
           <button type="submit" class="primary">Сохранить</button>
           <button type="button" id="stand-cancel-edit" hidden>Отмена</button>
         </form>
+        <p class="muted">Потоки (pytest -n): 0 — последовательно. На k8s v2 троттлинг снят, 4 потока — 27 мин вместо 1,5 ч.</p>
       </div>
 
       <div class="card">

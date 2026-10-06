@@ -27,7 +27,7 @@ def _stand_payload(row: sqlite3.Row) -> dict:
 
 def _stands_for(conn: sqlite3.Connection, project_name: str) -> list[dict]:
     rows = conn.execute(
-        "SELECT id, name, url, login, manual_only, sentry_project, sentry_environment "
+        "SELECT id, name, url, login, manual_only, sentry_project, sentry_environment, workers "
         "FROM stands WHERE project = ? ORDER BY name",
         (project_name,),
     ).fetchall()
@@ -147,13 +147,21 @@ def create_stand(
     if exists:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Stand already exists")
     cur = conn.execute(
-        "INSERT INTO stands (project, name, url, login, sentry_project, sentry_environment) "
-        "VALUES (?, ?, ?, ?, ?, ?)",
-        (name, body.name, body.url, body.login, body.sentry_project, body.sentry_environment),
+        "INSERT INTO stands (project, name, url, login, sentry_project, sentry_environment, workers) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (
+            name,
+            body.name,
+            body.url,
+            body.login,
+            body.sentry_project,
+            body.sentry_environment,
+            body.workers if body.workers is not None else 0,
+        ),
     )
     conn.commit()
     row = conn.execute(
-        "SELECT id, name, url, login, manual_only, sentry_project, sentry_environment "
+        "SELECT id, name, url, login, manual_only, sentry_project, sentry_environment, workers "
         "FROM stands WHERE id = ?",
         (cur.lastrowid,),
     ).fetchone()
@@ -186,14 +194,15 @@ def update_stand(
     sentry_environment = (
         body.sentry_environment if body.sentry_environment is not None else row["sentry_environment"]
     )
+    workers = body.workers if body.workers is not None else row["workers"]
     conn.execute(
-        "UPDATE stands SET name = ?, url = ?, login = ?, sentry_project = ?, sentry_environment = ? "
-        "WHERE id = ?",
-        (stand_name, url, login, sentry_project, sentry_environment, stand_id),
+        "UPDATE stands SET name = ?, url = ?, login = ?, sentry_project = ?, sentry_environment = ?, "
+        "workers = ? WHERE id = ?",
+        (stand_name, url, login, sentry_project, sentry_environment, workers, stand_id),
     )
     conn.commit()
     row = conn.execute(
-        "SELECT id, name, url, login, manual_only, sentry_project, sentry_environment "
+        "SELECT id, name, url, login, manual_only, sentry_project, sentry_environment, workers "
         "FROM stands WHERE id = ?",
         (stand_id,),
     ).fetchone()

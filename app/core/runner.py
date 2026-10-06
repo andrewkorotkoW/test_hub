@@ -571,6 +571,14 @@ async def _execute(
     if marker:
         args.extend(["-m", marker])
 
+    if stand is not None and stand["workers"] and not live and repeat <= 1:
+        # pytest-xdist: параллельные воркеры стенда (docs/missions/2026-10-06_stand_workers.md).
+        # Не включаем при live — эфир транслирует кадры одного процесса, несколько воркеров
+        # перемешивают их между собой; не включаем при repeat > 1 — флаки-детектор гоняет
+        # одну и ту же цель последовательно и сравнивает прогоны между собой, а не делит их
+        # на параллельные воркеры.
+        args.extend(["-n", str(stand["workers"])])
+
     # repeat > 1 (флаки-детектор, см. app/core/flaky.py) гоняет ту же цель несколько
     # раз подряд в один и тот же results_dir: pytest-repeat не в requirements.txt,
     # поэтому вместо --count используется просто N последовательных subprocess-запусков
