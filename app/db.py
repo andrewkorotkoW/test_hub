@@ -469,6 +469,7 @@ def init_db() -> None:
         _migrate_add_column(conn, "runs", "label", "label TEXT")
         _migrate_add_column(conn, "runs", "live", "live INTEGER NOT NULL DEFAULT 0")
         _migrate_add_column(conn, "runs", "mobile", "mobile INTEGER NOT NULL DEFAULT 0")
+        _migrate_add_column(conn, "stands", "workers", "workers INTEGER NOT NULL DEFAULT 0")
         # На старых БД case_key ещё не заполнен для уже импортированных кейсов с
         # автотестом (у них case_key всегда равен nodeid, см. app/core/test_cases.py)
         # — без бэкфилла первый же повторный импорт не нашёл бы их по case_key и
