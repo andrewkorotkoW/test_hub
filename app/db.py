@@ -60,7 +60,8 @@ CREATE TABLE IF NOT EXISTS runs (
     marker TEXT,
     repeat INTEGER NOT NULL DEFAULT 1,
     label TEXT,
-    live INTEGER NOT NULL DEFAULT 0
+    live INTEGER NOT NULL DEFAULT 0,
+    mobile INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS run_events (
@@ -467,6 +468,7 @@ def init_db() -> None:
         _migrate_add_column(conn, "test_cases", "requirement", "requirement TEXT")
         _migrate_add_column(conn, "runs", "label", "label TEXT")
         _migrate_add_column(conn, "runs", "live", "live INTEGER NOT NULL DEFAULT 0")
+        _migrate_add_column(conn, "runs", "mobile", "mobile INTEGER NOT NULL DEFAULT 0")
         # На старых БД case_key ещё не заполнен для уже импортированных кейсов с
         # автотестом (у них case_key всегда равен nodeid, см. app/core/test_cases.py)
         # — без бэкфилла первый же повторный импорт не нашёл бы их по case_key и

@@ -174,6 +174,10 @@ _pending_runs: dict[int, tuple[int, int | None]] = {}
 
 
 async def _trigger(conn: sqlite3.Connection, row: sqlite3.Row, requested_by: str, *, advance: bool) -> int:
+    # Поле mobile в расписаниях не добавлено (docs/missions/2026-10-06_mobile_frame.md,
+    # п.5): у schedules нет даже поля live по аналогии с которым можно было бы
+    # механически добавить mobile — тянет переделку формы расписаний, что мисия
+    # прямо разрешает пропустить.
     run_id = await runner.submit_run(row["project"], row["stand"], row["target"] or "all", requested_by, row["marker"])
     _pending_runs[run_id] = (row["id"], row["last_run_id"])
     if advance:
