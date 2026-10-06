@@ -202,8 +202,16 @@ test("phoneFrameEnabled: desktop-прогон (run.mobile=false) -> false даж
   assert.strictEqual(Logic.phoneFrameEnabled(false, false), false);
 });
 
+test("phoneFrameEnabled: desktop-прогон (run.mobile=false) -> false независимо от localStorage-переключателя", function () {
+  assert.strictEqual(Logic.phoneFrameEnabled(false, true), false);
+});
+
 test("phoneFrameScale: высота панели больше натуральной рамки -> масштаб не растягивается больше 1", function () {
   assert.strictEqual(Logic.phoneFrameScale(2000), 1);
+});
+
+test("phoneFrameScale: высота панели равна натуральной рамке -> масштаб ровно 1 (граница)", function () {
+  assert.strictEqual(Logic.phoneFrameScale(Logic.PHONE_FRAME_HEIGHT), 1);
 });
 
 test("phoneFrameScale: высота панели меньше натуральной рамки -> масштаб пропорционально меньше 1", function () {
