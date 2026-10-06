@@ -273,6 +273,13 @@ def import_drafts(conn: sqlite3.Connection, project_row: sqlite3.Row) -> dict:
 
             section = _section_for_case(case, subdir, file_stem)
             steps_json = json.dumps(_numbered_steps(case["steps"]), ensure_ascii=False)
+            # Строка по nodeid уже есть, а рядом осталась старая ручная копия этого же кейса
+            # по TC-ID (импорт до фикса выше) — убираем сироту, ручные правки не трогаем.
+            if case["nodeid"] and case["case_id"] and case_key != case["case_id"]:
+                conn.execute(
+                    "DELETE FROM test_cases WHERE project = ? AND case_key = ? AND source != 'manual' AND id != ?",
+                    (project, case["case_id"], existing["id"] if existing else -1),
+                )
             if existing:
                 conn.execute(
                     "UPDATE test_cases SET section = ?, title = ?, steps = ?, precondition = ?, priority = ?, "

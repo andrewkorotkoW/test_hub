@@ -275,6 +275,32 @@ def test_import_drafts_manual_case_that_gains_nodeid_is_rekeyed_not_duplicated(d
         assert result["updated"] == 1 and result["imported"] == 0
 
 
+def test_import_drafts_removes_orphan_tcid_row_when_nodeid_row_exists(db_path, tmp_path):
+    """Состояние после импорта до фикса: есть и строка по nodeid, и сирота по TC-ID того же
+    кейса. Повторный импорт удаляет сироту (source != manual), остаётся одна строка."""
+    docs_dir = tmp_path / "docs" / "test_cases"; docs_dir.mkdir(parents=True)
+    nodeid = "tests/ui/helpdesk/admin/test_groups.py::test_create_group"
+    (docs_dir / "groups.md").write_text(
+        f"### TC-HELPDESK_GROUPS-001 Создание группы\n\n- Автотест: {nodeid}\n- Приоритет: medium Тип: ui Роли: admin\n\n"
+        "| # | Шаг | Ожидаемый результат |\n|---|---|---|\n| 1 | Открыть | Список |\n", encoding="utf-8")
+    with sqlite3.connect(db_path) as conn:
+        conn.row_factory = sqlite3.Row
+        _insert_project(conn, tmp_path)
+        project_row = conn.execute("SELECT * FROM projects WHERE name = ?", (PROJECT,)).fetchone()
+        conn.execute(
+            "INSERT INTO test_cases (project, section, title, steps, priority, case_key, source, updated_at) "
+            "VALUES (?, 'helpdesk/groups', 'Создание группы', '[]', 'medium', 'TC-HELPDESK_GROUPS-001', 'generated', '2026-10-06')",
+            (PROJECT,))
+        conn.execute(
+            "INSERT INTO test_cases (project, section, title, steps, priority, nodeid, case_key, source, updated_at) "
+            "VALUES (?, 'helpdesk/ui/helpdesk', 'Создание группы', '[]', 'medium', ?, ?, 'generated', '2026-10-06')",
+            (PROJECT, nodeid, nodeid))
+        conn.commit()
+        test_cases.import_drafts(conn, project_row)
+        rows = conn.execute("SELECT * FROM test_cases WHERE project = ?", (PROJECT,)).fetchall()
+        assert [r["case_key"] for r in rows] == [nodeid]
+
+
 # ------------------------------------------------------------------ import_drafts(): рекурсия по подпапкам
 
 def test_import_drafts_recursive_subdir_sections_and_requirement(db_path, vshgu_like_project_with_subdir):
