@@ -260,6 +260,13 @@ def import_drafts(conn: sqlite3.Connection, project_row: sqlite3.Row) -> dict:
             existing = conn.execute(
                 "SELECT * FROM test_cases WHERE project = ? AND case_key = ?", (project, case_key)
             ).fetchone()
+            # Кейс был ручным (ключ TC-ID), а теперь получил «- Автотест:» (ключ nodeid) —
+            # подхватываем старую строку и переводим её на новый ключ, иначе импорт
+            # создаёт дубль, а ручная запись остаётся сиротой (06.10.2026, helpdesk).
+            if existing is None and case["nodeid"] and case["case_id"]:
+                existing = conn.execute(
+                    "SELECT * FROM test_cases WHERE project = ? AND case_key = ?", (project, case["case_id"])
+                ).fetchone()
             if existing and existing["source"] == "manual":
                 result["skipped_manual"] += 1
                 continue

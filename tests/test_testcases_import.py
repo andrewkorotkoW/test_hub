@@ -251,6 +251,30 @@ def test_case_key_unique_per_project(db_path, vshgu_like_project_dir):
         conn.close()
 
 
+def test_import_drafts_manual_case_that_gains_nodeid_is_rekeyed_not_duplicated(db_path, tmp_path):
+    """Ручной кейс (ключ TC-ID) после добавления «- Автотест:» должен обновить СВОЮ строку
+    (ключ → nodeid), а не создать вторую (06.10.2026: 10 кейсов helpdesk продублировались)."""
+    docs_dir = tmp_path / "docs" / "test_cases"; docs_dir.mkdir(parents=True)
+    md = docs_dir / "groups.md"
+    md.write_text("### TC-HELPDESK_GROUPS-001 Создание группы\n\n- Приоритет: medium Тип: ui Роли: admin\n\n"
+                  "| # | Шаг | Ожидаемый результат |\n|---|---|---|\n| 1 | Открыть | Список |\n", encoding="utf-8")
+    with sqlite3.connect(db_path) as conn:
+        conn.row_factory = sqlite3.Row
+        _insert_project(conn, tmp_path)
+        project_row = conn.execute("SELECT * FROM projects WHERE name = ?", (PROJECT,)).fetchone()
+        test_cases.import_drafts(conn, project_row)
+        assert conn.execute("SELECT COUNT(*) FROM test_cases WHERE project = ?", (PROJECT,)).fetchone()[0] == 1
+        md.write_text(md.read_text(encoding="utf-8").replace(
+            "- Приоритет:", "- Автотест: tests/ui/helpdesk/admin/test_groups.py::test_create_group\n- Приоритет:"),
+            encoding="utf-8")
+        result = test_cases.import_drafts(conn, project_row)
+        rows = conn.execute("SELECT * FROM test_cases WHERE project = ?", (PROJECT,)).fetchall()
+        assert len(rows) == 1, [dict(r) for r in rows]
+        assert rows[0]["case_key"] == "tests/ui/helpdesk/admin/test_groups.py::test_create_group"
+        assert rows[0]["nodeid"] == "tests/ui/helpdesk/admin/test_groups.py::test_create_group"
+        assert result["updated"] == 1 and result["imported"] == 0
+
+
 # ------------------------------------------------------------------ import_drafts(): рекурсия по подпапкам
 
 def test_import_drafts_recursive_subdir_sections_and_requirement(db_path, vshgu_like_project_with_subdir):
