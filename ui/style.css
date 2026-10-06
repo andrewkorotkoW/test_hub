@@ -540,7 +540,7 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
   width: auto;
   height: 480px;
   max-width: 100%;
-  max-height: 480px;
+  max-height: 915px; /* натуральная высота Pixel 7: inline height из phoneFrameScale не должен клампиться (дефект нашёл dwight, 07.10) */
   aspect-ratio: 412 / 915;
   background: #000;
   border: 10px solid #000;
