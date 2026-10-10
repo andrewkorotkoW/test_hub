@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Test Hub — регистрация</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="common.js"></script>
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="card login-card">
+      <h1>Регистрация</h1>
+      <p class="muted">Заявку рассмотрит администратор, доступ появится после одобрения.</p>
+      <div id="register-error" class="error-box" hidden></div>
+
+      <form id="register-form">
+        <div class="field">
+          <label for="reg-login">Логин</label>
+          <input id="reg-login" autocomplete="username" required>
+        </div>
+        <div class="field">
+          <label for="reg-password">Пароль</label>
+          <input id="reg-password" type="password" autocomplete="new-password" required>
+        </div>
+        <div class="field">
+          <label for="reg-full-name">ФИО</label>
+          <input id="reg-full-name" required>
+        </div>
+        <div class="field">
+          <label for="reg-position">Должность</label>
+          <input id="reg-position" required>
+        </div>
+        <div class="field">
+          <label for="reg-project">Проект</label>
+          <select id="reg-project"><option value="">— не выбран —</option></select>
+        </div>
+        <button type="submit" class="primary">Отправить заявку</button>
+      </form>
+
+      <div id="register-done" hidden>
+        <p class="hint-box">Заявка отправлена, ждите одобрения администратора.</p>
+        <a href="index.html">Вернуться ко входу</a>
+      </div>
+
+      <p class="muted">Уже есть аккаунт? <a href="index.html">Войти</a></p>
+    </div>
+  </div>
+
+  <script src="register.js"></script>
+</body>
+</html>

@@ -46,10 +46,16 @@
       </div>
 
       <div class="card">
+        <h2>Заявки на регистрацию</h2>
+        <div id="pending-empty" class="muted" hidden>Заявок на рассмотрение нет.</div>
+        <div id="pending-rows"></div>
+      </div>
+
+      <div class="card">
         <h2>Пользователи</h2>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Логин</th><th>Роль</th><th>Онбординг</th><th></th></tr></thead>
+            <thead><tr><th>Логин</th><th>Роль</th><th>ФИО</th><th>Должность</th><th>Проект</th><th>Статус</th><th>Онбординг</th><th></th></tr></thead>
             <tbody id="users-rows"></tbody>
           </table>
         </div>

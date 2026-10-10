@@ -60,6 +60,14 @@ def list_projects(
     return [_project_payload(conn, r) for r in rows]
 
 
+@router.get("/names")
+def list_project_names(conn: sqlite3.Connection = Depends(get_db)) -> list[str]:
+    """Публичный (без авторизации) список имён проектов — нужен register.html,
+    где пользователь ещё не вошёл и не может звать GET /api/projects."""
+    rows = conn.execute("SELECT name FROM projects ORDER BY name").fetchall()
+    return [r["name"] for r in rows]
+
+
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_project(
     body: ProjectCreate,
