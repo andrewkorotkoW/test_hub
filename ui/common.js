@@ -349,20 +349,48 @@ function renderSidebar(user, page) {
   });
 }
 
+// Инициалы для фолбэка аватара: по ФИО (первые буквы первых двух слов), иначе по логину —
+// тот же приём, что у .logo-placeholder проектов в ui/projects.js.
+function userInitials(user) {
+  const base = (user.full_name || user.login || "").trim();
+  if (!base) return "?";
+  const parts = base.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return base.slice(0, 2).toUpperCase();
+}
+
 function renderHeader(user) {
   const mount = document.getElementById("app-header");
   if (!mount) return;
   const page = currentPage();
   renderSidebar(user, page);
+  const initials = escapeHtml(userInitials(user));
+  const avatarHtml = user.avatar_url
+    ? `<img class="header-avatar" src="${escapeHtml(user.avatar_url)}" alt="" data-initials="${initials}">`
+    : `<span class="header-avatar-placeholder">${initials}</span>`;
   mount.innerHTML = `
     <div class="header-left">
       <h1 class="topbar-title">Здравствуйте, ${escapeHtml(user.login)}</h1>
       <div class="topbar-search"><input type="search" placeholder="Поиск (скоро)" disabled aria-label="Поиск"></div>
     </div>
     <div class="header-right">
-      <span class="user-chip">${escapeHtml(user.login)} <span class="role-badge">${escapeHtml(user.role)}</span></span>
+      <a class="header-avatar-link" href="profile.html" title="Профиль">
+        ${avatarHtml}
+        <span class="user-chip">${escapeHtml(user.login)} <span class="role-badge">${escapeHtml(user.role)}</span></span>
+      </a>
     </div>
   `;
+  // нет файла аватара (удалён вручную, хотя avatar_url выставлен) — вместо битой
+  // картинки круг с инициалами, тот же приём, что у .project-logo-big в projects.js
+  const avatarImg = mount.querySelector("img.header-avatar");
+  if (avatarImg) {
+    avatarImg.addEventListener("error", () => {
+      const ph = document.createElement("span");
+      ph.className = "header-avatar-placeholder";
+      ph.textContent = avatarImg.dataset.initials;
+      avatarImg.replaceWith(ph);
+    });
+  }
 }
 
 async function initPage() {

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Test Hub — профиль</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="common.js"></script>
+  <script src="tour.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside id="app-sidebar" class="app-sidebar"></aside>
+    <div class="app-content">
+  <header id="app-header" class="site-header"></header>
+  <main class="page">
+    <h1>Профиль</h1>
+    <div id="profile-error" class="error-box" hidden></div>
+    <div id="profile-success" class="hint-box" hidden></div>
+
+    <div class="card">
+      <h2>Аватар</h2>
+      <div class="profile-avatar-row">
+        <div class="profile-avatar-box">
+          <img id="profile-avatar-img" class="profile-avatar-img" alt="" hidden>
+          <span id="profile-avatar-placeholder" class="profile-avatar-placeholder-lg" hidden></span>
+        </div>
+        <div class="profile-avatar-upload">
+          <input type="file" id="avatar-input" accept="image/png,image/jpeg">
+          <button type="button" id="avatar-upload-btn" class="primary">Загрузить</button>
+          <p class="muted">PNG или JPG.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Личные данные</h2>
+      <form id="profile-form" class="schedule-form">
+        <div class="field">
+          <label for="profile-login">Логин</label>
+          <input id="profile-login" disabled>
+        </div>
+        <div class="field">
+          <label for="profile-full-name">ФИО</label>
+          <input id="profile-full-name" placeholder="Фамилия Имя Отчество">
+        </div>
+        <div class="field">
+          <label for="profile-position">Должность</label>
+          <input id="profile-position" placeholder="Должность">
+        </div>
+        <div class="field">
+          <label for="profile-project">Проект</label>
+          <select id="profile-project"><option value="">— не выбран —</option></select>
+        </div>
+        <button type="submit" class="primary">Сохранить</button>
+      </form>
+    </div>
+  </main>
+    </div>
+  </div>
+
+  <script src="profile.js"></script>
+</body>
+</html>

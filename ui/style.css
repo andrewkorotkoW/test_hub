@@ -1648,3 +1648,53 @@ a.sentry-row:hover { background: var(--surface-hover); }
   .tc-toolbar { gap: 8px; }
   .tc-filters-bar .muted { margin-left: 0; }
 }
+
+/* ---------------- аватар пользователя в шапке (клик -> profile.html) ---------------- */
+.header-avatar-link { display: flex; align-items: center; gap: 8px; text-decoration: none; color: inherit; }
+.header-avatar-link:hover { text-decoration: none; }
+.header-avatar, .header-avatar-placeholder { width: 30px; height: 30px; border-radius: 50%; flex: none; }
+.header-avatar { object-fit: cover; border: 1px solid var(--border); }
+.header-avatar-placeholder {
+  background: var(--accent);
+  color: var(--accent-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+.header-avatar-link:hover .header-avatar,
+.header-avatar-link:hover .header-avatar-placeholder { box-shadow: 0 0 0 2px var(--accent); }
+
+/* ---------------- страница профиля (ui/profile.html) ---------------- */
+.profile-avatar-row { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+.profile-avatar-box { width: 88px; height: 88px; flex: none; }
+.profile-avatar-img, .profile-avatar-placeholder-lg { width: 88px; height: 88px; border-radius: 50%; }
+.profile-avatar-img { object-fit: cover; border: 1px solid var(--border); }
+.profile-avatar-placeholder-lg {
+  background: var(--accent);
+  color: var(--accent-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+  font-weight: 700;
+}
+.profile-avatar-upload { display: flex; flex-direction: column; gap: 8px; }
+.profile-avatar-upload input[type="file"] { font-size: 12px; }
+
+/* ---------------- заявки на регистрацию (ui/admin.html) ---------------- */
+.pending-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+.pending-row:last-child { border-bottom: none; }
+.pending-info { display: flex; flex-direction: column; gap: 2px; }
+.pending-info .login { font-weight: 700; }
+.pending-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pending-actions select { font-size: 12px; }
