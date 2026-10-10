@@ -162,6 +162,12 @@ CREATE TABLE IF NOT EXISTS test_case_attachments (
     source TEXT NOT NULL CHECK (source IN ('allure', 'manual')),
     created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS user_projects (
+    user_login TEXT NOT NULL REFERENCES users(login) ON DELETE CASCADE,
+    project TEXT NOT NULL REFERENCES projects(name) ON DELETE CASCADE,
+    PRIMARY KEY (user_login, project)
+);
 """
 
 SEED_USERS = [

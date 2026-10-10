@@ -89,6 +89,11 @@ def approve_user(
     row = _get_user_or_404(conn, login)
     role = body.role if body.role is not None else row["role"]
     conn.execute("UPDATE users SET role = ?, status = 'active' WHERE login = ?", (role, login))
+    if role == "manager" and row["project"]:
+        conn.execute(
+            "INSERT OR IGNORE INTO user_projects (user_login, project) VALUES (?, ?)",
+            (login, row["project"]),
+        )
     conn.commit()
     return _user_payload(_get_user_or_404(conn, login))
 

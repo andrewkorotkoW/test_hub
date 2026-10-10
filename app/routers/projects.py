@@ -54,9 +54,23 @@ def _get_project_or_404(conn: sqlite3.Connection, name: str) -> sqlite3.Row:
 
 @router.get("")
 def list_projects(
-    conn: sqlite3.Connection = Depends(get_db), _user: sqlite3.Row = Depends(get_current_user)
+    conn: sqlite3.Connection = Depends(get_db), user: sqlite3.Row = Depends(get_current_user)
 ) -> list[dict]:
-    rows = conn.execute("SELECT * FROM projects ORDER BY name").fetchall()
+    if user["role"] in ("qa", "superadmin"):
+        rows = conn.execute("SELECT * FROM projects ORDER BY name").fetchall()
+    elif user["role"] == "manager":
+        rows = conn.execute(
+            "SELECT projects.* FROM projects "
+            "JOIN user_projects ON user_projects.project = projects.name "
+            "WHERE user_projects.user_login = ? ORDER BY projects.name",
+            (user["login"],),
+        ).fetchall()
+    elif user["project"]:
+        rows = conn.execute(
+            "SELECT * FROM projects WHERE name = ? ORDER BY name", (user["project"],)
+        ).fetchall()
+    else:
+        rows = conn.execute("SELECT * FROM projects ORDER BY name").fetchall()
     return [_project_payload(conn, r) for r in rows]
 
 
@@ -72,7 +86,7 @@ def list_project_names(conn: sqlite3.Connection = Depends(get_db)) -> list[str]:
 def create_project(
     body: ProjectCreate,
     conn: sqlite3.Connection = Depends(get_db),
-    _user: sqlite3.Row = Depends(require_roles("qa")),
+    user: sqlite3.Row = Depends(require_roles("qa", "manager")),
 ) -> dict:
     exists = conn.execute("SELECT 1 FROM projects WHERE name = ?", (body.name,)).fetchone()
     if exists:
@@ -86,6 +100,11 @@ def create_project(
         "INSERT INTO projects (name, path, venv, stands, use_env_flag) VALUES (?, ?, ?, '[]', ?)",
         (body.name, body.path, body.venv, int(body.use_env_flag)),
     )
+    if user["role"] == "manager":
+        conn.execute(
+            "INSERT OR IGNORE INTO user_projects (user_login, project) VALUES (?, ?)",
+            (user["login"], body.name),
+        )
     conn.commit()
     return _project_payload(conn, _get_project_or_404(conn, body.name))
 

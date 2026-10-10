@@ -4,13 +4,14 @@
 все данные», customer — «только запуск и просмотр отчётов». Ни manager, ни
 customer не входят в require_roles("qa") ни на одном write-эндпоинте
 (app/routers/projects.py, app/routers/users.py), поэтому оба должны получать
-403 на POST/PUT/DELETE.
+403 на POST/PUT/DELETE — кроме POST /api/projects: начиная с задачи про доступ
+по проектам (user_projects) manager может создавать свои проекты
+(require_roles("qa", "manager")), см. отдельные тесты ниже.
 """
 
 import pytest
 
 WRITE_REQUESTS = [
-    ("post", "/api/projects", {"name": "tmp_proj", "path": "/tmp/tmp_proj", "venv": ".venv"}),
     ("put", "/api/projects/bike_fit", {"path": "/tmp/new-path"}),
     ("delete", "/api/projects/bike_fit", None),
     ("post", "/api/projects/bike_fit/stands", {"name": "stg", "url": "http://stg"}),
@@ -46,6 +47,20 @@ async def test_customer_forbidden_on_write_endpoints(customer_client, method, ur
 async def test_manager_forbidden_on_write_endpoints(manager_client, method, url, payload):
     resp = await manager_client.request(method, url, json=payload)
     assert resp.status_code == 403, f"{method.upper()} {url} -> {resp.status_code}, ожидался 403"
+
+
+async def test_customer_forbidden_on_project_create(customer_client, tmp_path):
+    resp = await customer_client.post(
+        "/api/projects", json={"name": "tmp_proj_customer", "path": str(tmp_path), "venv": ".venv"}
+    )
+    assert resp.status_code == 403
+
+
+async def test_manager_can_create_project(manager_client, tmp_path):
+    resp = await manager_client.post(
+        "/api/projects", json={"name": "tmp_proj_manager", "path": str(tmp_path), "venv": ".venv"}
+    )
+    assert resp.status_code == 201
 
 
 async def test_manager_can_read_projects_and_stands(manager_client):
