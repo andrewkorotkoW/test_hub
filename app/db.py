@@ -14,7 +14,12 @@ CREATE TABLE IF NOT EXISTS users (
     login TEXT PRIMARY KEY,
     password_hash TEXT NOT NULL,
     role TEXT NOT NULL CHECK (role IN ('qa', 'manager', 'customer', 'superadmin')),
-    onboarded INTEGER NOT NULL DEFAULT 0
+    onboarded INTEGER NOT NULL DEFAULT 0,
+    full_name TEXT,
+    position TEXT,
+    project TEXT REFERENCES projects(name),
+    avatar_filename TEXT,
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'pending', 'rejected'))
 );
 
 CREATE TABLE IF NOT EXISTS projects (
@@ -470,6 +475,16 @@ def init_db() -> None:
         _migrate_add_column(conn, "runs", "live", "live INTEGER NOT NULL DEFAULT 0")
         _migrate_add_column(conn, "runs", "mobile", "mobile INTEGER NOT NULL DEFAULT 0")
         _migrate_add_column(conn, "stands", "workers", "workers INTEGER NOT NULL DEFAULT 0")
+        _migrate_add_column(conn, "users", "full_name", "full_name TEXT")
+        _migrate_add_column(conn, "users", "position", "position TEXT")
+        _migrate_add_column(conn, "users", "project", "project TEXT REFERENCES projects(name)")
+        _migrate_add_column(conn, "users", "avatar_filename", "avatar_filename TEXT")
+        _migrate_add_column(
+            conn,
+            "users",
+            "status",
+            "status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'pending', 'rejected'))",
+        )
         # На старых БД case_key ещё не заполнен для уже импортированных кейсов с
         # автотестом (у них case_key всегда равен nodeid, см. app/core/test_cases.py)
         # — без бэкфилла первый же повторный импорт не нашёл бы их по case_key и

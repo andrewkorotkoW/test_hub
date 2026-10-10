@@ -125,6 +125,24 @@ class AdminUserUpdate(BaseModel):
     password: Optional[str] = None
 
 
+class RegisterRequest(BaseModel):
+    login: str
+    password: str
+    full_name: str
+    position: str
+    project: Optional[str] = None
+
+
+class UserApprove(BaseModel):
+    role: Optional[Role] = None
+
+
+class MeUpdate(BaseModel):
+    full_name: Optional[str] = None
+    position: Optional[str] = None
+    project: Optional[str] = None
+
+
 class CoverageStandSummary(BaseModel):
     stand: str
     routes_total: int
