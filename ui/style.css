@@ -316,13 +316,12 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
 .nav-button {
   display: inline-flex;
   align-items: center;
-  padding: 14px 26px;
-  border: 2px solid var(--accent);
-  border-radius: 12px;
+  padding: 8px 14px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
   background: var(--surface);
   color: var(--text);
-  font-size: 18px;
-  font-weight: 600;
+  font: inherit;
   line-height: 1.2;
   white-space: nowrap;
   text-decoration: none;
@@ -1385,6 +1384,20 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 .runs-feed-item { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; }
 .runs-feed-meta { flex: 1 1 auto; min-width: 0; display: flex; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--text-muted); }
 .runs-feed-id { font-weight: 600; color: var(--text); }
+/* нейтральная пилюля-тег для строки ленты (сборка/эфир/мобильный) — не .badge-manual,
+   тот зарезервирован под предупреждение "стенд требует ручного подтверждения"
+   (жёлтый, var(--flaky)); эти теги — просто метаданные прогона, без акцента. */
+.runs-feed-tag {
+  display: inline-block;
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  border-radius: var(--radius);
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  vertical-align: middle;
+}
 /* REFERENCES.md, п.4: «спарклайн в строке» — сегментный бар passed/failed/skipped,
    как в docs/missions/redesign/variants/mockups.html (.bar). */
 .runs-feed-bar { flex: 0 0 90px; height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; display: flex; }
@@ -1680,6 +1693,7 @@ a.sentry-row:hover { background: var(--surface-hover); }
   font-size: 30px;
   font-weight: 700;
 }
+.profile-avatar-placeholder-lg[hidden] { display: none; }
 .profile-avatar-upload { display: flex; flex-direction: column; gap: 8px; }
 .profile-avatar-upload input[type="file"] { font-size: 12px; }
 

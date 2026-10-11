@@ -273,7 +273,13 @@ function renderNavItem(item, page, projectName) {
   const href = navItemHref(item, projectName);
   const [hrefPathAndQuery, hrefHash] = href.split("#");
   const hrefPage = hrefPathAndQuery.split("?")[0];
-  const active = hrefPage === page && (!hrefHash || window.location.hash === `#${hrefHash}`) ? " active" : "";
+  // "Прогоны" — не своя страница, а шорткат на project.html#history; без выбранного
+  // проекта её href деградирует до projects.html, который совпал бы с пунктом
+  // «Проекты» и подсвечивался бы активным всегда (даже на самой странице проектов).
+  // Активной эта ссылка может быть только когда реально ведёт на #history.
+  const active = item.runsShortcut
+    ? (projectName && hrefHash === "history" && window.location.hash === "#history" ? " active" : "")
+    : hrefPage === page && (!hrefHash || window.location.hash === `#${hrefHash}`) ? " active" : "";
   return `<a class="app-nav-link${active}" href="${href}">${escapeHtml(item.label)}</a>`;
 }
 
