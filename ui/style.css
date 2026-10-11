@@ -1348,10 +1348,17 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 .dash-ring-progress { transition: stroke-dashoffset .8s ease; }
 
 .dashboard-lists-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+/* тот же сброс .card + .card, что у .dashboard-feed-grid — см. комментарий там */
+.dashboard-lists-grid > .card { margin-top: 0; }
 @media (max-width: 900px) { .dashboard-lists-grid { grid-template-columns: 1fr; } }
 
 /* вариант A «Панель» (DESIGN.md Layout: «лента + xfail» — остаток + 340px) */
 .dashboard-feed-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; margin: 16px 0; }
+/* .card + .card даёт margin-top:16px для карточек, идущих одна под другой в общем
+   потоке страницы — здесь же .runs-feed-card/.xfail-card стоят бок о бок в гриде
+   (общий отступ уже даёт gap выше), но тот же CSS-селектор всё равно цепляет вторую
+   карточку по разметке и сдвигает её вниз без видимой причины. Сбрасываем. */
+.dashboard-feed-grid > .card { margin-top: 0; }
 @media (max-width: 900px) { .dashboard-feed-grid { grid-template-columns: 1fr; } }
 
 /* «Самые долгие тесты» — второстепенный блок, дублирующий топ-10 на странице
@@ -1390,7 +1397,7 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
    текстовых пунктов (см. .runs-feed-tags). Цвет — тот же var(--flaky) (фиолетовый),
    что и раньше у .badge-manual; .badge-manual оставлен только для "ручной" — у него
    теперь нет прежней причины совпадать по классу с этими тегами, но цвет сохранён. */
-.runs-feed-tags { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.runs-feed-tags { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
 .runs-feed-tag {
   display: inline-block;
   background: var(--flaky);

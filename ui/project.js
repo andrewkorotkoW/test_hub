@@ -2295,7 +2295,16 @@
             <td>${r.id}</td>
             <td class="status-text ${escapeHtml(r.status)}">${escapeHtml(r.status)}</td>
             <td>${escapeHtml(r.stand || "—")}${isManualStandRun(r.stand) ? `<span class="badge-manual">ручной</span>` : ""}</td>
-            <td>${r.target === "all" ? "всё" : "выборочно"}${r.label ? ` <span class="runs-feed-tag">сборка: ${escapeHtml(r.label)}</span>` : ""}${r.live ? ` <span class="runs-feed-tag">эфир</span>` : ""}${r.mobile ? ` <span class="runs-feed-tag">Pixel 7</span>` : ""}</td>
+            <td>
+              <div>${r.target === "all" ? "всё" : "выборочно"}</div>
+              ${(r.label || r.live || r.mobile) ? `
+                <div class="runs-feed-tags">
+                  ${r.label ? `<span class="runs-feed-tag">сборка: ${escapeHtml(r.label)}</span>` : ""}
+                  ${r.live ? `<span class="runs-feed-tag">эфир</span>` : ""}
+                  ${r.mobile ? `<span class="runs-feed-tag">Pixel 7</span>` : ""}
+                </div>
+              ` : ""}
+            </td>
             <td>${fmtDate(r.started)}</td>
             <td>${fmtDuration(r.duration)}</td>
             <td>${escapeHtml(r.requested_by || "—")}</td>
