@@ -646,6 +646,9 @@ table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .table-wrap { overflow-x: auto; }
 th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
 th { color: var(--text-muted); font-weight: 600; font-size: 12px; text-transform: uppercase; }
+/* числовые колонки (счётчики/проценты) — вправо, заголовок вместе со значением,
+   иначе цифры не выравниваются по разрядам и таблицу тяжело сканировать взглядом */
+th.num-col, td.num-col { text-align: right; font-variant-numeric: tabular-nums; }
 /* DESIGN.md «Таблицы»: зебра чётных строк — везде, где есть tbody/tr (низкая
    специфичность нарочно ниже статусных подсветок tbody tr.flaky-high/.xpass-row
    ниже по файлу, чтобы те не терялись на чётных строках). */

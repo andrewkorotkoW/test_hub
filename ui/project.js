@@ -575,9 +575,9 @@
       return `
         <tr class="${rowClass}">
           <td title="${escapeHtml(item.test)}">${escapeHtml(shortName)}</td>
-          <td>${item.runs}</td>
-          <td>${item.fails}</td>
-          <td>${percent}%</td>
+          <td class="num-col">${item.runs}</td>
+          <td class="num-col">${item.fails}</td>
+          <td class="num-col">${percent}%</td>
           <td class="flaky-dots">${flakyDotsHtml(item.last_statuses)}</td>
           <td>${runBtn}</td>
         </tr>
