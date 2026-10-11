@@ -323,6 +323,21 @@ function renderSidebar(user, page) {
     ? `<div class="app-nav-section">${roleLinks.map((item) => renderNavItem(item, page, projectName)).join("")}</div>`
     : "";
 
+  // Компактная сводка Sentry — только тем, кто видит полную карточку на дашборде
+  // (app/routers/sentry.py — require_roles("qa") + superadmin автоматом), и
+  // только когда открыт конкретный проект (ошибки привязаны к проекту+стенду,
+  // вне проекта показывать нечего). Подробный список остаётся только на
+  // дашборде (project.html#dashboard, #sentry-card) — здесь только бейдж-счётчик
+  // новых issues за 24ч и ссылка туда, без дублирования списка.
+  const canSeeSentry = user.role === "qa" || user.role === "superadmin";
+  const sentrySection = (canSeeSentry && projectName)
+    ? `<a class="app-nav-link app-sidebar-sentry" id="app-sidebar-sentry" href="project.html?name=${encodeURIComponent(projectName)}#dashboard" title="Ошибки продукта (Sentry)" hidden>
+        <svg class="app-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9L2.8 17a1.8 1.8 0 001.56 2.7h15.3a1.8 1.8 0 001.56-2.7L13.7 3.9a1.8 1.8 0 00-3.4 0zM12 9v4M12 16.5h.01"/></svg>
+        <span class="app-nav-label">Sentry</span>
+        <span class="app-sidebar-sentry-badge" id="app-sidebar-sentry-badge"></span>
+      </a>`
+    : "";
+
   const theme = document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
 
   const collapsed = localStorage.getItem("th_sidebar_collapsed") === "1";
@@ -337,7 +352,7 @@ function renderSidebar(user, page) {
       <button type="button" id="app-burger-btn" class="app-burger-btn" aria-label="Открыть меню" aria-expanded="false">&#9776;</button>
     </div>
     <div class="app-sidebar-collapsible">
-      <nav class="app-nav">${nav}${roleNav}</nav>
+      <nav class="app-nav">${nav}${roleNav}${sentrySection}</nav>
       <div class="app-sidebar-footer">
         <button type="button" id="theme-toggle-btn" class="theme-toggle" aria-pressed="${theme === "light" ? "true" : "false"}">
           <span id="theme-toggle-label">${theme === "dark" ? "Тёмная тема" : "Светлая тема"}</span>
@@ -347,6 +362,8 @@ function renderSidebar(user, page) {
       </div>
     </div>
   `;
+
+  if (canSeeSentry && projectName) loadSidebarSentrySummary(projectName);
 
   // Сворачивание в узкую иконочную полосу (десктоп) — состояние в localStorage,
   // применяется сразу на классе #app-sidebar ещё до построения разметки (см.
@@ -395,6 +412,41 @@ function renderSidebar(user, page) {
       link.classList.toggle("active", active);
     });
   });
+}
+
+// Пороги светофора — те же 0/1-4/5+, что у .sentry-signal-* на карточке дашборда
+// (ui/project.js::sentrySignalClass); не вынесено в общий модуль ради одной
+// трёхстрочной функции, дублирование минимальное.
+function sentrySummarySignalClass(count) {
+  if (count <= 0) return "sentry-signal-green";
+  if (count <= 4) return "sentry-signal-yellow";
+  return "sentry-signal-red";
+}
+
+// Компактная сводка Sentry в сайдбаре (см. renderSidebar выше) — берёт первый
+// стенд проекта (тот же выбор по умолчанию, что у полной карточки на
+// дашборде, ui/project.js) и считает issues за 24ч тем же эндпоинтом. Полный
+// список сознательно не дублируется — только счётчик-бейдж со ссылкой.
+async function loadSidebarSentrySummary(projectName) {
+  const link = document.getElementById("app-sidebar-sentry");
+  const badge = document.getElementById("app-sidebar-sentry-badge");
+  if (!link || !badge) return;
+  try {
+    const stands = await api(`/api/projects/${encodeURIComponent(projectName)}/stands`);
+    const stand = stands[0] && stands[0].name;
+    if (!stand) return;
+    const data = await api(
+      `/api/projects/${encodeURIComponent(projectName)}/stands/${encodeURIComponent(stand)}/sentry/issues?since=-24h`
+    );
+    if (!data || !data.connected) return;
+    const count = (data.issues || []).length;
+    badge.textContent = String(count);
+    badge.className = `app-sidebar-sentry-badge ${sentrySummarySignalClass(count)}`;
+    link.hidden = false;
+  } catch {
+    // Sentry не подключён/стенд недоступен — бейдж просто не показываем,
+    // как и полная карточка в этом случае (renderSentryCard на дашборде).
+  }
 }
 
 // Инициалы для фолбэка аватара: по ФИО (первые буквы первых двух слов), иначе по логину —
