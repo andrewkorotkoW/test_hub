@@ -254,6 +254,26 @@ const APP_NAV_ITEMS = [
   { href: "project.html", hash: "#schedules", label: "Расписания", needsProject: true },
 ];
 
+// Иконки пунктов сайдбара — ключ по label (набор пунктов маленький и фиксированный,
+// заводить отдельное поле icon в APP_NAV_ITEMS/roleLinks ради этого не стали).
+// Тот же набор путей, что в макете-артефакте, утверждённом владельцем (вариант A).
+const APP_NAV_ICONS = {
+  "Проекты": '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+  "Прогоны": '<path d="M5 12h14M13 6l6 6-6 6"/>',
+  "Покрытие": '<path d="M3 15l5-6 4 4 5-7 4 5"/>',
+  "Статистика": '<path d="M4 19V9M12 19V4M20 19v-6"/>',
+  "Xfail": '<path d="M12 9v4M12 16.5h.01"/><path d="M10.3 3.9L2.8 17a1.8 1.8 0 001.56 2.7h15.3a1.8 1.8 0 001.56-2.7L13.7 3.9a1.8 1.8 0 00-3.4 0z"/>',
+  "Расписания": '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/>',
+  "Стенды и пользователи": '<path d="M4 21v-2a4 4 0 014-4h3M16 11a3 3 0 100-6 3 3 0 000 6zM17 21v-2a3 3 0 00-2-2.83"/><circle cx="9" cy="7" r="3"/>',
+  "Суперадминка": '<path d="M12 2l2.4 5 5.6.5-4.2 3.8 1.3 5.5-4.9-3-4.9 3 1.3-5.5L4.3 7.5l5.6-.5z"/>',
+};
+
+function navIconSvg(label) {
+  const path = APP_NAV_ICONS[label];
+  if (!path) return "";
+  return `<svg class="app-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg>`;
+}
+
 function currentProjectNameFromUrl() {
   return new URLSearchParams(window.location.search).get("name");
 }
@@ -267,8 +287,9 @@ function navItemHref(item, projectName) {
 }
 
 function renderNavItem(item, page, projectName) {
+  const icon = navIconSvg(item.label);
   if (item.needsProject && !projectName) {
-    return `<span class="app-nav-link app-nav-disabled" title="Откройте проект, чтобы перейти в раздел «${escapeHtml(item.label)}»">${escapeHtml(item.label)}</span>`;
+    return `<span class="app-nav-link app-nav-disabled" title="Откройте проект, чтобы перейти в раздел «${escapeHtml(item.label)}»">${icon}<span class="app-nav-label">${escapeHtml(item.label)}</span></span>`;
   }
   const href = navItemHref(item, projectName);
   const [hrefPathAndQuery, hrefHash] = href.split("#");
@@ -280,7 +301,9 @@ function renderNavItem(item, page, projectName) {
   const active = item.runsShortcut
     ? (projectName && hrefHash === "history" && window.location.hash === "#history" ? " active" : "")
     : hrefPage === page && (!hrefHash || window.location.hash === `#${hrefHash}`) ? " active" : "";
-  return `<a class="app-nav-link${active}" href="${href}">${escapeHtml(item.label)}</a>`;
+  // title — нативная подсказка-тултип, нужна в свёрнутом виде сайдбара (см.
+  // .app-sidebar-collapsed), где подпись скрыта и остаётся только иконка.
+  return `<a class="app-nav-link${active}" href="${href}" title="${escapeHtml(item.label)}">${icon}<span class="app-nav-label">${escapeHtml(item.label)}</span></a>`;
 }
 
 function renderSidebar(user, page) {
@@ -302,9 +325,15 @@ function renderSidebar(user, page) {
 
   const theme = document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
 
+  const collapsed = localStorage.getItem("th_sidebar_collapsed") === "1";
+  mount.classList.toggle("app-sidebar-collapsed", collapsed);
+
   mount.innerHTML = `
     <div class="app-sidebar-top">
       <a class="app-sidebar-brand" href="projects.html">Test Hub</a>
+      <button type="button" id="app-collapse-btn" class="app-collapse-btn" aria-label="${collapsed ? "Развернуть сайдбар" : "Свернуть сайдбар"}" title="${collapsed ? "Развернуть сайдбар" : "Свернуть сайдбар"}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 6l-6 6 6 6"/></svg>
+      </button>
       <button type="button" id="app-burger-btn" class="app-burger-btn" aria-label="Открыть меню" aria-expanded="false">&#9776;</button>
     </div>
     <div class="app-sidebar-collapsible">
@@ -319,6 +348,19 @@ function renderSidebar(user, page) {
     </div>
   `;
 
+  // Сворачивание в узкую иконочную полосу (десктоп) — состояние в localStorage,
+  // применяется сразу на классе #app-sidebar ещё до построения разметки (см.
+  // выше), чтобы при переходе на следующую страницу не было мигания развёрнутого
+  // состояния перед схлопыванием. Не путать с app-burger-btn — тот открывает/
+  // закрывает сайдбар целиком на мобильном (viewport ≤900px), это другой режим.
+  document.getElementById("app-collapse-btn").addEventListener("click", () => {
+    const nowCollapsed = mount.classList.toggle("app-sidebar-collapsed");
+    localStorage.setItem("th_sidebar_collapsed", nowCollapsed ? "1" : "0");
+    const btn = document.getElementById("app-collapse-btn");
+    const label = nowCollapsed ? "Развернуть сайдбар" : "Свернуть сайдбар";
+    btn.setAttribute("aria-label", label);
+    btn.setAttribute("title", label);
+  });
   document.getElementById("app-burger-btn").addEventListener("click", () => {
     const open = mount.classList.toggle("app-sidebar-open");
     document.getElementById("app-burger-btn").setAttribute("aria-expanded", open ? "true" : "false");

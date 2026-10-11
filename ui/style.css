@@ -184,23 +184,55 @@ label { display: inline-flex; align-items: center; gap: 6px; }
 /* на десктопе — просто прозрачная обёртка над nav/footer, чтобы не ломать
    существующий flex-column сайдбара; сворачивание применяется только на мобильном */
 .app-sidebar-collapsible { display: contents; }
+
+/* ---------- сворачивание в узкую иконочную полосу (десктоп) ----------
+   Отдельный режим от мобильного бургера выше: тот прячет/показывает сайдбар
+   целиком (app-sidebar-open), этот — сужает его до колонки иконок, сам сайдбар
+   остаётся на экране. См. common.js::renderSidebar — класс и localStorage. */
+.app-sidebar { transition: width .15s ease; }
+.app-collapse-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text-muted);
+}
+.app-collapse-btn:hover { color: var(--text); border-color: var(--accent); }
+.app-collapse-btn svg { width: 14px; height: 14px; transition: transform .15s ease; }
+.app-sidebar-collapsed .app-collapse-btn svg { transform: rotate(180deg); }
+
+.app-sidebar-collapsed { width: 60px; flex-basis: 60px; padding-left: 8px; padding-right: 8px; }
+.app-sidebar-collapsed .app-sidebar-top { justify-content: center; flex-direction: column; gap: 10px; }
+.app-sidebar-collapsed .app-sidebar-brand { display: none; }
+.app-sidebar-collapsed .app-nav-link { justify-content: center; padding: 9px 0; }
+.app-sidebar-collapsed .app-nav-label { display: none; }
+/* тема/тур/выход в иконки не переведены — в свёрнутом виде прячутся целиком,
+   развернуть сайдбар кнопкой наверху, чтобы до них добраться */
+.app-sidebar-collapsed .app-sidebar-footer { display: none; }
 .app-nav { display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; }
 .app-nav-section { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 2px; }
 .app-nav-link {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
   padding: 9px 12px;
   border-radius: 10px;
   color: var(--text-muted);
   font-weight: 500;
   font-size: 13px;
+  white-space: nowrap;
 }
 .app-nav-link:hover { background: var(--surface-hover); color: var(--text); text-decoration: none; }
 .app-nav-link.active { background: var(--accent); color: var(--accent-text); }
 .app-nav-link.app-nav-disabled { opacity: .5; cursor: default; }
 .app-nav-link.app-nav-disabled:hover { background: none; color: var(--text-muted); }
+.app-nav-icon { width: 17px; height: 17px; flex: none; }
+.app-nav-label { overflow: hidden; text-overflow: ellipsis; }
 .app-sidebar-footer { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
 .theme-toggle {
   display: flex;
@@ -833,6 +865,11 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
     gap: 0;
   }
   .app-sidebar-brand { padding: 0; }
+  /* иконочная полоса — только десктопный режим, на мобильном сайдбар и так
+     либо полностью скрыт, либо полностью открыт бургером */
+  .app-collapse-btn { display: none; }
+  .app-sidebar.app-sidebar-collapsed { width: 100%; flex-basis: auto; padding-left: 14px; padding-right: 14px; }
+  .app-sidebar-collapsed .app-sidebar-brand { display: flex; }
   .app-burger-btn {
     display: flex;
     align-items: center;
