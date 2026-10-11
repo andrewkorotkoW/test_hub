@@ -130,10 +130,24 @@ app.include_router(test_cases.router)
 app.include_router(sentry.router)
 app.include_router(product_map.router)
 
+class NoCacheStaticFiles(StaticFiles):
+    """Без Cache-Control браузер мог отдавать ui/*.js и ui/*.css из памяти вообще
+    без похода на сервер (ETag/Last-Modified есть, но это не заставляет лишний раз
+    проверять свежесть) — после каждого фикса фронтенда нужен был хард-рефреш,
+    путали с "фикс не сработал". no-cache не отключает кэш, а требует
+    ревалидации по ETag на каждый запрос: если файл не менялся — обычный быстрый
+    304, если менялся — сразу новое содержимое, без ручного сброса кэша."""
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 # Статика фронтенда (ui/) монтируется последней, чтобы её catch-all "/" не
 # перехватывал API-маршруты, зарегистрированные выше.
 UI_DIR = Path(__file__).resolve().parent.parent / "ui"
-app.mount("/", StaticFiles(directory=UI_DIR, html=True), name="ui")
+app.mount("/", NoCacheStaticFiles(directory=UI_DIR, html=True), name="ui")
 
 
 if __name__ == "__main__":

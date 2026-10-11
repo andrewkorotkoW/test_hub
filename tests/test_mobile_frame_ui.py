@@ -112,7 +112,7 @@ def test_project_js_toggles_device_badge_with_mobile_payload():
 # ------------------------------------------------------------------ 5. пилюли «Pixel 7»
 
 def test_project_js_renders_pixel7_pill_in_feed_and_table_next_to_live():
-    assert 'r.mobile ? `<span class="badge-manual">Pixel 7</span>' in PROJECT_JS
+    assert 'r.mobile ? `<span class="runs-feed-tag">Pixel 7</span>' in PROJECT_JS
     # ровно в тех же местах, где пилюля «эфир» — список прогонов и таблица истории
     assert PROJECT_JS.count('Pixel 7</span>') >= 2
 

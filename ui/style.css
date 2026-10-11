@@ -1382,16 +1382,19 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 
 .runs-feed { display: flex; flex-direction: column; gap: 8px; }
 .runs-feed-item { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; }
-.runs-feed-meta { flex: 1 1 auto; min-width: 0; display: flex; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--text-muted); }
+.runs-feed-meta { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--text-muted); }
 .runs-feed-id { font-weight: 600; color: var(--text); }
-/* нейтральная пилюля-тег для строки ленты (сборка/эфир/мобильный) — не .badge-manual,
-   тот зарезервирован под предупреждение "стенд требует ручного подтверждения"
-   (жёлтый, var(--flaky)); эти теги — просто метаданные прогона, без акцента. */
+/* сборка/эфир/мобильный — отдельный флекс-блок внутри .runs-feed-meta, не вперемешку
+   с текстовыми пунктами (стенд/дата/длительность/автор): при недостатке места теги
+   переносятся все вместе одним блоком на новую строку, а не ломают строку посреди
+   текстовых пунктов (см. .runs-feed-tags). Цвет — тот же var(--flaky) (фиолетовый),
+   что и раньше у .badge-manual; .badge-manual оставлен только для "ручной" — у него
+   теперь нет прежней причины совпадать по классу с этими тегами, но цвет сохранён. */
+.runs-feed-tags { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .runs-feed-tag {
   display: inline-block;
-  background: var(--surface-hover);
-  border: 1px solid var(--border);
-  color: var(--text-muted);
+  background: var(--flaky);
+  color: #fff;
   border-radius: var(--radius);
   padding: 2px 8px;
   font-size: 11px;

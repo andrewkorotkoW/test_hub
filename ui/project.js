@@ -2115,9 +2115,13 @@
           <span>${fmtDate(r.started)}</span>
           <span>${fmtDuration(r.duration)}</span>
           <span>${escapeHtml(r.requested_by || "—")}</span>
-          ${r.label ? `<span class="runs-feed-tag">сборка: ${escapeHtml(r.label)}</span>` : ""}
-          ${r.live ? `<span class="runs-feed-tag">эфир</span>` : ""}
-          ${r.mobile ? `<span class="runs-feed-tag">Pixel 7</span>` : ""}
+          ${(r.label || r.live || r.mobile) ? `
+            <div class="runs-feed-tags">
+              ${r.label ? `<span class="runs-feed-tag">сборка: ${escapeHtml(r.label)}</span>` : ""}
+              ${r.live ? `<span class="runs-feed-tag">эфир</span>` : ""}
+              ${r.mobile ? `<span class="runs-feed-tag">Pixel 7</span>` : ""}
+            </div>
+          ` : ""}
         </div>
         ${runsFeedBarHtml(r)}
         <div class="runs-feed-actions">
