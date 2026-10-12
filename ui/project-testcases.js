@@ -328,6 +328,10 @@
     try {
       const qs = new URLSearchParams(TestCasesLogic.queryParamsFromFilters(tcFilters)).toString();
       tcTree = await api(`${tcApiBase()}${qs ? "?" + qs : ""}`);
+      // разделы свёрнуты при открытии страницы (и при каждой перезагрузке дерева
+      // фильтром/поиском — kindNode.collapsed и так не переживает переприсвоение
+      // tcTree выше) — пользователь раскрывает нужные сам, кликом по заголовку.
+      (tcTree.kinds || []).forEach((k) => { k.collapsed = true; });
       tcCaseCache.clear();
       // без активного фильтра по разделу ответ содержит все разделы — обновляем
       // опции селекта; при активном фильтре список разделов временно неполный,
