@@ -2475,6 +2475,56 @@
   }
 
   // ---- вид 1: дерево разделов + карточка кейса ----
+  // kindNode.collapsed хранится прямо на узле дерева (тот же приём, что node.collapsed
+  // в coverage.js у SVG-дерева) — сворачивание раздела с сотнями кейсов (например
+  // «API») не трогает выбранный кейс и не дёргает повторную загрузку карточки.
+  function buildTcTreeHtml() {
+    let html = "";
+    (tcTree.kinds || []).forEach((kindNode) => {
+      const kindCount = (kindNode.areas || []).reduce((sum, a) => sum + (a.cases || []).length, 0);
+      if (!kindCount) return;
+      const collapsed = !!kindNode.collapsed;
+      html += `<div class="tc-tree-section">
+        <button type="button" class="tc-tree-section-label" data-kind="${escapeHtml(kindNode.kind)}" aria-expanded="${!collapsed}">
+          <span class="tc-tree-section-arrow">${collapsed ? "▸" : "▾"}</span>
+          <span>${escapeHtml(TestCasesLogic.kindLabel(kindNode.kind))}</span>
+          <span class="count">${kindCount}</span>
+        </button>`;
+      if (!collapsed) {
+        (kindNode.areas || []).forEach((area) => {
+          if (!area.cases || !area.cases.length) return;
+          if (area.area) html += `<div class="tc-tree-area-label">${escapeHtml(area.area)}</div>`;
+          area.cases.forEach((c) => {
+            const key = TestCasesLogic.statusKey(c);
+            html += `<button type="button" class="tc-tree-case" data-id="${c.id}"><span class="tc-dot ${key}"></span><span class="title" title="${escapeHtml(c.title)}">${escapeHtml(c.title)}</span></button>`;
+          });
+        });
+      }
+      html += `</div>`;
+    });
+    return html;
+  }
+
+  function bindTcTreeHandlers() {
+    tcTreePane.querySelectorAll(".tc-tree-case").forEach((btn) => {
+      btn.addEventListener("click", () => selectTcCase(Number(btn.dataset.id)));
+    });
+    tcTreePane.querySelectorAll(".tc-tree-section-label").forEach((btn) => {
+      btn.addEventListener("click", () => toggleTcTreeSection(btn.dataset.kind));
+    });
+  }
+
+  function toggleTcTreeSection(kind) {
+    const kindNode = (tcTree.kinds || []).find((k) => k.kind === kind);
+    if (!kindNode) return;
+    kindNode.collapsed = !kindNode.collapsed;
+    tcTreePane.innerHTML = buildTcTreeHtml();
+    bindTcTreeHandlers();
+    tcTreePane.querySelectorAll(".tc-tree-case").forEach((btn) => {
+      btn.classList.toggle("active", Number(btn.dataset.id) === tcSelectedCaseId);
+    });
+  }
+
   function renderTcTree() {
     const kinds = tcTree.kinds || [];
     if (!kinds.length) {
@@ -2483,26 +2533,8 @@
       tcSelectedCaseId = null;
       return;
     }
-    let html = "";
-    kinds.forEach((kindNode) => {
-      const kindCount = (kindNode.areas || []).reduce((sum, a) => sum + (a.cases || []).length, 0);
-      if (!kindCount) return;
-      html += `<div class="tc-tree-section">
-        <div class="tc-tree-section-label"><span>${escapeHtml(TestCasesLogic.kindLabel(kindNode.kind))}</span><span class="count">${kindCount}</span></div>`;
-      (kindNode.areas || []).forEach((area) => {
-        if (!area.cases || !area.cases.length) return;
-        if (area.area) html += `<div class="tc-tree-area-label">${escapeHtml(area.area)}</div>`;
-        area.cases.forEach((c) => {
-          const key = TestCasesLogic.statusKey(c);
-          html += `<button type="button" class="tc-tree-case" data-id="${c.id}"><span class="tc-dot ${key}"></span><span class="title" title="${escapeHtml(c.title)}">${escapeHtml(c.title)}</span></button>`;
-        });
-      });
-      html += `</div>`;
-    });
-    tcTreePane.innerHTML = html;
-    tcTreePane.querySelectorAll(".tc-tree-case").forEach((btn) => {
-      btn.addEventListener("click", () => selectTcCase(Number(btn.dataset.id)));
-    });
+    tcTreePane.innerHTML = buildTcTreeHtml();
+    bindTcTreeHandlers();
     const cases = TestCasesLogic.flattenTree(tcTree);
     const keepSelected = tcSelectedCaseId && cases.some((c) => c.id === tcSelectedCaseId);
     selectTcCase(keepSelected ? tcSelectedCaseId : cases[0].id);

@@ -1629,8 +1629,25 @@ a.sentry-row:hover { background: var(--surface-hover); }
 .tc-tree-pane, .tc-card-pane { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); min-width: 0; }
 .tc-tree-pane { max-height: 620px; overflow: auto; padding: 8px 6px; }
 .tc-card-pane { padding: 16px 18px; max-height: 620px; overflow: auto; }
-.tc-tree-section-label { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 8px; font-weight: 700; font-size: 13px; }
-.tc-tree-section-label .count { font-size: 11px; font-weight: 600; color: var(--text-muted); }
+.tc-tree-section-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  padding: 7px 8px;
+  font-weight: 700;
+  font-size: 13px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.tc-tree-section-label:hover { background: var(--surface-hover); }
+.tc-tree-section-arrow { flex: 0 0 auto; width: 12px; color: var(--text-muted); font-size: 10px; }
+.tc-tree-section-label .count { margin-left: auto; font-size: 11px; font-weight: 600; color: var(--text-muted); }
 .tc-tree-area-label { padding: 5px 8px 5px 16px; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted); font-weight: 600; }
 .tc-tree-case {
   display: flex;
