@@ -203,7 +203,7 @@ label { display: inline-flex; align-items: center; gap: 6px; }
   color: var(--text-muted);
 }
 .app-collapse-btn:hover { color: var(--text); border-color: var(--accent); }
-.app-collapse-btn svg { width: 14px; height: 14px; transition: transform .15s ease; }
+.app-collapse-btn svg { width: 14px; height: 14px; flex-shrink: 0; transition: transform .15s ease; }
 .app-sidebar-collapsed .app-collapse-btn svg { transform: rotate(180deg); }
 
 .app-sidebar-collapsed { width: 60px; flex-basis: 60px; padding-left: 8px; padding-right: 8px; }

@@ -288,7 +288,12 @@ function navItemHref(item, projectName) {
 
 function renderNavItem(item, page, projectName) {
   const icon = navIconSvg(item.label);
-  if (item.needsProject && !projectName) {
+  // runsShortcut без projectName — та же ситуация, что needsProject: деградировавший
+  // href вёл бы сам на projects.html вместо настоящего раздела (см. active ниже),
+  // то есть реальной навигации всё равно нет — честнее показать той же серой
+  // неактивной ссылкой, что и у Покрытия/Статистики/Xfail/Расписаний, а не живой
+  // кликабельной, которая просто остаётся на месте.
+  if ((item.needsProject || item.runsShortcut) && !projectName) {
     return `<span class="app-nav-link app-nav-disabled" title="Откройте проект, чтобы перейти в раздел «${escapeHtml(item.label)}»">${icon}<span class="app-nav-label">${escapeHtml(item.label)}</span></span>`;
   }
   const href = navItemHref(item, projectName);
