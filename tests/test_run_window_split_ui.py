@@ -8,7 +8,8 @@ tests/test_redesign_ui_smoke.py: без браузера — раздача ст
 id/data-атрибутов в разметке и (там, где поведение зависит от DOM-событий, не
 исполняемых здесь) наличие соответствующей логики в исходнике project.js через
 re.search/подстроки. Чистая логика без DOM (HTTP_LINE_RE/filterRequestLines,
-normalizeTestStatus) реально прогоняется через node — см.
+normalizeTestStatus) вынесена в ui/run-window-split-logic.js (window.RunWindowSplitLogic)
+и реально прогоняется через node — см.
 tests/js/test_run_window_split_logic.js и test_run_window_split_logic_js_suite_passes
 ниже. Один сквозной API-тест (синтетические run_events в БД, как в
 tests/test_run_tests_api.py) проверяет, что бэкенд отдаёт ровно те поля, которые

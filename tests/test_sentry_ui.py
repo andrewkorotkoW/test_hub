@@ -7,7 +7,8 @@ docs/missions/2026-09-29_sentry.md.
 которое зависит от DOM-событий, проверяется по исходнику через re.search (сам
 project.js — не модуль, целиком в node не исполняется, см. мотивацию в
 tests/js/test_run_window_split_logic.js). Чистая логика без DOM
-(sentrySignalClass/sentryIssueRowHtml) реально прогоняется через node — см.
+(sentrySignalClass/sentryIssueRowHtml) вынесена в ui/sentry-logic.js
+(window.SentryLogic) и реально прогоняется через node — см.
 tests/js/test_sentry_logic.js и test_sentry_logic_js_suite_passes ниже.
 """
 import pathlib
@@ -75,7 +76,7 @@ def test_render_sentry_card_limits_to_five_rows_with_signal_dot():
     match = re.search(r"function renderSentryCard\(data\) \{(.*?)\n  \}", PROJECT_JS, re.DOTALL)
     body = match.group(1)
     assert "slice(0, SENTRY_CARD_ROWS)" in body
-    assert "sentrySignalClass(issues.length)" in body
+    assert "SentryLogic.sentrySignalClass(issues.length)" in body
 
 
 def test_render_sentry_card_empty_issues_message():
@@ -107,7 +108,7 @@ def test_render_sentry_tab_shows_disconnected_and_empty_messages():
 def test_render_sentry_tab_renders_rows_with_new_badge_enabled():
     match = re.search(r"function renderSentryTab\(\) \{(.*?)\n  \}", PROJECT_JS, re.DOTALL)
     body = match.group(1)
-    assert "sentryIssueRowHtml(i, { withNewBadge: true })" in body
+    assert "SentryLogic.sentryIssueRowHtml(i, { withNewBadge: true })" in body
 
 
 def test_window_tabs_include_sentry_only_when_can_see_sentry():

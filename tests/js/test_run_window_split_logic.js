@@ -1,51 +1,17 @@
 /*
- * Юнит-тесты чистой логики сплит-карточки прогона (ui/project.js: HTTP_LINE_RE/
- * filterRequestLines — фильтр строк консоли под вкладку «Запросы», normalizeTestStatus —
- * нормализация статуса теста в списке слева).
- *
- * ui/project.js — единственный сценарный скрипт без module.exports, весь код внутри
- * одного async IIFE, который на верхнем уровне обращается к document/window.location и
- * ждёт initPage() (сетевой запрос) — целиком исполнить его в node нельзя (по тому же
- * поводу, что и tour.js, см. tests/js/test_tour_data.js). В отличие от tour.js эти две
- * функции не нужно "протаскивать" наружу дополнительной строкой в sandbox — они сами по
- * себе не используют DOM (только String/Array/RegExp), поэтому просто вырезаются из
- * исходника регуляркой (см. tests/test_run_window_split_ui.py, который подгоняет эти
- * regex под точный текст функций) и исполняются через vm.runInContext как отдельный
- * маленький сниппет.
+ * Юнит-тесты чистой логики сплит-карточки прогона (ui/run-window-split-logic.js:
+ * HTTP_LINE_RE/filterRequestLines — фильтр строк консоли под вкладку «Запросы»,
+ * normalizeTestStatus — нормализация статуса теста в списке слева; project.js
+ * подключает этот файл и использует window.RunWindowSplitLogic).
  */
 "use strict";
 
 var assert = require("assert");
 var path = require("path");
-var fs = require("fs");
-var vm = require("vm");
 
-var SRC_PATH = path.join(__dirname, "..", "..", "ui", "project.js");
-var src = fs.readFileSync(SRC_PATH, "utf8");
-
-function extract(re, label) {
-  var m = src.match(re);
-  if (!m) throw new Error("не найдено в ui/project.js: " + label);
-  return m[0];
-}
-
-var snippet = [
-  extract(/const HTTP_LINE_RE = .*?;/, "HTTP_LINE_RE"),
-  extract(/function filterRequestLines\(lines\) \{[\s\S]*?\n  \}/, "filterRequestLines"),
-  extract(/const TEST_STATUS_CLASSES = .*?;/, "TEST_STATUS_CLASSES"),
-  extract(/function normalizeTestStatus\(status\) \{[\s\S]*?\n  \}/, "normalizeTestStatus"),
-].join("\n");
-
-var sandbox = { console: console };
-vm.createContext(sandbox);
-vm.runInContext(
-  snippet + "\n;this.__filterRequestLines__ = filterRequestLines;this.__normalizeTestStatus__ = normalizeTestStatus;",
-  sandbox,
-  { filename: "project.js#split-logic" }
-);
-
-var filterRequestLines = sandbox.__filterRequestLines__;
-var normalizeTestStatus = sandbox.__normalizeTestStatus__;
+var RunWindowSplitLogic = require(path.join(__dirname, "..", "..", "ui", "run-window-split-logic.js"));
+var filterRequestLines = RunWindowSplitLogic.filterRequestLines;
+var normalizeTestStatus = RunWindowSplitLogic.normalizeTestStatus;
 
 var tests = [];
 function test(name, fn) {

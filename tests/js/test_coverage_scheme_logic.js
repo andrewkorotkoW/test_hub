@@ -1,21 +1,18 @@
 /*
- * Юнит-тесты чистой JS-логики схемы продукта на странице покрытия (ui/coverage.js:
- * pmBuildRouteGrid/pmSegmentBlocked/pmRouteOnGrid/pmNodeAnchor/pmEdgeRoute —
- * ортогональная разводка связей без пересечения чужих узлов; pmAllEdges — слияние
- * edges с node.target; goToNodeTests — переход в дерево тестов раздела по клику) —
- * без DOM, запускаются напрямую через node (см. tests/test_coverage_scheme_logic_js.py,
- * который дёргает этот файл через subprocess).
+ * Юнит-тесты чистой JS-логики схемы продукта на странице покрытия
+ * (ui/coverage-scheme-logic.js: pmBuildRouteGrid/pmSegmentBlocked/pmRouteOnGrid/
+ * pmNodeAnchor/pmEdgeRoute — ортогональная разводка связей без пересечения
+ * чужих узлов; pmAllEdges — слияние edges с node.target; nodeTestsUrl — URL
+ * перехода в дерево тестов раздела по клику; pmCanvasSvgAttrs — атрибуты SVG
+ * схемы) — без DOM, запускаются напрямую через node (см.
+ * tests/test_coverage_scheme_logic_js.py, который дёргает этот файл через
+ * subprocess). coverage.js подключает ui/coverage-scheme-logic.js и
+ * использует window.CoverageSchemeLogic.
  *
- * ui/coverage.js — единственный сценарный скрипт без module.exports, весь код внутри
- * одного async IIFE, который на верхнем уровне ждёт initPage() (сетевой запрос) и
- * обращается к document — целиком исполнить его в node нельзя (см. пример этого же
- * приёма для ui/project.js в tests/js/test_run_window_split_logic.js). Перечисленные
- * функции сами по себе не используют DOM (только Array/Set/Math/URLSearchParams),
- * поэтому вырезаются из исходника регуляркой (см. tests/test_coverage_scheme_logic_js.py,
- * который подгоняет эти regex под точный текст функций) и исполняются через
- * vm.runInContext как отдельный маленький сниппет. pmAllEdges/goToNodeTests читают
- * замыкающие переменные модуля (productMap/projectName/window) — в sandbox им заранее
- * заведены места (см. ниже), тесты заполняют их перед каждым вызовом.
+ * pluralRu общий для всех страниц — живёт в ui/common.js, которое по-прежнему
+ * не модуль (единственный плоский script без dual-export во всём проекте),
+ * поэтому вырезается регуляркой и исполняется через vm.runInContext, как и
+ * раньше.
  */
 "use strict";
 
@@ -24,77 +21,30 @@ var path = require("path");
 var fs = require("fs");
 var vm = require("vm");
 
-var SRC_PATH = path.join(__dirname, "..", "..", "ui", "coverage.js");
-var src = fs.readFileSync(SRC_PATH, "utf8");
 var COMMON_SRC_PATH = path.join(__dirname, "..", "..", "ui", "common.js");
 var commonSrc = fs.readFileSync(COMMON_SRC_PATH, "utf8");
 
-function extract(re, label) {
-  var m = src.match(re);
-  if (!m) throw new Error("не найдено в ui/coverage.js: " + label);
-  return m[0];
-}
-
-function extractCommon(re, label) {
-  var m = commonSrc.match(re);
-  if (!m) throw new Error("не найдено в ui/common.js: " + label);
-  return m[0];
-}
-
-var snippet = [
-  // pluralRu общий для всех страниц (ui/common.js) — coverage.js больше не
-  // держит свою копию, см. миссию про вынос дублирующихся хелперов.
-  extractCommon(/function pluralRu\(n, one, few, many\) \{[\s\S]*?\n\}/, "pluralRu"),
-  extract(/function pmBuildRouteGrid\(nodes, canvas\) \{[\s\S]*?\n  \}/, "pmBuildRouteGrid"),
-  extract(/function pmSegmentBlocked\(x1, y1, x2, y2, obstacles\) \{[\s\S]*?\n  \}/, "pmSegmentBlocked"),
-  extract(/function pmRouteOnGrid\(grid, sx, sy, tx, ty, obstacles\) \{[\s\S]*?\n  \}/, "pmRouteOnGrid"),
-  extract(/function pmNodeAnchor\(n, otherCx, otherCy\) \{[\s\S]*?\n  \}/, "pmNodeAnchor"),
-  extract(/function pmEdgeRoute\(a, b, grid, allNodes\) \{[\s\S]*?\n  \}/, "pmEdgeRoute"),
-  extract(/function pmAllEdges\(\) \{[\s\S]*?\n  \}/, "pmAllEdges"),
-  extract(/function goToNodeTests\(node\) \{[\s\S]*?\n  \}/, "goToNodeTests"),
-].join("\n");
-
-var sandbox = {
-  console: console,
-  URLSearchParams: URLSearchParams,
-  window: { location: { href: "" } },
-  projectName: "demo",
-  productMap: null,
-};
+var pluralRuMatch = commonSrc.match(/function pluralRu\(n, one, few, many\) \{[\s\S]*?\n\}/);
+if (!pluralRuMatch) throw new Error("не найдено в ui/common.js: pluralRu");
+var sandbox = { console: console };
 vm.createContext(sandbox);
-vm.runInContext(
-  snippet + "\n" +
-    ";this.__pluralRu__ = pluralRu;" +
-    "this.__pmBuildRouteGrid__ = pmBuildRouteGrid;" +
-    "this.__pmSegmentBlocked__ = pmSegmentBlocked;" +
-    "this.__pmRouteOnGrid__ = pmRouteOnGrid;" +
-    "this.__pmNodeAnchor__ = pmNodeAnchor;" +
-    "this.__pmEdgeRoute__ = pmEdgeRoute;" +
-    "this.__pmAllEdges__ = pmAllEdges;" +
-    "this.__goToNodeTests__ = goToNodeTests;",
-  sandbox,
-  { filename: "coverage.js#scheme-logic" }
-);
-
+vm.runInContext(pluralRuMatch[0] + "\n;this.__pluralRu__ = pluralRu;", sandbox, { filename: "common.js#pluralRu" });
 var pluralRu = sandbox.__pluralRu__;
-var pmBuildRouteGrid = sandbox.__pmBuildRouteGrid__;
-var pmSegmentBlocked = sandbox.__pmSegmentBlocked__;
-var pmRouteOnGrid = sandbox.__pmRouteOnGrid__;
-var pmNodeAnchor = sandbox.__pmNodeAnchor__;
-var pmEdgeRoute = sandbox.__pmEdgeRoute__;
-var pmAllEdges = sandbox.__pmAllEdges__;
-var goToNodeTests = sandbox.__goToNodeTests__;
+
+var CoverageSchemeLogic = require(path.join(__dirname, "..", "..", "ui", "coverage-scheme-logic.js"));
+var pmBuildRouteGrid = CoverageSchemeLogic.pmBuildRouteGrid;
+var pmSegmentBlocked = CoverageSchemeLogic.pmSegmentBlocked;
+var pmRouteOnGrid = CoverageSchemeLogic.pmRouteOnGrid;
+var pmNodeAnchor = CoverageSchemeLogic.pmNodeAnchor;
+var pmEdgeRoute = CoverageSchemeLogic.pmEdgeRoute;
+var pmAllEdges = CoverageSchemeLogic.pmAllEdges;
+var nodeTestsUrl = CoverageSchemeLogic.nodeTestsUrl;
 
 var tests = [];
 function test(name, fn) {
   tests.push({ name: name, fn: fn });
 }
 
-// Значения, построенные внутри vm.runInContext (массивы/объекты-литералы из тела
-// функций pmEdgeRoute/pmAllEdges), принадлежат другому реалму — их Array/Object
-// не тот же конструктор, что в этом файле, поэтому assert.deepStrictEqual с
-// литералом здесь падает как "same structure but not reference-equal" (см.
-// tests/js/test_tour_data.js/test_coverage_areas_logic.js, тот же приём).
 function norm(value) {
   return JSON.parse(JSON.stringify(value));
 }
@@ -266,20 +216,19 @@ test("pmEdgeRoute: начинается на границе a и заканчи�
 // ------------------------------------------------------------------ pmAllEdges
 
 test("pmAllEdges: пусто, если карта продукта ещё не загружена", function () {
-  sandbox.productMap = null;
-  assert.deepStrictEqual(norm(pmAllEdges()), []);
+  assert.deepStrictEqual(norm(pmAllEdges(null)), []);
 });
 
 test("pmAllEdges: возвращает edges как есть, если у узлов нет target", function () {
-  sandbox.productMap = {
+  var productMap = {
     edges: [{ source: "a", target: "b" }],
     nodes: [{ id: "a" }, { id: "b" }],
   };
-  assert.deepStrictEqual(norm(pmAllEdges()), [{ source: "a", target: "b" }]);
+  assert.deepStrictEqual(norm(pmAllEdges(productMap)), [{ source: "a", target: "b" }]);
 });
 
 test("pmAllEdges: node.target добавляет связь, если её ещё нет среди edges", function () {
-  sandbox.productMap = {
+  var productMap = {
     edges: [{ source: "a", target: "b" }],
     nodes: [
       { id: "a", target: "b" }, // уже есть в edges -> не дублируется
@@ -287,7 +236,7 @@ test("pmAllEdges: node.target добавляет связь, если её ещ�
       { id: "gateway" },
     ],
   };
-  var edges = pmAllEdges();
+  var edges = pmAllEdges(productMap);
   assert.strictEqual(edges.length, 2);
   assert.deepStrictEqual(norm(edges), [
     { source: "a", target: "b" },
@@ -296,42 +245,38 @@ test("pmAllEdges: node.target добавляет связь, если её ещ�
 });
 
 test("pmAllEdges: узел без target не добавляет ничего", function () {
-  sandbox.productMap = { edges: [], nodes: [{ id: "a", target: null }] };
-  assert.deepStrictEqual(norm(pmAllEdges()), []);
+  var productMap = { edges: [], nodes: [{ id: "a", target: null }] };
+  assert.deepStrictEqual(norm(pmAllEdges(productMap)), []);
 });
 
-// ------------------------------------------------------------------ goToNodeTests
+// ------------------------------------------------------------------ nodeTestsUrl
 
-test("goToNodeTests: узел без тестов (total=0) — переход не происходит", function () {
-  sandbox.window.location.href = "";
-  sandbox.projectName = "demo";
-  goToNodeTests({ id: "n1", tests_count: { total: 0 }, sample_tests: [] });
-  assert.strictEqual(sandbox.window.location.href, "");
+test("nodeTestsUrl: узел без тестов (total=0) — null", function () {
+  var url = nodeTestsUrl({ id: "n1", tests_count: { total: 0 }, sample_tests: [] }, "demo");
+  assert.strictEqual(url, null);
 });
 
-test("goToNodeTests: узел без sample_tests (пустой список) — переход не происходит", function () {
-  sandbox.window.location.href = "";
-  sandbox.projectName = "demo";
-  goToNodeTests({ id: "n1", tests_count: { total: 3 }, sample_tests: [] });
-  assert.strictEqual(sandbox.window.location.href, "");
+test("nodeTestsUrl: узел без sample_tests (пустой список) — null", function () {
+  var url = nodeTestsUrl({ id: "n1", tests_count: { total: 3 }, sample_tests: [] }, "demo");
+  assert.strictEqual(url, null);
 });
 
-test("goToNodeTests: переходит на project.html с уникальными файлами тестов и #run", function () {
-  sandbox.window.location.href = "";
-  sandbox.projectName = "demo proj"; // с пробелом — проверяет корректное URL-кодирование
-  goToNodeTests({
-    id: "n1",
-    tests_count: { total: 3 },
-    sample_tests: [
-      { nodeid: "tests/api/orders/test_orders.py::test_list_orders", name: "test_list_orders" },
-      { nodeid: "tests/api/orders/test_orders.py::test_get_order", name: "test_get_order" },
-      { nodeid: "tests/api/health/test_health.py::test_ping", name: "test_ping" },
-    ],
-  });
-  var href = sandbox.window.location.href;
-  assert.ok(href.indexOf("project.html?") === 0, href);
-  assert.ok(href.endsWith("#run"), href);
-  var qs = new URLSearchParams(href.slice("project.html?".length, href.length - "#run".length));
+test("nodeTestsUrl: строит project.html с уникальными файлами тестов и #run", function () {
+  var url = nodeTestsUrl(
+    {
+      id: "n1",
+      tests_count: { total: 3 },
+      sample_tests: [
+        { nodeid: "tests/api/orders/test_orders.py::test_list_orders", name: "test_list_orders" },
+        { nodeid: "tests/api/orders/test_orders.py::test_get_order", name: "test_get_order" },
+        { nodeid: "tests/api/health/test_health.py::test_ping", name: "test_ping" },
+      ],
+    },
+    "demo proj" // с пробелом — проверяет корректное URL-кодирование
+  );
+  assert.ok(url.indexOf("project.html?") === 0, url);
+  assert.ok(url.endsWith("#run"), url);
+  var qs = new URLSearchParams(url.slice("project.html?".length, url.length - "#run".length));
   assert.strictEqual(qs.get("name"), "demo proj");
   var files = qs.get("target").split("\n");
   assert.deepStrictEqual(files, ["tests/api/orders/test_orders.py", "tests/api/health/test_health.py"]);

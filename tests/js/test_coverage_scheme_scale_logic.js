@@ -1,43 +1,19 @@
 /*
  * Юнит-тест чистой JS-логики масштабирования схемы продукта на странице покрытия
- * (ui/coverage.js: pmCanvasSvgAttrs — атрибуты обёртки <svg class="pm-canvas-svg">
- * вокруг схемы, само масштабирование под ширину карточки/скролл на узких экранах —
- * в CSS, см. ui/style.css) — без DOM, запускается напрямую через node (см.
- * tests/test_coverage_scheme_scale_logic_js.py, который дёргает этот файл через
- * subprocess).
- *
- * ui/coverage.js — единственный сценарный скрипт без module.exports, весь код внутри
- * одного async IIFE — целиком исполнить его в node нельзя (см. тот же приём в
- * tests/js/test_coverage_tree_logic.js для ui/coverage-tree-logic.js и в
- * tests/js/test_run_window_split_logic.js для ui/project.js). pmCanvasSvgAttrs сама
- * по себе не использует DOM (только шаблонная строка), поэтому вырезается из
- * исходника регуляркой и исполняется через vm.runInContext как отдельный сниппет.
+ * (ui/coverage-scheme-logic.js: pmCanvasSvgAttrs — атрибуты обёртки
+ * <svg class="pm-canvas-svg"> вокруг схемы, само масштабирование под ширину
+ * карточки/скролл на узких экранах — в CSS, см. ui/style.css) — без DOM,
+ * запускается напрямую через node (см. tests/test_coverage_scheme_scale_logic_js.py,
+ * который дёргает этот файл через subprocess). coverage.js подключает
+ * ui/coverage-scheme-logic.js и использует window.CoverageSchemeLogic.
  */
 "use strict";
 
 var assert = require("assert");
 var path = require("path");
-var fs = require("fs");
-var vm = require("vm");
 
-var SRC_PATH = path.join(__dirname, "..", "..", "ui", "coverage.js");
-var src = fs.readFileSync(SRC_PATH, "utf8");
-
-function extract(re, label) {
-  var m = src.match(re);
-  if (!m) throw new Error("не найдено в ui/coverage.js: " + label);
-  return m[0];
-}
-
-var snippet = extract(/function pmCanvasSvgAttrs\(canvas\) \{[\s\S]*?\n  \}/, "pmCanvasSvgAttrs");
-
-var sandbox = {};
-vm.createContext(sandbox);
-vm.runInContext(snippet + "\n;this.__pmCanvasSvgAttrs__ = pmCanvasSvgAttrs;", sandbox, {
-  filename: "coverage.js#scheme-scale-logic",
-});
-
-var pmCanvasSvgAttrs = sandbox.__pmCanvasSvgAttrs__;
+var CoverageSchemeLogic = require(path.join(__dirname, "..", "..", "ui", "coverage-scheme-logic.js"));
+var pmCanvasSvgAttrs = CoverageSchemeLogic.pmCanvasSvgAttrs;
 
 var tests = [];
 function test(name, fn) {

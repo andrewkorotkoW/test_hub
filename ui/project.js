@@ -1091,22 +1091,12 @@
   }
 
   // ---------------- карточка прогона · сплит (тесты слева, окно теста справа) ----------------
-  const TEST_STATUS_CLASSES = ["passed", "failed", "broken", "skipped", "xfail", "flaky", "running", "queued", "cancelled"];
-  function normalizeTestStatus(status) {
-    const s = String(status || "unknown").toLowerCase().replace(/^xfailed$/, "xfail");
-    return TEST_STATUS_CLASSES.includes(s) ? s : "unknown";
-  }
-
-  // HTTP-строка консоли — как предложено в задаче: метод, путь, код ответа.
-  const HTTP_LINE_RE = /\b(GET|POST|PUT|PATCH|DELETE)\s+\S+\s+(\d{3})\b/;
-
-  function filterRequestLines(lines) {
-    return lines.filter((line) => HTTP_LINE_RE.test(line));
-  }
+  // normalizeTestStatus/HTTP_LINE_RE/filterRequestLines — чистая логика без DOM,
+  // вынесена в ui/run-window-split-logic.js (window.RunWindowSplitLogic).
 
   function highlightConsoleLine(line) {
     let html = escapeHtml(line);
-    const m = line.match(HTTP_LINE_RE);
+    const m = line.match(RunWindowSplitLogic.HTTP_LINE_RE);
     if (m) {
       const method = m[1];
       const code = m[2];
@@ -1128,7 +1118,7 @@
   }
 
   function testRowHtml(t) {
-    const status = normalizeTestStatus(t.status);
+    const status = RunWindowSplitLogic.normalizeTestStatus(t.status);
     const shortName = t.nodeid.includes("::") ? t.nodeid.split("::").slice(1).join("::") : t.nodeid;
     return `
       <div class="test-row${t.nodeid === selectedNodeid ? " active" : ""}" data-nodeid="${encodeURIComponent(t.nodeid)}">
@@ -1147,7 +1137,7 @@
   function updateWindowPill() {
     const t = selectedNodeid ? splitTestsByNodeid[selectedNodeid] : null;
     if (!t) { runWindowPill.hidden = true; return; }
-    const status = normalizeTestStatus(t.status);
+    const status = RunWindowSplitLogic.normalizeTestStatus(t.status);
     runWindowPill.hidden = false;
     runWindowPill.textContent = status;
     runWindowPill.className = `status-pill ${status}`;
@@ -1188,7 +1178,7 @@
     }
     const issues = runSentryData.issues || [];
     if (!issues.length) return `<p class="muted">Issues за окно прогона не найдено.</p>`;
-    return `<div class="sentry-rows">${issues.map((i) => sentryIssueRowHtml(i, { withNewBadge: true })).join("")}</div>`;
+    return `<div class="sentry-rows">${issues.map((i) => SentryLogic.sentryIssueRowHtml(i, { withNewBadge: true })).join("")}</div>`;
   }
 
   // «Эфир»/«Видео» (docs/missions/2026-10-01_live_stream.md, п.1-3) — какая из двух
@@ -1261,7 +1251,7 @@
     } else if (activeWindowTab === "sentry") {
       runWindowBody.innerHTML = renderSentryTab();
     } else {
-      const reqLines = filterRequestLines(selectedTestLog);
+      const reqLines = RunWindowSplitLogic.filterRequestLines(selectedTestLog);
       runWindowBody.innerHTML = reqLines.length
         ? renderConsoleBox(reqLines)
         : `<p class="muted">HTTP-строк в выводе этого теста нет.</p>`;
@@ -1272,7 +1262,7 @@
   // Порядок и состав вкладок — RunLiveLogic.windowTabOrder (п.4 миссии): Эфир/Видео
   // (если есть) первой, дальше неизменный хвост Кадры/Консоль/Запросы(/Sentry).
   function renderWindowTabs() {
-    const reqCount = filterRequestLines(selectedTestLog).length;
+    const reqCount = RunWindowSplitLogic.filterRequestLines(selectedTestLog).length;
     const sentryCount = runSentryData && runSentryData.connected ? (runSentryData.issues || []).length : 0;
     const order = RunLiveLogic.windowTabOrder(currentMediaTab(), canSeeSentry);
     if (order.indexOf(activeWindowTab) === -1) activeWindowTab = order[0];
@@ -2167,31 +2157,8 @@
   }
 
   // ---------------- ошибки продукта (Sentry) ----------------
-  // Светофор простой пороговой логикой, как договорено в миссии: 0 — зелёный,
-  // 1–4 — жёлтый, 5+ — красный (цвета только из токенов DESIGN.md).
-  function sentrySignalClass(count) {
-    if (count <= 0) return "sentry-signal-green";
-    if (count <= 4) return "sentry-signal-yellow";
-    return "sentry-signal-red";
-  }
-
-  // Общий рендер строки issue для карточки на дашборде и вкладки в окне прогона:
-  // withNewBadge — только там, где есть is_new (окно прогона, GET /api/runs/{id}/sentry).
-  function sentryIssueRowHtml(issue, { withNewBadge = false } = {}) {
-    const level = String(issue.level || "unknown").toLowerCase();
-    const isNew = withNewBadge && issue.is_new;
-    const inner = `
-      <span class="sentry-level sentry-level-${escapeHtml(level)}">${escapeHtml(level)}</span>
-      <span class="sentry-row-title" title="${escapeHtml(issue.title)}">${escapeHtml(issue.title)}</span>
-      ${isNew ? `<span class="sentry-new-badge">новое</span>` : ""}
-      <span class="sentry-row-count">×${issue.count}</span>
-    `;
-    const cls = `sentry-row${isNew ? " is-new" : ""}`;
-    return issue.permalink
-      ? `<a class="${cls}" href="${escapeHtml(issue.permalink)}" target="_blank" rel="noopener">${inner}</a>`
-      : `<div class="${cls}">${inner}</div>`;
-  }
-
+  // Светофор/рендер строки issue — чистая логика без DOM, вынесена в
+  // ui/sentry-logic.js (window.SentryLogic), юнит-тестируется через node.
   const SENTRY_CARD_ROWS = 5;
 
   function renderSentryCard(data) {
@@ -2202,13 +2169,13 @@
     const issues = data.issues || [];
     sentryCardBody.innerHTML = `
       <div class="sentry-summary">
-        <span class="sentry-signal-dot ${sentrySignalClass(issues.length)}"></span>
+        <span class="sentry-signal-dot ${SentryLogic.sentrySignalClass(issues.length)}"></span>
         <span class="kpi-tile-value">${issues.length}</span>
         <span class="muted">новых issues за 24&nbsp;ч</span>
       </div>
       <div class="sentry-rows">
         ${issues.length
-          ? issues.slice(0, SENTRY_CARD_ROWS).map((i) => sentryIssueRowHtml(i)).join("")
+          ? issues.slice(0, SENTRY_CARD_ROWS).map((i) => SentryLogic.sentryIssueRowHtml(i)).join("")
           : `<p class="muted">Issues за последние сутки нет.</p>`}
       </div>
     `;

@@ -1,16 +1,16 @@
 /*
- * Юнит-тесты чистой логики блока Sentry (ui/project.js: sentrySignalClass —
+ * Юнит-тесты чистой логики блока Sentry (ui/sentry-logic.js: sentrySignalClass —
  * пороги светофора, sentryIssueRowHtml — рендер строки issue для карточки
- * дашборда и вкладки окна прогона).
+ * дашборда и вкладки окна прогона; project.js подключает этот файл и использует
+ * window.SentryLogic).
  *
- * ui/project.js не экспортирует ничего (см. tests/js/test_run_window_split_logic.js)
- * — функции вырезаются регуляркой и исполняются через vm.runInContext.
- * sentryIssueRowHtml зовёт escapeHtml (ui/common.js) как свободную переменную —
- * подкладываем её в sandbox тоже, вырезая из common.js. common.js использует `??`,
- * которого нет в установленном здесь node 12 (см. testhub-redesign-ui-smoke-tests
- * в памяти агента) — заменяем на `||` только для этого теста: для всех значений,
- * которые реально передаются в escapeHtml (issue.level/title/permalink — строки
- * или undefined), `??` и `||` эквивалентны.
+ * sentryIssueRowHtml зовёт escapeHtml (ui/common.js) как свободную глобальную
+ * переменную (в браузере её даёт common.js, подключённый раньше) — здесь кладём
+ * её в node-global тем же приёмом, что и раньше: вырезаем регуляркой из common.js
+ * (единственное, что по-прежнему не модуль) и заменяем `??` на `||`, которого нет
+ * в установленном здесь node 12 (см. testhub-redesign-ui-smoke-tests в памяти
+ * агента) — для всех значений, которые реально передаются в escapeHtml
+ * (issue.level/title/permalink — строки или undefined), `??` и `||` эквивалентны.
  */
 "use strict";
 
@@ -19,43 +19,17 @@ var path = require("path");
 var fs = require("fs");
 var vm = require("vm");
 
-var PROJECT_JS_PATH = path.join(__dirname, "..", "..", "ui", "project.js");
 var COMMON_JS_PATH = path.join(__dirname, "..", "..", "ui", "common.js");
-var projectSrc = fs.readFileSync(PROJECT_JS_PATH, "utf8");
 var commonSrc = fs.readFileSync(COMMON_JS_PATH, "utf8");
 
-function extract(src, re, label) {
-  var m = src.match(re);
-  if (!m) throw new Error("не найдено: " + label);
-  return m[0];
-}
+var escapeHtmlMatch = commonSrc.match(/function escapeHtml\(value\) \{[\s\S]*?\n\}/);
+if (!escapeHtmlMatch) throw new Error("не найдено в ui/common.js: escapeHtml");
+var escapeHtmlSrc = escapeHtmlMatch[0].replace(/\?\?/g, "||");
+vm.runInThisContext(escapeHtmlSrc + "\nglobal.escapeHtml = escapeHtml;", { filename: "common.js#escapeHtml" });
 
-var escapeHtmlSrc = extract(commonSrc, /function escapeHtml\(value\) \{[\s\S]*?\n\}/, "escapeHtml").replace(
-  /\?\?/g,
-  "||"
-);
-
-var snippet = [
-  escapeHtmlSrc,
-  extract(projectSrc, /function sentrySignalClass\(count\) \{[\s\S]*?\n  \}/, "sentrySignalClass"),
-  extract(
-    projectSrc,
-    /function sentryIssueRowHtml\(issue, \{ withNewBadge = false \} = \{\}\) \{[\s\S]*?\n  \}/,
-    "sentryIssueRowHtml"
-  ),
-].join("\n");
-
-var sandbox = { console: console };
-vm.createContext(sandbox);
-vm.runInContext(
-  snippet +
-    "\n;this.__sentrySignalClass__ = sentrySignalClass;this.__sentryIssueRowHtml__ = sentryIssueRowHtml;",
-  sandbox,
-  { filename: "project.js#sentry-logic" }
-);
-
-var sentrySignalClass = sandbox.__sentrySignalClass__;
-var sentryIssueRowHtml = sandbox.__sentryIssueRowHtml__;
+var SentryLogic = require(path.join(__dirname, "..", "..", "ui", "sentry-logic.js"));
+var sentrySignalClass = SentryLogic.sentrySignalClass;
+var sentryIssueRowHtml = SentryLogic.sentryIssueRowHtml;
 
 var tests = [];
 function test(name, fn) {
