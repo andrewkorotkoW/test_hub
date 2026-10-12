@@ -1788,7 +1788,7 @@ a.sentry-row:hover { background: var(--surface-hover); }
 .profile-avatar-upload { display: flex; flex-direction: column; gap: 8px; }
 .profile-avatar-upload input[type="file"] { font-size: 12px; }
 
-/* ---------------- заявки на регистрацию (ui/admin.html) ---------------- */
+/* ---------------- заявки на регистрацию (ui/users.html) ---------------- */
 .pending-row {
   display: flex;
   align-items: center;

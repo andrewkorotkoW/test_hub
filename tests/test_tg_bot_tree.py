@@ -246,7 +246,7 @@ async def test_cb_tree_open_on_dir_node_navigates_without_touching_selection():
 
 
 async def test_cb_tree_run_submits_target_joined_by_newline_in_sorted_order(monkeypatch):
-    monkeypatch.setattr(tg_bot, "_watch_run", AsyncMock())
+    monkeypatch.setattr(tg_bot.handlers, "_watch_run", AsyncMock())
     nodes, idx_one, idx_two = _two_test_nodes()
     chat_id = 555
     browse_state = {chat_id: {"project": "proj", "stand": "stage"}}
@@ -308,7 +308,7 @@ async def test_cb_tree_run_manual_only_stand_shows_confirmation_instead_of_submi
 
 
 async def test_cb_tree_run_confirm_submits_with_confirm_manual_true(monkeypatch):
-    monkeypatch.setattr(tg_bot, "_watch_run", AsyncMock())
+    monkeypatch.setattr(tg_bot.handlers, "_watch_run", AsyncMock())
     nodes, idx_one, idx_two = _two_test_nodes()
     chat_id = 555
     browse_state = {chat_id: {"project": "proj", "stand": "stage"}}
@@ -365,7 +365,7 @@ def _make_full_dispatcher(client, tree_cache=None, browse_state=None, selections
 
 async def test_tree_flow_selects_two_tests_and_runs_them_and_clears_selection(monkeypatch):
     monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
-    monkeypatch.setattr(tg_bot, "_watch_run", AsyncMock())
+    monkeypatch.setattr(tg_bot.handlers, "_watch_run", AsyncMock())
     bot, session = _make_bot()
 
     tree = {"tests/test_a.py": {"": ["test_one", "test_two"]}}
@@ -407,7 +407,7 @@ async def test_tree_flow_selects_two_tests_and_runs_them_and_clears_selection(mo
 
 async def test_tree_flow_manual_only_stand_requires_confirmation_step_before_submit(monkeypatch):
     monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
-    monkeypatch.setattr(tg_bot, "_watch_run", AsyncMock())
+    monkeypatch.setattr(tg_bot.handlers, "_watch_run", AsyncMock())
     bot, session = _make_bot()
 
     tree = {"tests/test_a.py": {"": ["test_one"]}}
@@ -527,7 +527,7 @@ def _last_sent_of_type(session, sent_type):
 
 async def test_fail_open_shows_trimmed_error_then_restart_one_submits_its_nodeid(monkeypatch):
     monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
-    monkeypatch.setattr(tg_bot, "_watch_run", AsyncMock())
+    monkeypatch.setattr(tg_bot.handlers, "_watch_run", AsyncMock())
     bot, session = _make_bot()
 
     tree, report = _failing_tree_and_report()
@@ -585,7 +585,7 @@ async def test_fail_open_shows_trimmed_error_then_restart_one_submits_its_nodeid
 
 async def test_fail_restart_all_submits_every_failing_nodeid_joined_by_newline(monkeypatch):
     monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
-    monkeypatch.setattr(tg_bot, "_watch_run", AsyncMock())
+    monkeypatch.setattr(tg_bot.handlers, "_watch_run", AsyncMock())
     bot, session = _make_bot()
 
     tree, report = _failing_tree_and_report()

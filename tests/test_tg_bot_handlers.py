@@ -63,7 +63,7 @@ def _no_background_watch(monkeypatch):
     """cmd_run ставит фоновую задачу опроса прогона через asyncio.create_task —
     подменяем саму _watch_run (как в tests/test_tg_bot.py), чтобы не плодить
     реальную задачу, спящую POLL_INTERVAL_SECONDS и переживающую тест."""
-    monkeypatch.setattr(tg_bot, "_watch_run", AsyncMock())
+    monkeypatch.setattr(tg_bot.handlers, "_watch_run", AsyncMock())
 
 
 PROJECTS = [

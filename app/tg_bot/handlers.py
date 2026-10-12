@@ -1,31 +1,11 @@
-"""Telegram-бот test_hub на inline-кнопках (aiogram 3).
-
-Главный сценарий — кнопочный: /start или текст «Меню» открывает список проектов,
-дальше выбор стенда → набора тестов (Smoke/API/UI/Все) → подтверждение → запуск,
-и всё это редактирует одно и то же сообщение (edit_text), не плодя новые. Текстовые
-команды (/projects, /run, /status, /report, /last) дублируют тот же функционал через
-HTTP API test_hub — обе ветки используют один и тот же HubClient.
-
-Стенд с manual_only=1 (боевой stage, см. app/db.py::VSHGU_MANUAL_ONLY_STAND) вместо
-маркеров показывает пресеты (build_preset_keyboard) и требует ещё один шаг
-подтверждения (build_manual_confirm_keyboard/_manual_confirm_text) перед
-submit_run(confirm_manual=True) — как для пресета (cb_preset/cb_preset_confirm),
-так и для дерева тестов (cb_tree_run/cb_tree_run_confirm), и то же самое даёт
-команда /stage <проект> <пресет>. Сервисная учётка бота при этом всё равно не
-может ничего запустить на таком стенде — submit_run блокирует её отдельно, см.
-app/core/runner.py::ManualRunNotConfirmed.
-
-Бот работает поверх REST API самого test_hub (app/routers/projects.py, app/routers/runs.py)
-под сервисной учёткой settings.TH_TG_SERVICE_LOGIN (сидится в app/db.py::_seed_tg_bot_user),
-используя фичи t1 — RunCreate.marker и projects.use_env_flag/--env (app/schemas.py,
-app/core/runner.py): маркер, выбранный кнопкой/введённый в /run, передаётся в
-RunCreate.marker как есть, раннер сам решает, добавлять ли `-m <marker>` и
-`--env <stand>` к pytest (см. build_run_args ниже — зеркалит этот же формат для UI).
-
-Разбор callback_data/команд и построение аргументов вынесены в чистые функции
-(parse_callback, parse_run_command, build_run_args, format_*) без объектов aiogram —
-их можно юнит-тестировать напрямую, без сети и без запуска бота.
-"""
+"""Кнопочный флоу и текстовые команды бота — router, middleware доступа, все
+cb_*/cmd_* хендлеры и их приватные async-хелперы, плюс запуск/остановка
+aiogram-приложения (TgApplication/build_application/start_application/
+stop_application). Самый большой модуль пакета: вся эта часть завязана на общий
+Router и на состояние, которое прокидывает Dispatcher (tree_cache, browse_state,
+selections, failed_cache, last_run, run_chats — см. build_application), поэтому
+дробить её дальше рискованно — see app/tg_bot/__init__.py про monkeypatch
+tg_bot.handlers._watch_run в тестах."""
 from __future__ import annotations
 
 import asyncio
@@ -49,44 +29,63 @@ from aiogram.types import (
 )
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from .config import settings
+from ..config import settings
+from .callbacks import build_callback, parse_callback
+from .client import HubClient
+from .formatting import (
+    STATUS_RU,
+    _bad_tests,
+    _confirm_text,
+    _error_text,
+    _manual_confirm_text,
+    _stand_label,
+    format_flaky,
+    format_projects,
+    format_report,
+    format_schedules,
+    format_stats,
+    format_status,
+    format_xfail,
+)
+from .keyboards import (
+    build_back_keyboard,
+    build_confirm_keyboard,
+    build_fail_detail_keyboard,
+    build_manual_confirm_keyboard,
+    build_marker_keyboard,
+    build_preset_keyboard,
+    build_projects_keyboard,
+    build_report_keyboard,
+    build_run_keyboard,
+    build_schedules_keyboard,
+    build_stands_keyboard,
+    build_tree_keyboard,
+    build_tree_text,
+)
+from .parsing import (
+    RUN_USAGE,
+    parse_flaky_args,
+    parse_optional_run_id,
+    parse_project_name,
+    parse_run_command,
+    parse_run_id,
+    parse_stage_args,
+    parse_stats_args,
+    parse_xfail_args,
+)
+from .tree import _collect_test_nodeids, build_flat_tree, build_full_name_index, build_run_args
 
 logger = logging.getLogger(__name__)
 
 POLL_INTERVAL_SECONDS = 3.0
 TERMINAL_STATUSES = {"passed", "failed", "cancelled"}
-MAX_FAILED_LISTED = 15
-MAX_REASON_LEN = 120
 TELEGRAM_CAPTION_LIMIT = 1024
-MAX_FAILED_BUTTONS = 10
-MAX_FAILED_LABEL_LEN = 40
-MAX_ERROR_TEXT_LEN = 1500
-
-STATUS_RU = {
-    "queued": "в очереди",
-    "running": "выполняется",
-    "passed": "пройден",
-    "failed": "провален",
-    "cancelled": "отменён",
-}
-
-MARKER_BUTTONS = [("Smoke", "smoke"), ("API", "api"), ("UI", "ui"), ("Все", None)]
-MARKER_LABELS = dict(MARKER_BUTTONS)
 
 TREE_CACHE_TTL_SECONDS = 300
-TREE_PAGE_SIZE = 8
 
-RUN_USAGE = "Использование: /run <проект> <стенд> [маркер]"
-STATUS_USAGE = "id прогона должен быть числом: /status [id]"
 REPORT_USAGE = "Использование: /report <id>"
 LAST_USAGE = "Использование: /last <проект>"
-FLAKY_USAGE = "Использование: /flaky <проект> [стенд]"
-FLAKY_TOP_N = 10
-XFAIL_USAGE = "Использование: /xfail <проект> [стенд]"
-XFAIL_TOP_N = 10
-STATS_USAGE = "Использование: /stats <проект> [стенд]"
 SCHEDULE_USAGE = "Использование: /schedules <проект>"
-STAGE_USAGE = "Использование: /stage <проект> <пресет>"
 STAGE_STAND_NAME = "stage"
 
 # Второй аргумент /run — либо имя стенда (старое поведение, см. RUN_USAGE), либо
@@ -102,805 +101,7 @@ _SECTION_ARG_RE = re.compile(r"^(?:api|ui)/[\w-]+$|^e2e$")
 ACCESS_DENIED_MESSAGE = "Извините, у вас нет доступа к этому боту."
 MENU_TEXT = "Выберите проект:"
 
-# callback_data кодирует отсутствующее значение (стенд "без стенда", маркер "Все")
-# этим токеном — project/stand в этой системе не содержат ":" и "_" отдельным полем.
-_NONE_TOKEN = "_"
 
-
-# ------------------------------------------------------------------ HTTP-клиент к test_hub
-class HubClient:
-    """Ходит в собственный REST API test_hub от имени сервисной учётки
-    (settings.TH_TG_SERVICE_LOGIN/PASSWORD), переиспользуя cookie сессии между
-    запросами и перелогиниваясь при 401 (например, после истечения сессии)."""
-
-    def __init__(self) -> None:
-        self._client = httpx.AsyncClient(base_url=f"http://127.0.0.1:{settings.TH_PORT}")
-        self._logged_in = False
-        self._login_lock = asyncio.Lock()
-
-    async def aclose(self) -> None:
-        await self._client.aclose()
-
-    async def _login(self) -> None:
-        resp = await self._client.post(
-            "/api/login",
-            json={"login": settings.TH_TG_SERVICE_LOGIN, "password": settings.TH_TG_SERVICE_PASSWORD},
-        )
-        resp.raise_for_status()
-        self._logged_in = True
-
-    async def _ensure_login(self) -> None:
-        if self._logged_in:
-            return
-        async with self._login_lock:
-            if not self._logged_in:
-                await self._login()
-
-    async def _request(self, method: str, url: str, **kwargs) -> httpx.Response:
-        await self._ensure_login()
-        resp = await self._client.request(method, url, **kwargs)
-        if resp.status_code == 401:
-            self._logged_in = False
-            await self._ensure_login()
-            resp = await self._client.request(method, url, **kwargs)
-        resp.raise_for_status()
-        return resp
-
-    async def list_projects(self) -> list[dict]:
-        resp = await self._request("GET", "/api/projects")
-        return resp.json()
-
-    async def list_stands(self, project: str) -> list[dict]:
-        resp = await self._request("GET", f"/api/projects/{project}/stands")
-        return resp.json()
-
-    async def submit_run(
-        self,
-        project: str,
-        stand: str | None,
-        marker: str | None,
-        target: str = "all",
-        confirm_manual: bool = False,
-    ) -> dict:
-        payload: dict = {"stand": stand, "target": target}
-        if marker:
-            payload["marker"] = marker
-        if confirm_manual:
-            payload["confirm_manual"] = True
-        resp = await self._request("POST", f"/api/projects/{project}/runs", json=payload)
-        return resp.json()
-
-    async def list_stand_presets(self, project: str, stand: str) -> list[dict]:
-        resp = await self._request("GET", f"/api/projects/{project}/stands/{stand}/presets")
-        return resp.json()
-
-    async def get_tests(self, project: str) -> dict:
-        resp = await self._request("GET", f"/api/projects/{project}/tests")
-        return resp.json()
-
-    async def get_report(self, run_id: int) -> dict:
-        resp = await self._request("GET", f"/api/runs/{run_id}/report")
-        return resp.json()
-
-    async def get_report_png(self, run_id: int) -> bytes:
-        resp = await self._request("GET", f"/api/runs/{run_id}/report.png")
-        return resp.content
-
-    async def get_trend_png(self, run_id: int) -> bytes:
-        resp = await self._request("GET", f"/api/runs/{run_id}/trend.png")
-        return resp.content
-
-    async def list_runs(self, project: str) -> list[dict]:
-        resp = await self._request("GET", f"/api/projects/{project}/runs")
-        return resp.json()
-
-    async def cancel_run(self, run_id: int) -> dict:
-        resp = await self._request("POST", f"/api/runs/{run_id}/cancel")
-        return resp.json()
-
-    async def create_share_link(self, run_id: int, expires: str = "30d") -> dict:
-        resp = await self._request("POST", f"/api/runs/{run_id}/share", json={"expires": expires})
-        return resp.json()
-
-    async def list_flaky(self, project: str, stand: str | None = None) -> list[dict]:
-        params = {"stand": stand} if stand else {}
-        resp = await self._request("GET", f"/api/projects/{project}/flaky", params=params)
-        return resp.json()["items"]
-
-    async def list_xfail(self, project: str, stand: str | None = None) -> list[dict]:
-        params = {"stand": stand} if stand else {}
-        resp = await self._request("GET", f"/api/projects/{project}/xfail", params=params)
-        return resp.json()["items"]
-
-    async def get_stats(self, project: str, stand: str | None = None) -> dict:
-        params = {"stand": stand} if stand else {}
-        resp = await self._request("GET", f"/api/projects/{project}/stats", params=params)
-        return resp.json()
-
-    async def list_schedules(self, project: str) -> list[dict]:
-        resp = await self._request("GET", f"/api/projects/{project}/schedules")
-        return resp.json()
-
-    async def set_schedule_enabled(self, project: str, schedule_id: int, enabled: bool) -> dict:
-        resp = await self._request(
-            "PUT", f"/api/projects/{project}/schedules/{schedule_id}", json={"enabled": enabled}
-        )
-        return resp.json()
-
-
-# ------------------------------------------------------------------ разбор текстовых команд
-def parse_run_args(text: str) -> tuple[str, str, str | None]:
-    """"<проект> <стенд> [маркер...]" — маркер может содержать пробелы (pytest -m
-    допускает выражения вида "smoke and not slow"), поэтому всё, что идёт после
-    стенда, склеивается в маркер целиком."""
-    parts = text.split()
-    if len(parts) < 2:
-        raise ValueError(RUN_USAGE)
-    project, stand, *rest = parts
-    marker = " ".join(rest) if rest else None
-    return project, stand, marker
-
-
-def parse_run_command(text: str) -> tuple[str, str, str | None] | None:
-    """То же, что parse_run_args, но без исключений — None при некорректном вводе."""
-    try:
-        return parse_run_args(text)
-    except ValueError:
-        return None
-
-
-def parse_run_id(text: str, usage: str) -> int:
-    parts = text.split()
-    if not parts:
-        raise ValueError(usage)
-    try:
-        return int(parts[0])
-    except ValueError:
-        raise ValueError(usage) from None
-
-
-def parse_optional_run_id(text: str) -> int | None:
-    parts = text.split()
-    if not parts:
-        return None
-    try:
-        return int(parts[0])
-    except ValueError:
-        raise ValueError(STATUS_USAGE) from None
-
-
-def parse_project_name(text: str, usage: str) -> str:
-    parts = text.split()
-    if not parts:
-        raise ValueError(usage)
-    return parts[0]
-
-
-def parse_flaky_args(text: str) -> tuple[str, str | None]:
-    """"<проект> [стенд]" — стенд необязателен (агрегирует по всем стендам проекта,
-    см. HubClient.list_flaky/app.core.flaky.list_stats с stand=None)."""
-    parts = text.split()
-    if not parts:
-        raise ValueError(FLAKY_USAGE)
-    project, *rest = parts
-    return project, rest[0] if rest else None
-
-
-def parse_xfail_args(text: str) -> tuple[str, str | None]:
-    """"<проект> [стенд]" — то же соглашение, что и parse_flaky_args."""
-    parts = text.split()
-    if not parts:
-        raise ValueError(XFAIL_USAGE)
-    project, *rest = parts
-    return project, rest[0] if rest else None
-
-
-def parse_stats_args(text: str) -> tuple[str, str | None]:
-    """"<проект> [стенд]" — то же соглашение, что и parse_flaky_args/parse_xfail_args."""
-    parts = text.split()
-    if not parts:
-        raise ValueError(STATS_USAGE)
-    project, *rest = parts
-    return project, rest[0] if rest else None
-
-
-def parse_stage_args(text: str) -> tuple[str, str]:
-    """"<проект> <пресет>" — имя пресета может содержать пробелы (как и маркер
-    в parse_run_args), поэтому всё после проекта склеивается в имя целиком."""
-    parts = text.split()
-    if len(parts) < 2:
-        raise ValueError(STAGE_USAGE)
-    project, *rest = parts
-    return project, " ".join(rest)
-
-
-# ------------------------------------------------------------------ callback_data кнопок
-def _encode_token(value: str | None) -> str:
-    return _NONE_TOKEN if value is None else value
-
-
-def _decode_token(value: str) -> str | None:
-    return None if value == _NONE_TOKEN else value
-
-
-def build_callback(action: str, **fields: str | None) -> str:
-    return ":".join([action, *(_encode_token(v) for v in fields.values())])
-
-
-def parse_callback(data: str) -> dict:
-    """callback_data → структура {"action": ..., ...}. Неизвестный/некорректный
-    формат отдаёт {"action": "invalid", "raw": data} — вызывающий код решает, что
-    с этим делать (в боте — молча ничего, см. cb_invalid)."""
-    tokens = data.split(":")
-    action, rest = tokens[0], tokens[1:]
-
-    if action == "menu" and not rest:
-        return {"action": "menu"}
-    if action == "project" and len(rest) == 1:
-        return {"action": "project", "project": rest[0]}
-    if action == "stand" and len(rest) == 2:
-        return {"action": "stand", "project": rest[0], "stand": _decode_token(rest[1])}
-    if action == "marker" and len(rest) == 3:
-        return {
-            "action": "marker",
-            "project": rest[0],
-            "stand": _decode_token(rest[1]),
-            "marker": _decode_token(rest[2]),
-        }
-    if action == "confirm" and len(rest) == 3:
-        return {
-            "action": "confirm",
-            "project": rest[0],
-            "stand": _decode_token(rest[1]),
-            "marker": _decode_token(rest[2]),
-        }
-    if action == "run_section_confirm" and len(rest) == 2:
-        return {"action": "run_section_confirm", "project": rest[0], "section": rest[1]}
-    if action in ("run_status", "run_report", "run_cancel", "run_trend", "run_share") and len(rest) == 1:
-        try:
-            run_id = int(rest[0])
-        except ValueError:
-            return {"action": "invalid", "raw": data}
-        return {"action": action, "run_id": run_id}
-    if action == "tests" and len(rest) == 2:
-        return {"action": "tests", "project": rest[0], "stand": _decode_token(rest[1])}
-    if action in ("preset", "preset_confirm") and len(rest) == 3:
-        try:
-            preset_id = int(rest[2])
-        except ValueError:
-            return {"action": "invalid", "raw": data}
-        return {"action": action, "project": rest[0], "stand": _decode_token(rest[1]), "preset_id": preset_id}
-    if action == "flaky" and len(rest) == 1:
-        return {"action": "flaky", "project": rest[0]}
-    if action in ("xfail", "xfail_check") and len(rest) == 1:
-        return {"action": action, "project": rest[0]}
-    if action == "sched_toggle" and len(rest) == 2:
-        try:
-            schedule_id = int(rest[1])
-        except ValueError:
-            return {"action": "invalid", "raw": data}
-        return {"action": "sched_toggle", "project": rest[0], "schedule_id": schedule_id}
-    if action in ("tree_open", "tree_page") and len(rest) == 1:
-        try:
-            value = int(rest[0])
-        except ValueError:
-            return {"action": "invalid", "raw": data}
-        key = "node" if action == "tree_open" else "page"
-        return {"action": action, key: value}
-    if action in (
-        "tree_up", "tree_refresh", "tree_select_file", "tree_clear", "tree_run", "tree_run_confirm",
-    ) and not rest:
-        return {"action": action}
-    if action in ("fail_open", "fail_restart_one") and len(rest) == 2:
-        try:
-            run_id, index = int(rest[0]), int(rest[1])
-        except ValueError:
-            return {"action": "invalid", "raw": data}
-        return {"action": action, "run_id": run_id, "index": index}
-    if action == "fail_restart_all" and len(rest) == 1:
-        try:
-            run_id = int(rest[0])
-        except ValueError:
-            return {"action": "invalid", "raw": data}
-        return {"action": action, "run_id": run_id}
-    return {"action": "invalid", "raw": data}
-
-
-# ------------------------------------------------------------------ аргументы pytest (зеркалит app/core/runner.py::_execute)
-def build_run_args(env_flag: bool, stand: str | None, marker: str | None) -> list[str]:
-    """Фрагмент аргументов pytest, которые добавит раннер (app/core/runner.py::_execute,
-    строки с `--env`/`-m`) поверх `pytest --alluredir=...` для данного выбора. Не
-    запускает pytest сам — только зеркалит формат, чтобы боту было что показать
-    пользователю на шаге подтверждения."""
-    args: list[str] = []
-    if env_flag and stand:
-        args.extend(["--env", stand])
-    if marker:
-        args.extend(["-m", marker])
-    return args
-
-
-# ------------------------------------------------------------------ дерево тестов (discover() -> плоский список узлов)
-def build_flat_tree(tree: dict) -> list[dict]:
-    """{file: {cls: [test, ...]}} (см. app/core/runner.py::discover) -> плоский
-    список узлов dir/file/class/test с parent/children-индексами. Узел [0] —
-    корень. Индекс узла в этом списке и есть то, что кодируется в callback_data
-    (см. п.6 задачи) — путь файла/тест-функции туда не попадает, так что 64-байтный
-    лимит Telegram не проблема независимо от длины реальных путей/имён тестов.
-    nodeid зеркалит ui/project.js::nodeIdOf (file::cls::test либо file::test)."""
-    nodes: list[dict] = [{"kind": "dir", "label": "", "parent": None, "children": []}]
-    dir_index: dict[tuple[str, ...], int] = {(): 0}
-
-    def get_dir(parts: tuple[str, ...]) -> int:
-        if parts in dir_index:
-            return dir_index[parts]
-        parent_idx = get_dir(parts[:-1])
-        idx = len(nodes)
-        nodes.append({"kind": "dir", "label": parts[-1], "parent": parent_idx, "children": []})
-        nodes[parent_idx]["children"].append(idx)
-        dir_index[parts] = idx
-        return idx
-
-    for file_path in sorted(tree):
-        parts = tuple(file_path.split("/"))
-        parent_idx = get_dir(parts[:-1])
-        file_idx = len(nodes)
-        nodes.append({"kind": "file", "label": parts[-1], "parent": parent_idx, "children": []})
-        nodes[parent_idx]["children"].append(file_idx)
-
-        classes = tree[file_path]
-        for cls_name in sorted(classes):
-            tests = classes[cls_name]
-            if cls_name:
-                owner_idx = len(nodes)
-                nodes.append({"kind": "class", "label": cls_name, "parent": file_idx, "children": []})
-                nodes[file_idx]["children"].append(owner_idx)
-            else:
-                owner_idx = file_idx
-            for test_name in tests:
-                nodeid = f"{file_path}::{cls_name}::{test_name}" if cls_name else f"{file_path}::{test_name}"
-                test_idx = len(nodes)
-                nodes.append(
-                    {"kind": "test", "label": test_name, "nodeid": nodeid, "parent": owner_idx, "children": []}
-                )
-                nodes[owner_idx]["children"].append(test_idx)
-    return nodes
-
-
-def _sorted_children(nodes: list[dict], index: int) -> list[int]:
-    return sorted(nodes[index]["children"], key=lambda i: nodes[i]["label"].lower())
-
-
-def _breadcrumb(nodes: list[dict], index: int) -> str:
-    parts = []
-    node: int | None = index
-    while node is not None:
-        label = nodes[node]["label"]
-        if label:
-            parts.append(label)
-        node = nodes[node]["parent"]
-    return "/".join(reversed(parts)) or "/"
-
-
-def _collect_test_nodeids(nodes: list[dict], index: int) -> list[str]:
-    result: list[str] = []
-    stack = [index]
-    while stack:
-        node = nodes[stack.pop()]
-        if node["kind"] == "test":
-            result.append(node["nodeid"])
-        else:
-            stack.extend(node["children"])
-    return result
-
-
-def _strip_param_suffix(nodeid: str) -> str:
-    if nodeid.endswith("]") and "[" in nodeid:
-        return nodeid[: nodeid.rindex("[")]
-    return nodeid
-
-
-def _nodeid_to_full_name(nodeid: str) -> str:
-    """Пересчитывает pytest nodeid (file.py::Class::test[param], см. build_flat_tree)
-    в то же представление, что allure_pytest кладёт в fullName результата
-    (allure_pytest.utils.allure_full_name: "{dotted.module.path}{.Class}?#{test}",
-    без параметров parametrize) — так падающий тест из отчёта можно сопоставить
-    с реальным nodeid для перезапуска."""
-    file_part, _, rest = nodeid.partition("::")
-    module = file_part[:-3] if file_part.endswith(".py") else file_part
-    module = module.replace("/", ".")
-    if not rest:
-        return module
-    segments = rest.split("::")
-    test = segments[-1].split("[")[0]
-    class_name = f".{segments[-2]}" if len(segments) > 1 else ""
-    return f"{module}{class_name}#{test}"
-
-
-def build_full_name_index(nodes: list[dict]) -> dict[str, str]:
-    """fullName (см. _nodeid_to_full_name) -> реальный nodeid без параметров
-    parametrize (pytest сам подберёт по такому базовому id все его вариации)."""
-    index: dict[str, str] = {}
-    for node in nodes:
-        if node["kind"] == "test":
-            index.setdefault(_nodeid_to_full_name(node["nodeid"]), _strip_param_suffix(node["nodeid"]))
-    return index
-
-
-# ------------------------------------------------------------------ форматирование
-def _stand_label(stand: str | None) -> str:
-    return stand if stand is not None else "без стенда"
-
-
-def _marker_label(marker: str | None) -> str:
-    return MARKER_LABELS.get(marker, marker) if marker is not None else "Все"
-
-
-def format_projects(projects: list[dict]) -> str:
-    if not projects:
-        return "Проектов пока нет."
-    lines = ["Проекты:"]
-    for project in projects:
-        stands = ", ".join(s["name"] for s in project.get("stands", [])) or "—"
-        lines.append(f"• {project['name']} (стенды: {stands})")
-    return "\n".join(lines)
-
-
-def _counts_line(counts: dict) -> str:
-    return (
-        f"passed: {counts.get('passed', 0)}, failed: {counts.get('failed', 0)}, "
-        f"broken: {counts.get('broken', 0)}, skipped: {counts.get('skipped', 0)}"
-    )
-
-
-def format_status(report: dict) -> str:
-    status_ru = STATUS_RU.get(report["status"], report["status"])
-    lines = [
-        f"Прогон #{report['id']} ({report.get('project')}) — {status_ru}",
-        _counts_line(report.get("counts") or {}),
-    ]
-    return "\n".join(lines)
-
-
-def _bad_tests(report: dict) -> list[dict]:
-    return [t for t in report.get("tests", []) if t.get("status") in ("failed", "broken")]
-
-
-def _short_reason(test: dict) -> str:
-    message = (test.get("message") or "").strip()
-    if not message:
-        return ""
-    return message.splitlines()[0][:MAX_REASON_LEN]
-
-
-def _short_test_label(name: str) -> str:
-    """allure fullName — "{dotted.module.path}{.Class}?#{test}" (см. allure_pytest.utils.
-    allure_full_name) — короткое имя это часть после "#", как label теста в дереве
-    (build_flat_tree), а не полный путь модуля."""
-    short = (name or "").rsplit("#", 1)[-1] or "?"
-    if len(short) > MAX_FAILED_LABEL_LEN:
-        short = short[: MAX_FAILED_LABEL_LEN - 1] + "…"
-    return short
-
-
-def _error_text(test: dict) -> str:
-    parts = [p for p in (test.get("message"), test.get("trace")) if p]
-    text = "\n\n".join(parts).strip()
-    if not text:
-        return "Текст ошибки недоступен."
-    if len(text) > MAX_ERROR_TEXT_LEN:
-        text = text[:MAX_ERROR_TEXT_LEN].rstrip() + "…"
-    return text
-
-
-def format_report(report: dict) -> str:
-    status_ru = STATUS_RU.get(report["status"], report["status"])
-    duration = report.get("duration")
-    duration_str = f"{duration:.1f}с" if isinstance(duration, (int, float)) else "—"
-    label = report.get("label")
-    # Прогон сборки (см. этап 2 миссии 2026-10-01_coverage_k_and_test_sets.md)
-    # называем по имени сборки, а не по (обычно длинному) списку целей.
-    title_suffix = f", сборка {label}" if label else ""
-    lines = [
-        f"Прогон #{report['id']} ({report.get('project')}{title_suffix}) — {status_ru}",
-        _counts_line(report.get("counts") or {}),
-        f"Длительность: {duration_str}",
-    ]
-    bad_tests = _bad_tests(report)
-    if bad_tests:
-        lines.append("Упавшие тесты:")
-        shown = bad_tests[:MAX_FAILED_LISTED]
-        for t in shown:
-            reason = _short_reason(t)
-            suffix = f": {reason}" if reason else ""
-            lines.append(f"  - {t.get('name')}{suffix}")
-        remaining = len(bad_tests) - len(shown)
-        if remaining > 0:
-            lines.append(f"  …и ещё {remaining}")
-    lines.append(f"http://127.0.0.1:{settings.TH_PORT}/project.html?name={report.get('project')}&run={report['id']}")
-    return "\n".join(lines)
-
-
-def format_flaky(project: str, stand: str | None, items: list[dict]) -> str:
-    header = f"Нестабильные тесты «{project}»" + (f" / {stand}" if stand else "") + ":"
-    top = items[:FLAKY_TOP_N]
-    if not top:
-        return f"{header}\nПока нет данных (мало прогонов) или все тесты стабильны."
-    lines = [header]
-    for item in top:
-        percent = round(item["score"] * 100)
-        short = (item.get("test") or "").rsplit("#", 1)[-1]
-        stand_suffix = "" if stand else f", стенд {item.get('stand')}"
-        lines.append(f"• {short}: {percent}% ({item.get('fails', 0)}/{item.get('runs', 0)} упал{stand_suffix})")
-    return "\n".join(lines)
-
-
-def format_xfail(project: str, items: list[dict]) -> str:
-    header = f"Известные дефекты «{project}»:"
-    if not items:
-        return f"{header}\nДефектов не найдено."
-    top = items[:XFAIL_TOP_N]
-    lines = [header]
-    for item in top:
-        short = (item.get("test") or "").rsplit("#", 1)[-1]
-        mark = "можно снять xfail (xpass)" if item.get("state") == "xpass" else "xfail"
-        lines.append(f"• {short} [{item.get('stand')}]: {mark}")
-    remaining = len(items) - len(top)
-    if remaining > 0:
-        lines.append(f"…и ещё {remaining}")
-    return "\n".join(lines)
-
-
-STATS_SECTIONS_LIMIT = 15
-
-
-def format_stats(project: str, stand: str | None, data: dict) -> str:
-    """Краткая сводка по разделам для /stats — та же таблица, что и на
-    ui/stats.html, но текстом: раздел, тестов, доля passed, средняя длительность,
-    флаки, активные xfail (по последнему полному прогону выбранного стенда)."""
-    header = f"Статистика «{project}»" + (f" / {stand}" if stand else "") + ":"
-    sections = [s for s in data.get("sections", []) if s.get("tests_total")]
-    if not sections:
-        return f"{header}\nПока нет данных — ни один раздел не прогонялся полностью."
-    lines = [header]
-    for s in sections[:STATS_SECTIONS_LIMIT]:
-        percent = s["passed_percent"]
-        percent_text = f"{percent}%" if percent is not None else "—"
-        duration_text = f"{s['avg_duration']:.1f}с" if s.get("avg_duration") is not None else "—"
-        extra = []
-        if s.get("flaky_count"):
-            extra.append(f"флаки {s['flaky_count']}")
-        if s.get("xfail_count"):
-            extra.append(f"xfail {s['xfail_count']}")
-        extra_text = f" ({', '.join(extra)})" if extra else ""
-        lines.append(f"• {s['section']}: {s['tests_total']} тестов, {percent_text} passed, {duration_text}{extra_text}")
-    remaining = len(sections) - STATS_SECTIONS_LIMIT
-    if remaining > 0:
-        lines.append(f"…и ещё {remaining}")
-    empty = data.get("empty_sections") or []
-    if empty:
-        lines.append(f"Без единого теста: {', '.join(empty)}")
-    return "\n".join(lines)
-
-
-def format_schedules(project: str, items: list[dict]) -> str:
-    header = f"Расписания «{project}»:"
-    if not items:
-        return f"{header}\nРасписаний нет."
-    lines = [header]
-    for item in items:
-        state = "включено" if item.get("enabled") else "выключено"
-        stand = _stand_label(item.get("stand"))
-        target = "все тесты" if (item.get("target") or "all") == "all" else "выборочно"
-        marker = _marker_label(item.get("marker"))
-        last_run_id = item.get("last_run_id")
-        suffix = f", последний прогон #{last_run_id}" if last_run_id else ""
-        lines.append(f"• #{item['id']} {stand} / {marker} / {target} — {item['cron']} ({state}){suffix}")
-    return "\n".join(lines)
-
-
-def _confirm_text(project: str, stand: str | None, marker: str | None, args: list[str]) -> str:
-    lines = [f"Запустить {project} / {_stand_label(stand)} / {_marker_label(marker)}?"]
-    if args:
-        lines.append(f"Аргументы pytest: {' '.join(args)}")
-    return "\n".join(lines)
-
-
-def _manual_confirm_text(stand: str | None, label: str) -> str:
-    """Подтверждение запуска на manual_only-стенде (boевой stage) — отдельный
-    текст от _confirm_text, т.к. submit_run на таком стенде требует
-    confirm_manual=True (см. app/core/runner.py::ManualRunNotConfirmed)."""
-    return f"⚠️ Запуск на {_stand_label(stand)}: {label}. Подтвердить?"
-
-
-# ------------------------------------------------------------------ inline-клавиатуры
-def build_projects_keyboard(projects: list[dict]) -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    for project in projects:
-        builder.button(text=project["name"], callback_data=build_callback("project", project=project["name"]))
-    builder.adjust(1)
-    return builder.as_markup()
-
-
-def build_stands_keyboard(project: str, stands: list[dict]) -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    if stands:
-        for stand in stands:
-            label = f"🔒 {stand['name']} (только вручную)" if stand.get("manual_only") else stand["name"]
-            builder.button(
-                text=label, callback_data=build_callback("stand", project=project, stand=stand["name"])
-            )
-    else:
-        builder.button(text="Без стенда", callback_data=build_callback("stand", project=project, stand=None))
-    builder.button(text="Флаки", callback_data=build_callback("flaky", project=project))
-    builder.button(text="Дефекты", callback_data=build_callback("xfail", project=project))
-    builder.button(text="« К проектам", callback_data="menu")
-    builder.adjust(1)
-    return builder.as_markup()
-
-
-def build_schedules_keyboard(project: str, items: list[dict]) -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    for item in items:
-        mark = "✅" if item.get("enabled") else "▫️"
-        builder.button(
-            text=f"{mark} #{item['id']}",
-            callback_data=build_callback("sched_toggle", project=project, id=str(item["id"])),
-        )
-    builder.button(text="« К проектам", callback_data="menu")
-    builder.adjust(1)
-    return builder.as_markup()
-
-
-def build_back_keyboard(callback_data: str, label: str = "« Назад") -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    builder.button(text=label, callback_data=callback_data)
-    return builder.as_markup()
-
-
-def build_marker_keyboard(project: str, stand: str | None) -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    for label, marker in MARKER_BUTTONS:
-        builder.button(text=label, callback_data=build_callback("marker", project=project, stand=stand, marker=marker))
-    builder.button(text="Выбрать тесты", callback_data=build_callback("tests", project=project, stand=stand))
-    builder.button(text="« К стендам", callback_data=build_callback("project", project=project))
-    builder.adjust(2, 2, 1, 1)
-    return builder.as_markup()
-
-
-def build_confirm_keyboard(project: str, stand: str | None, marker: str | None) -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    builder.button(text="Да", callback_data=build_callback("confirm", project=project, stand=stand, marker=marker))
-    builder.button(text="Отмена", callback_data="menu")
-    builder.adjust(2)
-    return builder.as_markup()
-
-
-def build_preset_keyboard(project: str, stand: str | None, presets: list[dict]) -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    for preset in presets:
-        builder.button(
-            text=preset["name"],
-            callback_data=build_callback("preset", project=project, stand=stand, id=str(preset["id"])),
-        )
-    builder.button(text="Выбрать тесты", callback_data=build_callback("tests", project=project, stand=stand))
-    builder.button(text="« К стендам", callback_data=build_callback("project", project=project))
-    builder.adjust(1)
-    return builder.as_markup()
-
-
-def build_manual_confirm_keyboard(yes_callback: str, cancel_callback: str = "menu") -> InlineKeyboardMarkup:
-    """Подтверждение запуска на manual_only-стенде — тот же двухкнопочный вид,
-    что и build_confirm_keyboard, но с явной формулировкой ("Да, запустить") и
-    свободным yes_callback: вызывающий код (пресет/дерево) сам решает, что
-    произойдёт по "Да" — submit_run с confirm_manual=True в разных вариантах
-    target/marker, которые не укладываются в формат build_callback("confirm", ...)."""
-    builder = InlineKeyboardBuilder()
-    builder.button(text="Да, запустить", callback_data=yes_callback)
-    builder.button(text="Отмена", callback_data=cancel_callback)
-    builder.adjust(2)
-    return builder.as_markup()
-
-
-def build_run_keyboard(run_id: int) -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    builder.button(text="Статус", callback_data=build_callback("run_status", run_id=str(run_id)))
-    builder.button(text="Отчёт", callback_data=build_callback("run_report", run_id=str(run_id)))
-    builder.button(text="Отменить", callback_data=build_callback("run_cancel", run_id=str(run_id)))
-    builder.button(text="Тренд", callback_data=build_callback("run_trend", run_id=str(run_id)))
-    builder.button(text="Поделиться", callback_data=build_callback("run_share", run_id=str(run_id)))
-    builder.adjust(2, 2, 1)
-    return builder.as_markup()
-
-
-def build_report_keyboard(run_id: int, failed: list[dict]) -> InlineKeyboardMarkup:
-    """Обычная клавиатура прогона (build_run_keyboard) + до MAX_FAILED_BUTTONS кнопок
-    упавших/сломанных тестов. Индекс кнопки — позиция в этом же списке `failed`,
-    закэшированном per run_id (см. failed_cache) — сам callback_data хранит только
-    run_id и индекс, не имя теста, поэтому укладывается в лимит Telegram (64 байта)
-    независимо от длины nodeid/fullName (тот же приём, что и в дереве тестов)."""
-    builder = InlineKeyboardBuilder(markup=build_run_keyboard(run_id).inline_keyboard)
-    for index, test in enumerate(failed[:MAX_FAILED_BUTTONS]):
-        builder.row(
-            InlineKeyboardButton(
-                text=f"❌ {_short_test_label(test.get('name') or '')}",
-                callback_data=build_callback("fail_open", run_id=str(run_id), index=str(index)),
-            )
-        )
-    return builder.as_markup()
-
-
-def build_fail_detail_keyboard(run_id: int, index: int) -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    builder.button(
-        text="Перезапустить этот тест",
-        callback_data=build_callback("fail_restart_one", run_id=str(run_id), index=str(index)),
-    )
-    builder.button(text="Перезапустить все упавшие", callback_data=build_callback("fail_restart_all", run_id=str(run_id)))
-    builder.adjust(1)
-    return builder.as_markup()
-
-
-def _tree_item_label(node: dict, selected: set[str]) -> str:
-    if node["kind"] == "test":
-        mark = "✅" if node["nodeid"] in selected else "▫️"
-        return f"{mark} {node['label']}"
-    icon = {"dir": "📁", "file": "📄", "class": "🗂"}[node["kind"]]
-    return f"{icon} {node['label']}"
-
-
-def build_tree_text(nodes: list[dict], project: str, stand: str | None, node: int, selected: set[str], error: str | None) -> str:
-    lines = [f"Проект: {project}", f"Стенд: {_stand_label(stand)}"]
-    if error:
-        lines.append(f"⚠️ {error}")
-    lines.append(f"Путь: {_breadcrumb(nodes, node)}")
-    lines.append(f"Выбрано тестов: {len(selected)}")
-    lines.append("Выберите папку, файл или тест:" if nodes[node]["children"] else "Здесь пусто.")
-    return "\n".join(lines)
-
-
-def build_tree_keyboard(
-    nodes: list[dict], project: str, stand: str | None, node: int, page: int, selected: set[str]
-) -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    children = _sorted_children(nodes, node)
-    start = page * TREE_PAGE_SIZE
-    page_items = children[start : start + TREE_PAGE_SIZE]
-    for child_idx in page_items:
-        child = nodes[child_idx]
-        builder.row(
-            InlineKeyboardButton(
-                text=_tree_item_label(child, selected),
-                callback_data=build_callback("tree_open", node=str(child_idx)),
-            )
-        )
-
-    nav_row = []
-    if start > 0:
-        nav_row.append(InlineKeyboardButton(text="‹ назад", callback_data=build_callback("tree_page", page=str(page - 1))))
-    if start + TREE_PAGE_SIZE < len(children):
-        nav_row.append(InlineKeyboardButton(text="вперёд ›", callback_data=build_callback("tree_page", page=str(page + 1))))
-    if nav_row:
-        builder.row(*nav_row)
-
-    top_row = []
-    if nodes[node]["parent"] is not None:
-        top_row.append(InlineKeyboardButton(text="⬆ уровень выше", callback_data="tree_up"))
-    top_row.append(InlineKeyboardButton(text="Обновить дерево", callback_data="tree_refresh"))
-    builder.row(*top_row)
-
-    if nodes[node]["kind"] == "file":
-        builder.row(InlineKeyboardButton(text="Выбрать все в файле", callback_data="tree_select_file"))
-
-    builder.row(
-        InlineKeyboardButton(text="Сбросить", callback_data="tree_clear"),
-        InlineKeyboardButton(text=f"Запустить выбранные ({len(selected)})", callback_data="tree_run"),
-    )
-    builder.row(InlineKeyboardButton(text="« К набору", callback_data=build_callback("stand", project=project, stand=stand)))
-    return builder.as_markup()
-
-
-# ------------------------------------------------------------------ доступ
 def _is_allowed(user_id: int | None) -> bool:
     return user_id is not None and user_id in settings.TH_TG_ALLOWED_IDS
 
@@ -921,7 +122,6 @@ class AccessMiddleware:
         return None
 
 
-# ------------------------------------------------------------------ безопасное редактирование
 async def _safe_edit(message: Message, text: str, reply_markup: InlineKeyboardMarkup | None = None) -> None:
     try:
         await message.edit_text(text, reply_markup=reply_markup)
@@ -981,7 +181,6 @@ async def _stand_manual_only(client: HubClient, project: str, stand: str | None)
     return bool(row and row.get("manual_only"))
 
 
-# ------------------------------------------------------------------ кэш дерева тестов (per project, TTL ~5 минут)
 async def _load_tree(
     client: HubClient, tree_cache: dict[str, tuple[float, list[dict], str | None]], project: str, force: bool = False
 ) -> tuple[list[dict] | None, str | None]:
@@ -1015,7 +214,6 @@ async def _render_tree(
     await _safe_edit(message, text, keyboard)
 
 
-# ------------------------------------------------------------------ фоновое ожидание прогона
 async def _watch_run(
     bot: Bot, client: HubClient, run_chats: dict[int, int], run_id: int, failed_cache: dict[int, list[dict]]
 ) -> None:
@@ -1050,7 +248,6 @@ async def _watch_run(
             return
 
 
-# ------------------------------------------------------------------ кнопочный флоу
 router = Router(name="tg_bot")
 
 
@@ -1753,7 +950,6 @@ async def cb_run_share(query: CallbackQuery, client: HubClient) -> None:
     await query.message.answer(f"Ссылка на отчёт прогона #{run_id} (30 дней): {share['url']}")
 
 
-# ------------------------------------------------------------------ упавшие тесты: текст ошибки и перезапуск
 async def _restart_tests(
     message: Message,
     client: HubClient,
@@ -1881,7 +1077,6 @@ async def cb_fail_restart_all(
     )
 
 
-# ------------------------------------------------------------------ текстовые команды (дублируют кнопки)
 @router.message(Command("projects"))
 async def cmd_projects(message: Message, client: HubClient) -> None:
     try:
@@ -2099,11 +1294,6 @@ async def cmd_schedules(message: Message, command: CommandObject, client: HubCli
     await message.answer(format_schedules(project, items), reply_markup=build_schedules_keyboard(project, items))
 
 
-# Переключение вкл/выкл требует роли qa на бэкенде (см. app/routers/schedules.py) —
-# у сервисной учётки бота роль 'customer' (см. app/db.py::_seed_tg_bot_user), поэтому
-# запрос может вернуть 403: тот же случай, что и с кнопкой «Отменить» у обычного
-# прогона (require_roles("qa", "manager")) — HubClient._request поднимет
-# httpx.HTTPStatusError, и пользователь просто увидит короткое сообщение об ошибке.
 @router.callback_query(F.data.startswith("sched_toggle:"))
 async def cb_sched_toggle(query: CallbackQuery, client: HubClient) -> None:
     if query.message is None:
@@ -2178,7 +1368,6 @@ async def cmd_last(
     await _send_report_png(message.answer_photo, message.answer, run_id, png, caption, keyboard)
 
 
-# ------------------------------------------------------------------ запуск/остановка приложения
 @dataclass
 class TgApplication:
     bot: Bot

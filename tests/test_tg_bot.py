@@ -610,7 +610,7 @@ async def test_button_flow_edits_single_message_and_submits_expected_run(monkeyp
     # Фоновый опрос прогона (_watch_run) не относится к этому сценарию — не
     # даём asyncio.create_task заспавнить реально спящую на 3с задачу, которая
     # переживёт тест и попытается сходить в замоканный HTTP уже после его конца.
-    monkeypatch.setattr(tg_bot, "_watch_run", AsyncMock())
+    monkeypatch.setattr(tg_bot.handlers, "_watch_run", AsyncMock())
 
     bot, session = _make_bot()
     submitted_runs: list[dict] = []
@@ -692,7 +692,7 @@ async def test_button_flow_edits_single_message_and_submits_expected_run(monkeyp
 
 async def test_button_flow_without_env_flag_omits_env_in_confirm_hint(monkeypatch):
     monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
-    monkeypatch.setattr(tg_bot, "_watch_run", AsyncMock())
+    monkeypatch.setattr(tg_bot.handlers, "_watch_run", AsyncMock())
     bot, session = _make_bot()
 
     async def handler(request: httpx.Request) -> httpx.Response:
@@ -800,7 +800,7 @@ async def test_button_flow_preset_leads_to_confirmation_before_submit(monkeypatc
 
 async def test_button_flow_preset_confirm_submits_with_confirm_manual_true(monkeypatch):
     monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
-    monkeypatch.setattr(tg_bot, "_watch_run", AsyncMock())
+    monkeypatch.setattr(tg_bot.handlers, "_watch_run", AsyncMock())
     bot, session = _make_bot()
     client = AsyncMock(spec=HubClient)
     client.list_stand_presets.return_value = [{"id": 1, "name": "Smoke", "target": "all", "marker": "smoke"}]
@@ -841,7 +841,7 @@ async def test_button_flow_preset_confirm_submits_expected_target_and_marker(mon
     confirm_manual=True (см. checklist "миссии": пресет БУК -> два пути через
     \\n и marker=None, пресет с явным маркером -> тот же путь)."""
     monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
-    monkeypatch.setattr(tg_bot, "_watch_run", AsyncMock())
+    monkeypatch.setattr(tg_bot.handlers, "_watch_run", AsyncMock())
     bot, session = _make_bot()
     client = AsyncMock(spec=HubClient)
     client.list_stand_presets.return_value = [preset]
@@ -1732,7 +1732,7 @@ async def test_cmd_run_known_stand_named_stage_does_not_use_section_confirmation
 
 async def test_cb_run_section_confirm_submits_without_stand_or_marker(monkeypatch):
     monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
-    monkeypatch.setattr(tg_bot, "_watch_run", AsyncMock())
+    monkeypatch.setattr(tg_bot.handlers, "_watch_run", AsyncMock())
     bot, session = _make_bot()
     client = AsyncMock(spec=HubClient)
     client.submit_run.return_value = {"id": 99}
