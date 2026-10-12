@@ -16,7 +16,7 @@ import pathlib
 import re
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
-PROJECT_JS = (REPO_ROOT / "ui" / "project.js").read_text()
+PROJECT_SECTIONS_PICKER_JS = (REPO_ROOT / "ui" / "project-sections-picker.js").read_text()
 PROJECT_HTML = (REPO_ROOT / "ui" / "project.html").read_text()
 STYLE_CSS = (REPO_ROOT / "ui" / "style.css").read_text()
 
@@ -74,8 +74,8 @@ def test_sections_picker_starts_with_empty_expanded_set():
     """createSectionsPicker: expanded — пустой Set и в начальном объявлении, и после
     каждого setData() (загрузка дерева) — узлы свёрнуты, пока пользователь/поиск/пресет
     не раскроют что-то явно."""
-    assert re.search(r"let expanded = new Set\(\);", PROJECT_JS)
-    set_data_match = re.search(r"setData\(newData\) \{([^}]*)\}", PROJECT_JS, re.DOTALL)
+    assert re.search(r"let expanded = new Set\(\);", PROJECT_SECTIONS_PICKER_JS)
+    set_data_match = re.search(r"setData\(newData\) \{([^}]*)\}", PROJECT_SECTIONS_PICKER_JS, re.DOTALL)
     assert set_data_match, "не найден setData() в createSectionsPicker"
     assert "expanded = new Set();" in set_data_match.group(1)
 
@@ -85,7 +85,7 @@ def test_build_sections_tree_html_hides_children_when_node_not_open():
     получают атрибут hidden, когда узел не в expandedKeys (kindOpen/areaOpen=false) —
     иначе дерево рисовалось бы развёрнутым несмотря на 'свёрнуто по умолчанию'
     в expanded."""
-    m = re.search(r"function buildSectionsTreeHtml\(filtered, checkedTargets, expandedKeys\) \{(.*?)\n  \}", PROJECT_JS, re.DOTALL)
+    m = re.search(r"function buildSectionsTreeHtml\(filtered, checkedTargets, expandedKeys\) \{(.*?)\n  \}", PROJECT_SECTIONS_PICKER_JS, re.DOTALL)
     assert m, "не найдена функция buildSectionsTreeHtml()"
     body = m.group(1)
     assert '<div class="tree-classes"${kindOpen ? "" : " hidden"}>' in body
@@ -95,7 +95,7 @@ def test_build_sections_tree_html_hides_children_when_node_not_open():
 def test_node_head_html_reflects_open_state_in_aria_expanded():
     """nodeHeadHtml(opts) — aria-expanded на заголовке узла должен отражать тот же
     open, который buildSectionsTreeHtml передаёт как kindOpen/areaOpen."""
-    m = re.search(r"function nodeHeadHtml\(opts\) \{(.*?)\n  \}", PROJECT_JS, re.DOTALL)
+    m = re.search(r"function nodeHeadHtml\(opts\) \{(.*?)\n  \}", PROJECT_SECTIONS_PICKER_JS, re.DOTALL)
     assert m, "не найдена функция nodeHeadHtml()"
     body = m.group(1)
     assert 'aria-expanded="${opts.open ? "true" : "false"}"' in body
@@ -107,7 +107,7 @@ def test_tree_events_checkbox_click_does_not_trigger_header_toggle():
     """setupTreeEvents: клик по input.tree-check должен выходить раньше, чем код
     дойдёт до onHeaderToggle — проверка это гарантирует (а не чекбокс отдельно
     обрабатывает раскрытие где-то ещё)."""
-    m = re.search(r"const toggleFromEvent = \(ev\) => \{(.*?)\n    \};", PROJECT_JS, re.DOTALL)
+    m = re.search(r"const toggleFromEvent = \(ev\) => \{(.*?)\n    \};", PROJECT_SECTIONS_PICKER_JS, re.DOTALL)
     assert m, "не найдена toggleFromEvent() в setupTreeEvents"
     body = m.group(1)
     first_line = body.strip().splitlines()[0]
@@ -118,7 +118,7 @@ def test_tree_events_checkbox_click_does_not_trigger_header_toggle():
 def test_tree_node_head_checkbox_is_inside_header_markup():
     """Чекбокс физически внутри .tree-node-head (один клик-хэндлер на всю шапку) —
     без этого проверка выше ничего не гарантирует на реальной разметке."""
-    m = re.search(r"function nodeHeadHtml\(opts\) \{(.*?)\n  \}", PROJECT_JS, re.DOTALL)
+    m = re.search(r"function nodeHeadHtml\(opts\) \{(.*?)\n  \}", PROJECT_SECTIONS_PICKER_JS, re.DOTALL)
     assert m
     body = m.group(1)
     head_div = re.search(r'<div class="tree-node-head"[^>]*>(.*?)</div>\s*`', body, re.DOTALL)
@@ -129,14 +129,14 @@ def test_tree_node_head_checkbox_is_inside_header_markup():
 # ------------------------------------------------------------------ пресет-переключатели: подсветка + сортировка
 
 def test_update_preset_buttons_toggles_active_class_by_dataset_preset():
-    m = re.search(r"function updatePresetButtons\(\) \{(.*?)\n    \}", PROJECT_JS, re.DOTALL)
+    m = re.search(r"function updatePresetButtons\(\) \{(.*?)\n    \}", PROJECT_SECTIONS_PICKER_JS, re.DOTALL)
     assert m, "не найдена updatePresetButtons()"
     body = m.group(1)
     assert 'btn.classList.toggle("active", btn.dataset.preset === activePreset)' in body
 
 
 def test_preset_click_handler_sorts_tree_and_sets_active_preset():
-    m = re.search(r'presetsRow\.addEventListener\("click", \(ev\) => \{(.*?)\n      \}\);', PROJECT_JS, re.DOTALL)
+    m = re.search(r'presetsRow\.addEventListener\("click", \(ev\) => \{(.*?)\n      \}\);', PROJECT_SECTIONS_PICKER_JS, re.DOTALL)
     assert m, "не найден обработчик клика по пресетам"
     body = m.group(1)
     assert "activePreset = preset;" in body
@@ -144,7 +144,7 @@ def test_preset_click_handler_sorts_tree_and_sets_active_preset():
 
 
 def test_render_sorts_kinds_for_active_preset_before_building_html():
-    m = re.search(r"function render\(\) \{(.*?)\n    \}", PROJECT_JS, re.DOTALL)
+    m = re.search(r"function render\(\) \{(.*?)\n    \}", PROJECT_SECTIONS_PICKER_JS, re.DOTALL)
     assert m, "не найдена render() в createSectionsPicker"
     body = m.group(1)
     assert "SectionsTreeLogic.sortKindsForPreset(filtered.kinds, activePreset)" in body
@@ -158,7 +158,7 @@ def test_sections_preset_btn_active_class_styled_in_css():
 # ------------------------------------------------------------------ строка итога: наличие и обновление
 
 def test_summary_line_rendered_on_every_render_call():
-    m = re.search(r"function render\(\) \{(.*?)\n    \}", PROJECT_JS, re.DOTALL)
+    m = re.search(r"function render\(\) \{(.*?)\n    \}", PROJECT_SECTIONS_PICKER_JS, re.DOTALL)
     assert m
     assert "updateSummaryLine();" in m.group(1)
 
@@ -167,14 +167,14 @@ def test_summary_line_updates_on_manual_leaf_checkbox_change():
     """onLeafChange хук срабатывает на каждое 'change' события чекбокса-листа
     (ручной клик пользователя, не через пресет) и обновляет ту же строку итога,
     что и render() после пресета/поиска."""
-    m = re.search(r"setupTreeEvents\(box, \{(.*?)\n    \}\);", PROJECT_JS, re.DOTALL)
+    m = re.search(r"setupTreeEvents\(box, \{(.*?)\n    \}\);", PROJECT_SECTIONS_PICKER_JS, re.DOTALL)
     assert m, "не найден вызов setupTreeEvents() в createSectionsPicker"
     body = m.group(1)
     assert "onLeafChange: updateSummaryLine," in body
 
 
 def test_update_summary_line_counts_total_api_ui_and_smoke_marker():
-    m = re.search(r"function updateSummaryLine\(\) \{(.*?)\n    \}", PROJECT_JS, re.DOTALL)
+    m = re.search(r"function updateSummaryLine\(\) \{(.*?)\n    \}", PROJECT_SECTIONS_PICKER_JS, re.DOTALL)
     assert m, "не найдена updateSummaryLine()"
     body = m.group(1)
     assert "SectionsTreeLogic.countCheckedByKind(data, new Set(checkedFileTargets(box)))" in body
@@ -188,18 +188,18 @@ def test_both_tabs_use_the_same_create_sections_picker_factory():
     assert re.search(
         r"const sectionsPicker = createSectionsPicker\(\s*"
         r"sectionsTreeBox, sectionsSearchInput, sectionsPresetsRow, markerSelect, sectionsSummaryLine\s*\);",
-        PROJECT_JS,
+        PROJECT_SECTIONS_PICKER_JS,
     )
     assert re.search(
         r"const schedSectionsPicker = createSectionsPicker\(\s*"
         r"schedSectionsTreeBox, schedSectionsSearchInput, schedSectionsPresetsRow, schedMarkerSelect, "
         r"schedSectionsSummaryLine\s*\);",
-        PROJECT_JS,
+        PROJECT_SECTIONS_PICKER_JS,
     )
 
 
 async def test_both_tabs_load_sections_data_into_both_pickers(client):
-    m = re.search(r"async function loadSections\(\) \{(.*?)\n  \}", PROJECT_JS, re.DOTALL)
+    m = re.search(r"async function loadSections\(\) \{(.*?)\n  \}", PROJECT_SECTIONS_PICKER_JS, re.DOTALL)
     assert m, "не найдена loadSections()"
     body = m.group(1)
     assert "sectionsPicker.setData(data);" in body

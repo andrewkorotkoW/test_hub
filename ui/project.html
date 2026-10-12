@@ -5,6 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Test Hub — проект</title>
   <link rel="stylesheet" href="style.css">
+  <!-- Без ?name= странице нечего показывать — редиректим до того, как грузятся
+       остальные скрипты сценария (ui/project-setup.js и project-*.js рассчитывают,
+       что projectName уже есть, см. их шапки; тот же приём, что в coverage.html). -->
+  <script>
+    if (!new URLSearchParams(window.location.search).get("name")) {
+      window.location.href = "projects.html";
+    }
+  </script>
   <script src="common.js"></script>
   <script src="tour.js"></script>
 </head>
@@ -498,6 +506,17 @@
   <script src="run-live-logic.js"></script>
   <script src="sentry-logic.js"></script>
   <script src="run-window-split-logic.js"></script>
+  <!-- project-setup.js и project-*.js делят один lexical scope с project.js
+       (классические <script>, без type="module") — см. шапку project-setup.js. -->
+  <script src="project-setup.js"></script>
+  <script src="project-run-split.js"></script>
+  <script src="project-stands.js"></script>
+  <script src="project-flaky.js"></script>
+  <script src="project-sections-picker.js"></script>
+  <script src="project-build.js"></script>
+  <script src="project-run-window.js"></script>
+  <script src="project-dashboard.js"></script>
+  <script src="project-testcases.js"></script>
   <script src="project.js"></script>
 </body>
 </html>

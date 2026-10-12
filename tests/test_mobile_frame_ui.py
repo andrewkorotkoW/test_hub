@@ -14,7 +14,14 @@ import pathlib
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 PROJECT_HTML = (REPO_ROOT / "ui" / "project.html").read_text()
-PROJECT_JS = (REPO_ROOT / "ui" / "project.js").read_text()
+# Сценарий project.html разбит на несколько файлов, делящих один lexical scope
+# (см. шапку ui/project-setup.js) — каждая константа ниже читает ровно тот файл,
+# где соответствующий код сейчас физически лежит.
+PROJECT_SETUP_JS = (REPO_ROOT / "ui" / "project-setup.js").read_text()
+PROJECT_SECTIONS_PICKER_JS = (REPO_ROOT / "ui" / "project-sections-picker.js").read_text()
+PROJECT_RUN_SPLIT_JS = (REPO_ROOT / "ui" / "project-run-split.js").read_text()
+PROJECT_RUN_WINDOW_JS = (REPO_ROOT / "ui" / "project-run-window.js").read_text()
+PROJECT_DASHBOARD_JS = (REPO_ROOT / "ui" / "project-dashboard.js").read_text()
 SHARE_HTML = (REPO_ROOT / "ui" / "share.html").read_text()
 SHARE_JS = (REPO_ROOT / "ui" / "share.js").read_text()
 STYLE_CSS = (REPO_ROOT / "ui" / "style.css").read_text()
@@ -36,9 +43,9 @@ async def test_project_html_has_mobile_checkbox_next_to_live(client):
 
 
 def test_project_js_mobile_checkbox_turns_on_live_but_does_not_block_manual_uncheck():
-    assert 'document.getElementById("mobile-checkbox")' in PROJECT_JS
-    m = PROJECT_JS.index('mobileCheckbox.addEventListener("change"')
-    snippet = PROJECT_JS[m : m + 200]
+    assert 'document.getElementById("mobile-checkbox")' in PROJECT_SETUP_JS
+    m = PROJECT_SECTIONS_PICKER_JS.index('mobileCheckbox.addEventListener("change"')
+    snippet = PROJECT_SECTIONS_PICKER_JS[m : m + 200]
     assert "liveCheckbox.checked = true" in snippet
     # никакого liveCheckbox.disabled = true здесь не выставляется — лимит эфира
     # продолжает решать submitRun сам через `liveCheckbox.checked && !liveCheckbox.disabled`
@@ -46,9 +53,11 @@ def test_project_js_mobile_checkbox_turns_on_live_but_does_not_block_manual_unch
 
 
 def test_project_js_submit_run_sends_mobile_flag():
-    assert "mobile: mobileCheckbox.checked" in PROJECT_JS or "mobile," in PROJECT_JS
-    assert "json: { stand: standSelect.value || null, target, marker: markerSelect.value || null, label, live, mobile }" in PROJECT_JS
-    assert "mobileCheckbox.checked);" in PROJECT_JS
+    # "mobile," в комментарии о payload-поле — в ui/project-run-split.js (рамка
+    # телефона), сама отправка поля — здесь, в ui/project-run-window.js.
+    assert "mobile: mobileCheckbox.checked" in PROJECT_RUN_WINDOW_JS or "mobile," in PROJECT_RUN_SPLIT_JS
+    assert "json: { stand: standSelect.value || null, target, marker: markerSelect.value || null, label, live, mobile }" in PROJECT_RUN_WINDOW_JS
+    assert "mobileCheckbox.checked);" in PROJECT_RUN_WINDOW_JS
 
 
 # ------------------------------------------------------------------ 2. чистые функции рамки
@@ -76,23 +85,25 @@ def test_style_css_has_phone_frame_class_sized_pixel7():
 # ------------------------------------------------------------------ 4. окно прогона: рамка + переключатель + бейджи
 
 def test_project_js_wraps_live_and_video_tabs_in_phone_frame_when_run_mobile():
-    assert "let currentRunMobile = false;" in PROJECT_JS
-    assert "currentRunMobile = Boolean(payload.mobile);" in PROJECT_JS
-    assert "function maybePhoneFrame(" in PROJECT_JS
-    assert "if (!currentRunMobile) return innerHtml;" in PROJECT_JS
+    # currentRunMobile объявлена в ui/project-run-split.js, назначается и
+    # используется в ui/project-run-window.js (подключён позже, тот же lexical scope).
+    assert "let currentRunMobile = false;" in PROJECT_RUN_SPLIT_JS
+    assert "function maybePhoneFrame(" in PROJECT_RUN_SPLIT_JS
+    assert "if (!currentRunMobile) return innerHtml;" in PROJECT_RUN_SPLIT_JS
+    assert "currentRunMobile = Boolean(payload.mobile);" in PROJECT_RUN_WINDOW_JS
     # обе вкладки (Эфир/Видео) реально оборачиваются
-    render_live = PROJECT_JS.index("function renderLiveTab()")
-    render_video = PROJECT_JS.index("function renderVideoTab()")
-    render_video_end = PROJECT_JS.index("function renderWindowBody()")
-    assert "maybePhoneFrame(" in PROJECT_JS[render_live:render_video]
-    assert "maybePhoneFrame(" in PROJECT_JS[render_video:render_video_end]
+    render_live = PROJECT_RUN_WINDOW_JS.index("function renderLiveTab()")
+    render_video = PROJECT_RUN_WINDOW_JS.index("function renderVideoTab()")
+    render_video_end = PROJECT_RUN_WINDOW_JS.index("function renderWindowBody()")
+    assert "maybePhoneFrame(" in PROJECT_RUN_WINDOW_JS[render_live:render_video]
+    assert "maybePhoneFrame(" in PROJECT_RUN_WINDOW_JS[render_video:render_video_end]
 
 
 def test_project_js_has_no_frame_toggle_persisted_in_local_storage():
-    assert 'th_phone_frame_off' in PROJECT_JS
-    assert "localStorage.getItem(PHONE_FRAME_OFF_KEY)" in PROJECT_JS
-    assert "localStorage.setItem(PHONE_FRAME_OFF_KEY" in PROJECT_JS
-    assert "Без рамки" in PROJECT_JS
+    assert 'th_phone_frame_off' in PROJECT_RUN_SPLIT_JS
+    assert "localStorage.getItem(PHONE_FRAME_OFF_KEY)" in PROJECT_RUN_SPLIT_JS
+    assert "localStorage.setItem(PHONE_FRAME_OFF_KEY" in PROJECT_RUN_SPLIT_JS
+    assert "Без рамки" in PROJECT_RUN_SPLIT_JS
 
 
 async def test_project_html_has_device_badge_hidden_by_default(client):
@@ -105,16 +116,18 @@ async def test_project_html_has_device_badge_hidden_by_default(client):
 
 
 def test_project_js_toggles_device_badge_with_mobile_payload():
-    assert "runDeviceBadge.hidden = !payload.mobile;" in PROJECT_JS
-    assert "runDeviceBadge.hidden = true;" in PROJECT_JS
+    assert "runDeviceBadge.hidden = !payload.mobile;" in PROJECT_RUN_WINDOW_JS
+    assert "runDeviceBadge.hidden = true;" in PROJECT_RUN_WINDOW_JS
 
 
 # ------------------------------------------------------------------ 5. пилюли «Pixel 7»
 
 def test_project_js_renders_pixel7_pill_in_feed_and_table_next_to_live():
-    assert 'r.mobile ? `<span class="runs-feed-tag">Pixel 7</span>' in PROJECT_JS
+    # лента прогонов (runsFeedItemHtml) и таблица истории (loadHistory) — обе
+    # в ui/project-dashboard.js.
+    assert 'r.mobile ? `<span class="runs-feed-tag">Pixel 7</span>' in PROJECT_DASHBOARD_JS
     # ровно в тех же местах, где пилюля «эфир» — список прогонов и таблица истории
-    assert PROJECT_JS.count('Pixel 7</span>') >= 2
+    assert PROJECT_DASHBOARD_JS.count('Pixel 7</span>') >= 2
 
 
 # ------------------------------------------------------------------ 6. share-страница: та же рамка без логина

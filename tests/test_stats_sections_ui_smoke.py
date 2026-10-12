@@ -88,20 +88,24 @@ async def test_project_html_loads_sections_tree_logic_before_project_js(client):
 async def test_project_js_targets_use_sections_tree_logic_collect_targets():
     """selectedTarget()/форма расписаний собирают target через
     SectionsTreeLogic.collectTargets (чистая логика, покрытая
-    tests/test_sections_tree_logic_js.py) — здесь только замок, что project.js
-    действительно её вызывает, а не собирает target вручную по DOM."""
-    project_js = (REPO_ROOT / "ui" / "project.js").read_text()
-    assert "SectionsTreeLogic.collectTargets(data, new Set(checkedFileTargets(box)))" in project_js
-    assert "sectionsPicker.targets()" in project_js
-    assert "schedSectionsPicker.targets()" in project_js
+    tests/test_sections_tree_logic_js.py) — здесь только замок, что сценарий
+    project.html действительно её вызывает, а не собирает target вручную по DOM.
+    collectTargets/sectionsPicker.targets() — в ui/project-sections-picker.js,
+    schedSectionsPicker.targets() (форма расписания) — в ui/project-setup.js
+    (оба файла делят один lexical scope, см. шапку project-setup.js)."""
+    sections_picker_js = (REPO_ROOT / "ui" / "project-sections-picker.js").read_text()
+    setup_js = (REPO_ROOT / "ui" / "project-setup.js").read_text()
+    assert "SectionsTreeLogic.collectTargets(data, new Set(checkedFileTargets(box)))" in sections_picker_js
+    assert "sectionsPicker.targets()" in sections_picker_js
+    assert "schedSectionsPicker.targets()" in setup_js
 
 
 async def test_project_js_manual_target_input_overrides_sections_picker():
     """Ручное поле под спойлером имеет приоритет над деревом, только если оно
     непустое (см. миссию: «ручное поле остаётся под спойлером»)."""
-    project_js = (REPO_ROOT / "ui" / "project.js").read_text()
+    project_js = (REPO_ROOT / "ui" / "project-sections-picker.js").read_text()
     match = re.search(r"function selectedTarget\(\)\s*\{([^}]*)\}", project_js)
-    assert match, "не найдена функция selectedTarget() в ui/project.js"
+    assert match, "не найдена функция selectedTarget() в ui/project-sections-picker.js"
     body = match.group(1)
     assert "manualTargetInput.value.trim()" in body
     assert "sectionsPicker.targets()" in body
@@ -111,9 +115,9 @@ async def test_project_js_smoke_preset_sets_marker_and_checks_all_files():
     """Пресет «smoke» — единственный, отсутствующий в SectionsTreeLogic.presetLeafTargets
     (это существующий pytest-маркер, не раздел файловой системы): выставляет
     marker=smoke и отмечает все файлы дерева (allLeafTargets)."""
-    project_js = (REPO_ROOT / "ui" / "project.js").read_text()
+    project_js = (REPO_ROOT / "ui" / "project-sections-picker.js").read_text()
     match = re.search(r'if \(preset === "smoke"\) \{([^}]*)\}', project_js)
-    assert match, "не найдена ветка пресета smoke в ui/project.js"
+    assert match, "не найдена ветка пресета smoke в ui/project-sections-picker.js"
     body = match.group(1)
     assert 'markerSelectEl.value = "smoke"' in body
     assert "SectionsTreeLogic.allLeafTargets(data)" in body
@@ -121,8 +125,9 @@ async def test_project_js_smoke_preset_sets_marker_and_checks_all_files():
 
 async def test_schedule_submit_falls_back_to_sections_picker_then_all():
     """POST .../schedules собирает target: ручное поле -> дерево разделов -> 'all'
-    (миссия, часть 3: «в форме расписания тот же выбор разделов»)."""
-    project_js = (REPO_ROOT / "ui" / "project.js").read_text()
+    (миссия, часть 3: «в форме расписания тот же выбор разделов»). Форма
+    расписаний — в ui/project-setup.js."""
+    project_js = (REPO_ROOT / "ui" / "project-setup.js").read_text()
     assert re.search(
         r'target:\s*schedTargetInput\.value\.trim\(\)\s*\|\|\s*schedSectionsPicker\.targets\(\)\.join\("\\n"\)\s*\|\|\s*"all"',
         project_js,

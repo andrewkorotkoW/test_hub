@@ -28,7 +28,7 @@ import pytest
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 
-PROJECT_JS = (REPO_ROOT / "ui" / "project.js").read_text()
+PROJECT_RUN_WINDOW_JS = (REPO_ROOT / "ui" / "project-run-window.js").read_text()
 PROJECT_HTML = (REPO_ROOT / "ui" / "project.html").read_text()
 
 JS_LOGIC_FILE = REPO_ROOT / "tests" / "js" / "test_run_window_split_logic.js"
@@ -67,7 +67,7 @@ def test_project_js_renders_three_window_tabs_with_expected_data_attributes():
     """Вкладки Кадры/Консоль/Запросы(/Эфир/Видео/Sentry) рендерятся JS-ом
     (renderWindowTabs) через порядок из RunLiveLogic.windowTabOrder (docs/missions/
     2026-10-01_live_stream.md) — проверяем сам шаблон и словарь подписей в исходнике."""
-    match = re.search(r"function renderWindowTabs\(\)\s*\{(.*?)\n  \}", PROJECT_JS, re.DOTALL)
+    match = re.search(r"function renderWindowTabs\(\)\s*\{(.*?)\n  \}", PROJECT_RUN_WINDOW_JS, re.DOTALL)
     assert match, "не найдена функция renderWindowTabs() в ui/project.js"
     body = match.group(1)
     assert "RunLiveLogic.windowTabOrder(" in body
@@ -80,10 +80,10 @@ def test_project_js_renders_three_window_tabs_with_expected_data_attributes():
 
 
 def test_project_js_window_tabs_click_handler_switches_active_tab_and_rerenders():
-    assert 'runWindowTabsBox.addEventListener("click"' in PROJECT_JS
+    assert 'runWindowTabsBox.addEventListener("click"' in PROJECT_RUN_WINDOW_JS
     match = re.search(
         r'runWindowTabsBox\.addEventListener\("click", \(ev\) => \{(.*?)\n  \}\);',
-        PROJECT_JS,
+        PROJECT_RUN_WINDOW_JS,
         re.DOTALL,
     )
     assert match, "не найден обработчик клика по вкладкам окна теста"
@@ -96,7 +96,7 @@ def test_project_js_window_tabs_click_handler_switches_active_tab_and_rerenders(
 # ------------------------------------------------------------------ 2. WS test_start/test_end/step/frame
 
 def test_project_js_ws_dispatch_covers_all_split_message_types():
-    match = re.search(r'ws\.addEventListener\("message", \(ev\) => \{(.*?)\n    \}\);', PROJECT_JS, re.DOTALL)
+    match = re.search(r'ws\.addEventListener\("message", \(ev\) => \{(.*?)\n    \}\);', PROJECT_RUN_WINDOW_JS, re.DOTALL)
     assert match, "не найден обработчик сообщений WS в openRun()"
     body = match.group(1)
     for msg_type, handler in [
@@ -110,7 +110,7 @@ def test_project_js_ws_dispatch_covers_all_split_message_types():
 
 
 def test_project_js_handle_test_start_upserts_rail_row_and_sets_running():
-    match = re.search(r"function handleTestStart\(msg\)\s*\{(.*?)\n  \}", PROJECT_JS, re.DOTALL)
+    match = re.search(r"function handleTestStart\(msg\)\s*\{(.*?)\n  \}", PROJECT_RUN_WINDOW_JS, re.DOTALL)
     assert match, "не найдена handleTestStart()"
     body = match.group(1)
     assert 'upsertSplitTest(msg.nodeid, { status: "running" })' in body
@@ -119,7 +119,7 @@ def test_project_js_handle_test_start_upserts_rail_row_and_sets_running():
 
 
 def test_project_js_handle_test_end_updates_status_from_th_end_line():
-    match = re.search(r"function handleTestEnd\(msg\)\s*\{(.*?)\n  \}", PROJECT_JS, re.DOTALL)
+    match = re.search(r"function handleTestEnd\(msg\)\s*\{(.*?)\n  \}", PROJECT_RUN_WINDOW_JS, re.DOTALL)
     assert match, "не найдена handleTestEnd()"
     body = match.group(1)
     assert "END_STATUS_RE" in body
@@ -128,7 +128,7 @@ def test_project_js_handle_test_end_updates_status_from_th_end_line():
 
 
 def test_project_js_handle_split_line_event_appends_to_selected_test_log_only():
-    match = re.search(r"function handleSplitLineEvent\(msg\)\s*\{(.*?)\n  \}", PROJECT_JS, re.DOTALL)
+    match = re.search(r"function handleSplitLineEvent\(msg\)\s*\{(.*?)\n  \}", PROJECT_RUN_WINDOW_JS, re.DOTALL)
     assert match, "не найдена handleSplitLineEvent()"
     body = match.group(1)
     # строка добавляется в окно только у выбранного в рельсе теста
@@ -138,7 +138,7 @@ def test_project_js_handle_split_line_event_appends_to_selected_test_log_only():
 
 
 def test_project_js_handle_frame_event_marks_has_frames_and_appends_filmstrip():
-    match = re.search(r"function handleFrameEvent\(msg\)\s*\{(.*?)\n  \}", PROJECT_JS, re.DOTALL)
+    match = re.search(r"function handleFrameEvent\(msg\)\s*\{(.*?)\n  \}", PROJECT_RUN_WINDOW_JS, re.DOTALL)
     assert match, "не найдена handleFrameEvent()"
     body = match.group(1)
     assert "upsertSplitTest(msg.nodeid, { has_frames: true })" in body
@@ -146,20 +146,20 @@ def test_project_js_handle_frame_event_marks_has_frames_and_appends_filmstrip():
 
 
 def test_project_js_rail_click_selects_test_and_loads_its_window():
-    assert 'runTestsRail.addEventListener("click"' in PROJECT_JS
-    match = re.search(r"async function selectTest\(nodeid, opts\)\s*\{(.*?)\n  \}", PROJECT_JS, re.DOTALL)
+    assert 'runTestsRail.addEventListener("click"' in PROJECT_RUN_WINDOW_JS
+    match = re.search(r"async function selectTest\(nodeid, opts\)\s*\{(.*?)\n  \}", PROJECT_RUN_WINDOW_JS, re.DOTALL)
     assert match, "не найдена selectTest()"
     body = match.group(1)
     assert "/tests/${encodeURIComponent(nodeid)}/log" in body
     assert "/tests/${encodeURIComponent(nodeid)}/frames" in body
     # ручной клик по тесту выключает «Следить за прогоном» (п.2 миссии «Эфир»)
-    assert "followEnabled = false;" in PROJECT_JS
+    assert "followEnabled = false;" in PROJECT_RUN_WINDOW_JS
 
 
 # ------------------------------------------------------------------ 3. честная подпись «кадров нет»
 
 def test_project_js_frames_tab_shows_explicit_caption_without_frames_not_just_spinner():
-    match = re.search(r"function renderFramesTab\(\)\s*\{(.*?)\n  \}", PROJECT_JS, re.DOTALL)
+    match = re.search(r"function renderFramesTab\(\)\s*\{(.*?)\n  \}", PROJECT_RUN_WINDOW_JS, re.DOTALL)
     assert match, "не найдена renderFramesTab()"
     body = match.group(1)
     empty_branch = re.search(r"if \(!selectedTestFrames\.length\) \{(.*?)\n    \}", body, re.DOTALL)
@@ -174,7 +174,7 @@ def test_project_js_frames_tab_shows_explicit_caption_without_frames_not_just_sp
 # ------------------------------------------------------------------ 4. деградация для старых прогонов
 
 def test_project_js_apply_view_mode_hides_split_and_toggle_without_markup():
-    match = re.search(r"function applyViewMode\(\)\s*\{(.*?)\n  \}", PROJECT_JS, re.DOTALL)
+    match = re.search(r"function applyViewMode\(\)\s*\{(.*?)\n  \}", PROJECT_RUN_WINDOW_JS, re.DOTALL)
     assert match, "не найдена applyViewMode()"
     body = match.group(1)
     assert "const showSplit = hasMarkup && viewMode ===" in body
@@ -185,7 +185,7 @@ def test_project_js_apply_view_mode_hides_split_and_toggle_without_markup():
 
 
 def test_project_js_detect_markup_returns_false_for_empty_or_lineonly_run():
-    match = re.search(r"async function detectMarkup\(runId\)\s*\{(.*?)\n  \}", PROJECT_JS, re.DOTALL)
+    match = re.search(r"async function detectMarkup\(runId\)\s*\{(.*?)\n  \}", PROJECT_RUN_WINDOW_JS, re.DOTALL)
     assert match, "не найдена detectMarkup()"
     body = match.group(1)
     # GET /tests пуст (нет test_start/test_end) -> splitTests.length === 0 -> false сразу
@@ -193,7 +193,7 @@ def test_project_js_detect_markup_returns_false_for_empty_or_lineonly_run():
 
 
 def test_project_js_reset_split_state_starts_with_markup_false():
-    match = re.search(r"function resetSplitState\(\)\s*\{(.*?)\n  \}", PROJECT_JS, re.DOTALL)
+    match = re.search(r"function resetSplitState\(\)\s*\{(.*?)\n  \}", PROJECT_RUN_WINDOW_JS, re.DOTALL)
     assert match, "не найдена resetSplitState()"
     body = match.group(1)
     assert "hasMarkup = false;" in body

@@ -12,6 +12,8 @@ import re
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 PROJECT_JS = (REPO_ROOT / "ui" / "project.js").read_text()
+PROJECT_SETUP_JS = (REPO_ROOT / "ui" / "project-setup.js").read_text()
+PROJECT_RUN_WINDOW_JS = (REPO_ROOT / "ui" / "project-run-window.js").read_text()
 PROJECT_HTML = (REPO_ROOT / "ui" / "project.html").read_text()
 COMMON_JS = (REPO_ROOT / "ui" / "common.js").read_text()
 
@@ -87,17 +89,19 @@ def test_project_html_schedules_history_flaky_panels_wrap_their_cards():
 # ------------------------------------------------------------------ переключение вкладок — логика в project.js
 
 def test_project_js_computes_active_tab_from_hash_defaulting_to_dashboard():
-    match = re.search(r"function activeTabId\(\)\s*\{([^}]*)\}", PROJECT_JS)
-    assert match, "не найдена функция activeTabId() в ui/project.js"
+    """activeTabId/renderActiveTab — в ui/project-setup.js (подключается первым
+    в сценарии project.html, см. его шапку), не в финальном project.js."""
+    match = re.search(r"function activeTabId\(\)\s*\{([^}]*)\}", PROJECT_SETUP_JS)
+    assert match, "не найдена функция activeTabId() в ui/project-setup.js"
     body = match.group(1)
     assert "window.location.hash" in body
     assert '"dashboard"' in body
 
 
 def test_project_js_listens_to_hashchange_and_toggles_panel_hidden():
-    assert 'addEventListener("hashchange"' in PROJECT_JS
-    match = re.search(r"function renderActiveTab\(\)\s*\{(.*?)\n  \}", PROJECT_JS, re.DOTALL)
-    assert match, "не найдена функция renderActiveTab() в ui/project.js"
+    assert 'addEventListener("hashchange"' in PROJECT_SETUP_JS
+    match = re.search(r"function renderActiveTab\(\)\s*\{(.*?)\n  \}", PROJECT_SETUP_JS, re.DOTALL)
+    assert match, "не найдена функция renderActiveTab() в ui/project-setup.js"
     body = match.group(1)
     assert "panel.hidden = panel.dataset.tabPanel !== active" in body
 
@@ -105,9 +109,9 @@ def test_project_js_listens_to_hashchange_and_toggles_panel_hidden():
 def test_project_js_open_run_switches_to_run_tab():
     """Открытие прогона (лента/история/расписания/deep-link ?run=) должно
     переключать на вкладку «Запуск» — иначе run-card заполнится, но останется
-    скрыт под hidden соседней вкладки."""
-    match = re.search(r"async function openRun\(runId\)\s*\{([^}]*)\}", PROJECT_JS)
-    assert match, "не найдена функция openRun() в ui/project.js"
+    скрыт под hidden соседней вкладки. openRun — в ui/project-run-window.js."""
+    match = re.search(r"async function openRun\(runId\)\s*\{([^}]*)\}", PROJECT_RUN_WINDOW_JS)
+    assert match, "не найдена функция openRun() в ui/project-run-window.js"
     assert 'window.location.hash = "run"' in match.group(1)
 
 

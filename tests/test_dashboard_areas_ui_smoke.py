@@ -80,21 +80,23 @@ def test_project_html_old_single_ring_markup_removed():
 
 
 def test_project_js_renders_area_traffic_columns_inside_render_dashboard():
-    js = (UI_DIR / "project.js").read_text()
+    # Вкладка «Дашборд» — в ui/project-dashboard.js (сценарий project.html разбит на
+    # несколько файлов, делящих один lexical scope, см. шапку ui/project-setup.js).
+    js = (UI_DIR / "project-dashboard.js").read_text()
     assert "renderAreaRings" not in js
     assert "areaKindFromFullName" not in js
     assert "function renderAreaTrafficColumns(tests)" in js
 
     match = re.search(r"async function renderDashboard\([^)]*\)\s*\{(.*?)\n  \}", js, re.DOTALL)
-    assert match, "не найдена функция renderDashboard() в ui/project.js"
+    assert match, "не найдена функция renderDashboard() в ui/project-dashboard.js"
     assert "renderAreaTrafficColumns(latestTests)" in match.group(1)
 
 
 def test_project_js_uses_dashboard_areas_logic_for_sections_and_grouping():
     """Подстраховка от регрессии: рендер колонок действительно вызывает
     buildAreaSections/groupSections/classifySection/sectionHref из
-    dashboard-areas-logic.js, а не дублирует логику в самом project.js."""
-    js = (UI_DIR / "project.js").read_text()
+    dashboard-areas-logic.js, а не дублирует логику в ui/project-dashboard.js."""
+    js = (UI_DIR / "project-dashboard.js").read_text()
     for call in (
         "DashboardAreasLogic.buildAreaSections(tests)",
         "DashboardAreasLogic.groupSections(sections)",
@@ -105,7 +107,7 @@ def test_project_js_uses_dashboard_areas_logic_for_sections_and_grouping():
 
 
 def test_project_js_area_row_click_builds_href_only_for_non_empty_sections():
-    js = (UI_DIR / "project.js").read_text()
+    js = (UI_DIR / "project-dashboard.js").read_text()
     assert 'data-href="${escapeHtml(href)}"' in js
     # closest(".area-row[data-href]") — строка без data-href (некликабельная "Сквозные
     # сценарии") не матчится селектором и клик по ней не сработает

@@ -76,8 +76,9 @@ async def test_project_html_dashboard_charts_order_matches_references(client):
 
 async def test_project_js_renders_runs_feed_progress_bar(client):
     """REFERENCES.md, п.4: «лента прогонов (спарклайн в строке…)» — сегментный бар
-    passed/failed/skipped на основе тех же counts, что и donut/KPI (runMetrics())."""
-    resp = await client.get("/project.js")
+    passed/failed/skipped на основе тех же counts, что и donut/KPI (runMetrics()).
+    Вкладка «Дашборд» — в ui/project-dashboard.js."""
+    resp = await client.get("/project-dashboard.js")
     js = resp.text
     assert "runs-feed-bar" in js
     assert "runMetrics(r)" in js
@@ -150,24 +151,25 @@ async def test_common_js_wires_sidebar_nav_and_theme_toggle(client):
 async def test_project_js_hides_run_buttons_row_for_customer_role():
     """project.html не рендерится сервером под конкретную роль — кнопки запуска везде
     присутствуют в статичной разметке (#run-buttons-row без hidden, см. ui/project.html).
-    Их скрытие для customer — чисто клиентская логика в project.js (см. ui/project.js:61):
+    Их скрытие для customer — чисто клиентская логика в ui/project-setup.js (первый
+    файл сценария project.html, делит lexical scope с project.js — см. его шапку):
     `if (user.role === "customer") { ...#run-buttons-row.hidden = true; }`. Без выполнения
     JS проверяем именно наличие этой логики в исходнике, а не финальный рендер."""
     import pathlib
 
-    project_js = (pathlib.Path(__file__).resolve().parent.parent / "ui" / "project.js").read_text()
+    project_js = (pathlib.Path(__file__).resolve().parent.parent / "ui" / "project-setup.js").read_text()
 
     match = re.search(
         r'if\s*\(\s*user\.role\s*===\s*"customer"\s*\)\s*\{([^}]*)\}',
         project_js,
     )
-    assert match, "не найдена ветка `user.role === \"customer\"` в ui/project.js"
+    assert match, "не найдена ветка `user.role === \"customer\"` в ui/project-setup.js"
     assert 'getElementById("run-buttons-row")' in match.group(1)
     assert ".hidden = true" in match.group(1)
 
 
 async def test_project_html_chart_and_list_ids_present_exactly_once(client):
-    """ui/project.js (renderDashboard()) адресуется к этим id напрямую через
+    """ui/project-dashboard.js (renderDashboard()) адресуется к этим id напрямую через
     getElementById — после перестройки project.html (t2) они должны остаться в
     разметке ровно по одному разу, иначе JS молча возьмёт не тот узел/упадёт."""
     resp = await client.get("/project.html")
@@ -301,9 +303,10 @@ async def test_project_html_has_manual_run_block_and_confirm_modal(client):
 
 async def test_project_js_confirm_click_posts_confirm_manual_true_to_runs_endpoint(client):
     """Замок соответствия между кнопкой «Запустить» модалки и телом POST /runs — если
-    confirm_manual потеряется при рефакторинге project.js, этот тест это поймает
-    раньше проверки в браузере (по образцу test_coverage_js_calls_all_five_router_endpoints)."""
-    resp = await client.get("/project.js")
+    confirm_manual потеряется при рефакторинге, этот тест это поймает раньше проверки
+    в браузере (по образцу test_coverage_js_calls_all_five_router_endpoints). Модалка
+    ручного подтверждения — в ui/project-stands.js."""
+    resp = await client.get("/project-stands.js")
     js = resp.text
     assert re.search(r"/api/projects/\$\{[^}]*\}/runs`", js)
     assert re.search(r"confirm_manual:\s*true", js)
