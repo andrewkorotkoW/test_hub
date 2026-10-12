@@ -29,7 +29,8 @@ PAGES_WITH_SHELL = [
     "coverage.html",
     "xfail.html",
     "admin_all.html",
-    "admin.html",
+    "stands.html",
+    "users.html",
     "stats.html",
 ]
 

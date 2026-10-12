@@ -264,7 +264,8 @@ const APP_NAV_ICONS = {
   "Статистика": '<path d="M4 19V9M12 19V4M20 19v-6"/>',
   "Xfail": '<path d="M12 9v4M12 16.5h.01"/><path d="M10.3 3.9L2.8 17a1.8 1.8 0 001.56 2.7h15.3a1.8 1.8 0 001.56-2.7L13.7 3.9a1.8 1.8 0 00-3.4 0z"/>',
   "Расписания": '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/>',
-  "Стенды и пользователи": '<path d="M4 21v-2a4 4 0 014-4h3M16 11a3 3 0 100-6 3 3 0 000 6zM17 21v-2a3 3 0 00-2-2.83"/><circle cx="9" cy="7" r="3"/>',
+  "Стенды": '<rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M7 7h.01M7 17h.01"/>',
+  "Пользователи": '<path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/>',
   "Суперадминка": '<path d="M12 2l2.4 5 5.6.5-4.2 3.8 1.3 5.5-4.9-3-4.9 3 1.3-5.5L4.3 7.5l5.6-.5z"/>',
 };
 
@@ -319,7 +320,8 @@ function renderSidebar(user, page) {
 
   const roleLinks = [];
   if (user.role === "qa" || user.role === "superadmin") {
-    roleLinks.push({ href: "admin.html", label: "Стенды и пользователи" });
+    roleLinks.push({ href: "stands.html", label: "Стенды" });
+    roleLinks.push({ href: "users.html", label: "Пользователи" });
   }
   if (user.role === "superadmin") {
     roleLinks.push({ href: "admin_all.html", label: "Суперадминка" });

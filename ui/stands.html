@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Test Hub — стенды и пользователи</title>
+  <title>Test Hub — стенды</title>
   <link rel="stylesheet" href="style.css">
   <script src="common.js"></script>
   <script src="tour.js"></script>
@@ -14,13 +14,12 @@
     <div class="app-content">
   <header id="app-header" class="site-header"></header>
   <main class="page">
-    <h1>Стенды и пользователи</h1>
+    <h1>Стенды</h1>
     <div id="access-denied" class="error-box" hidden>Этот раздел доступен только ролям qa и superadmin.</div>
     <div id="admin-error" class="error-box" hidden></div>
 
     <div id="admin-content">
       <div class="card">
-        <h2>Стенды</h2>
         <div class="form-row">
           <label for="admin-project-select">Проект</label>
           <select id="admin-project-select"></select>
@@ -44,40 +43,11 @@
         </form>
         <p class="muted">Потоки (pytest -n): 0 — последовательно. На k8s v2 троттлинг снят, 4 потока — 27 мин вместо 1,5 ч.</p>
       </div>
-
-      <div class="card">
-        <h2>Заявки на регистрацию</h2>
-        <div id="pending-empty" class="muted" hidden>Заявок на рассмотрение нет.</div>
-        <div id="pending-rows"></div>
-      </div>
-
-      <div class="card">
-        <h2>Пользователи</h2>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Логин</th><th>Роль</th><th>ФИО</th><th>Должность</th><th>Проект</th><th>Статус</th><th>Онбординг</th><th></th></tr></thead>
-            <tbody id="users-rows"></tbody>
-          </table>
-        </div>
-        <h3>Пользователь</h3>
-        <form id="user-form" class="form-row">
-          <input id="user-login" placeholder="Логин" required>
-          <input id="user-password" placeholder="Пароль" type="password">
-          <select id="user-role">
-            <option value="qa">qa</option>
-            <option value="manager">manager</option>
-            <option value="customer">customer</option>
-          </select>
-          <label><input type="checkbox" id="user-onboarded"> onboarded</label>
-          <button type="submit" class="primary">Сохранить</button>
-          <button type="button" id="user-cancel-edit" hidden>Отмена</button>
-        </form>
-      </div>
     </div>
   </main>
     </div>
   </div>
 
-  <script src="admin.js"></script>
+  <script src="stands.js"></script>
 </body>
 </html>

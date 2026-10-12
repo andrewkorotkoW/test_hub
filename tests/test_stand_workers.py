@@ -344,30 +344,30 @@ async def test_repeat_with_workers_four_does_not_add_dash_n_on_any_attempt(
 import pathlib  # noqa: E402
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
-ADMIN_HTML = (REPO_ROOT / "ui" / "admin.html").read_text()
-ADMIN_JS = (REPO_ROOT / "ui" / "admin.js").read_text()
+STANDS_HTML = (REPO_ROOT / "ui" / "stands.html").read_text()
+STANDS_JS = (REPO_ROOT / "ui" / "stands.js").read_text()
 
 
-async def test_admin_html_has_workers_field_served_over_http(client):
-    resp = await client.get("/admin.html")
+async def test_stands_html_has_workers_field_served_over_http(client):
+    resp = await client.get("/stands.html")
     assert resp.status_code == 200
     html = resp.text
     assert 'id="stand-workers"' in html
     assert 'type="number"' in html
 
 
-def test_admin_html_stand_form_has_workers_input_with_valid_range():
-    assert 'id="stand-workers" type="number" min="0" max="16"' in ADMIN_HTML
+def test_stands_html_stand_form_has_workers_input_with_valid_range():
+    assert 'id="stand-workers" type="number" min="0" max="16"' in STANDS_HTML
 
 
-def test_admin_js_badge_marks_name_with_multiplier_when_workers_positive():
-    assert 's.workers > 0 ? ` <span class="muted">×${s.workers}</span>` : ""' in ADMIN_JS
+def test_stands_js_badge_marks_name_with_multiplier_when_workers_positive():
+    assert 's.workers > 0 ? ` <span class="muted">×${s.workers}</span>` : ""' in STANDS_JS
 
 
-def test_admin_js_edit_button_carries_workers_dataset():
-    assert 'data-workers="${s.workers || 0}"' in ADMIN_JS
-    assert 'standWorkers.value = editBtn.dataset.workers || "0";' in ADMIN_JS
+def test_stands_js_edit_button_carries_workers_dataset():
+    assert 'data-workers="${s.workers || 0}"' in STANDS_JS
+    assert 'standWorkers.value = editBtn.dataset.workers || "0";' in STANDS_JS
 
 
-def test_admin_js_submit_payload_includes_workers_as_int():
-    assert 'workers: standWorkers.value === "" ? 0 : parseInt(standWorkers.value, 10),' in ADMIN_JS
+def test_stands_js_submit_payload_includes_workers_as_int():
+    assert 'workers: standWorkers.value === "" ? 0 : parseInt(standWorkers.value, 10),' in STANDS_JS
