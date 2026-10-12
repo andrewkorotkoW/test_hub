@@ -56,6 +56,10 @@
   let tcTree = { kinds: [] };
   let tcFilters = { section: "", status: "", hasTest: "", q: "" };
   let tcSelectedCaseId = null;
+  // вид «таблица»: какие разделы сейчас раскрыты (по row.section из
+  // TestCasesLogic.buildTableRows) — пусто -> все свёрнуты, тот же дефолт,
+  // что и у дерева (kindNode.collapsed = true в loadTestcases()).
+  let tcTableOpenSections = new Set();
   const tcCaseCache = new Map();
   let tcEditMode = "create";
   let tcEditCaseId = null;
@@ -249,16 +253,24 @@
   }
 
   // ---- вид 2: таблица с раскрывающимися шагами ----
+  // Разделы сворачиваемые, как и в дереве (вид 1) — иначе список на сотни кейсов
+  // одним полотном неюзабелен. tcTableOpenSections пуст по умолчанию (всё
+  // свёрнуто), раздел раскрывается кликом по строке-заголовку.
   function renderTcTable() {
     const rows = TestCasesLogic.buildTableRows(tcTree);
     if (!rows.length) {
       tcTableRows.innerHTML = `<tr><td colspan="6" class="muted">Кейсов не найдено.</td></tr>`;
       return;
     }
+    let sectionOpen = false;
     tcTableRows.innerHTML = rows.map((row) => {
       if (row.type === "section") {
-        return `<tr class="tc-section-row"><td colspan="6">${escapeHtml(row.label)}</td></tr>`;
+        sectionOpen = tcTableOpenSections.has(row.section);
+        return `<tr class="tc-section-row" data-section="${escapeHtml(row.section)}" aria-expanded="${sectionOpen}">
+          <td colspan="6"><span class="tc-chev">${sectionOpen ? "▾" : "▸"}</span>${escapeHtml(row.label)}</td>
+        </tr>`;
       }
+      if (!sectionOpen) return "";
       const c = row.case;
       const key = TestCasesLogic.statusKey(c);
       return `
@@ -276,6 +288,14 @@
   }
 
   tcTableRows.addEventListener("click", async (ev) => {
+    const sectionRow = ev.target.closest(".tc-section-row");
+    if (sectionRow) {
+      const section = sectionRow.dataset.section;
+      if (tcTableOpenSections.has(section)) tcTableOpenSections.delete(section);
+      else tcTableOpenSections.add(section);
+      renderTcTable();
+      return;
+    }
     const editBtn = ev.target.closest(".tc-edit-case-btn");
     if (editBtn) { openTcEditModal("edit", Number(editBtn.dataset.id)); return; }
     const row = ev.target.closest(".tc-case-row");
@@ -332,6 +352,7 @@
       // фильтром/поиском — kindNode.collapsed и так не переживает переприсвоение
       // tcTree выше) — пользователь раскрывает нужные сам, кликом по заголовку.
       (tcTree.kinds || []).forEach((k) => { k.collapsed = true; });
+      tcTableOpenSections.clear();
       tcCaseCache.clear();
       // без активного фильтра по разделу ответ содержит все разделы — обновляем
       // опции селекта; при активном фильтре список разделов временно неполный,

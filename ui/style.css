@@ -1712,7 +1712,9 @@ a.sentry-row:hover { background: var(--surface-hover); }
 /* вид 2 — таблица с раскрывающимися шагами (аккордеон) */
 .tc-table-wrap { overflow-x: auto; }
 .tc-table-wrap[hidden] { display: none; }
+.tc-section-row { cursor: pointer; }
 .tc-section-row td { background: var(--surface-hover); font-weight: 700; font-size: 12px; letter-spacing: .03em; color: var(--text-muted); text-transform: uppercase; padding: 8px 10px; }
+.tc-section-row .tc-chev { display: inline-block; width: 14px; color: var(--text-muted); }
 .tc-case-row { cursor: pointer; }
 .tc-case-row:hover { background: var(--surface-hover); }
 .tc-case-row .tc-chev { display: inline-block; width: 14px; color: var(--text-muted); transition: transform .12s; }
