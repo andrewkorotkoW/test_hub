@@ -4,7 +4,6 @@
   const parts = window.location.pathname.split("/").filter(Boolean); // ["share", "<token>"]
   const token = parts[1];
 
-  const pageError = document.getElementById("page-error");
   const runCard = document.getElementById("run-card");
   const runTitle = document.getElementById("run-title");
   const runMeta = document.getElementById("run-meta");
@@ -106,11 +105,6 @@
     liveTimer = setInterval(tick, 2000);
   }
 
-  function showError(message) {
-    pageError.textContent = message;
-    pageError.hidden = false;
-  }
-
   function renderRows() {
     const status = statusFilter.value;
     const rows = currentTests.filter((t) => !status || t.status === status);
@@ -166,14 +160,14 @@
 
   (async function load() {
     if (!token) {
-      showError("Ссылка недействительна.");
+      showPageError("Ссылка недействительна.");
       return;
     }
     let data;
     try {
       data = await api(`/share/${encodeURIComponent(token)}/data.json`);
     } catch (err) {
-      showError(
+      showPageError(
         err.status === 404
           ? "Ссылка недействительна, отозвана или срок её действия истёк."
           : `Не удалось загрузить отчёт: ${err.message}`

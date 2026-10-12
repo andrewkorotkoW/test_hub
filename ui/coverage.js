@@ -11,7 +11,6 @@
   document.getElementById("project-title").textContent = `Покрытие — ${projectName}`;
   document.getElementById("project-link").href = `project.html?name=${encodeURIComponent(projectName)}`;
 
-  const pageError = document.getElementById("page-error");
   const summaryKpiRow = document.getElementById("summary-kpi-row");
   const summaryStands = document.getElementById("summary-stands");
   const summaryPages = document.getElementById("summary-pages");
@@ -119,11 +118,6 @@
   let areaFilter = null;        // область, выбранная кликом по строке диаграммы (b), либо null
   let graphScope = null;        // {type: "area", value} | {type: "test", value: nodeid}
 
-  function showPageError(message) {
-    pageError.textContent = message;
-    pageError.hidden = false;
-  }
-
   function hideToolbarMsg() {
     toolbarMsg.hidden = true;
   }
@@ -209,15 +203,6 @@
   // coverage_scheme_stage2.md), но без карты MANUAL_ROUTES — координаты приходят
   // с бэкенда для произвольного проекта (не только VSHGU), поэтому связи считаются
   // общей эвристикой (routeGeneric ниже), а не вручную подобранными ломаными.
-  function pluralRu(n, one, few, many) {
-    const m = Math.abs(n) % 100;
-    if (m >= 11 && m <= 14) return many;
-    const d = m % 10;
-    if (d === 1) return one;
-    if (d >= 2 && d <= 4) return few;
-    return many;
-  }
-
   const PM_STATE_WORD = {
     green: "покрыто и проходит",
     yellow: "частично (xfail/skipped)",

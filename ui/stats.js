@@ -11,7 +11,6 @@
   document.getElementById("project-title").textContent = `Статистика — ${projectName}`;
   document.getElementById("project-link").href = `project.html?name=${encodeURIComponent(projectName)}`;
 
-  const pageError = document.getElementById("page-error");
   const standSelect = document.getElementById("stats-stand-select");
   const exportBtn = document.getElementById("stats-export-btn");
   const sectionsRows = document.getElementById("sections-rows");
@@ -20,11 +19,6 @@
   const dynamicsSectionSelect = document.getElementById("dynamics-section-select");
   const topSlowestList = document.getElementById("top-slowest-list");
   const topFlakyList = document.getElementById("top-flaky-list");
-
-  function showPageError(message) {
-    pageError.textContent = message;
-    pageError.hidden = false;
-  }
 
   let areaChart = null;
   let barChart = null;
@@ -135,7 +129,7 @@
   }
 
   async function loadStats() {
-    pageError.hidden = true;
+    hidePageError();
     try {
       const query = standSelect.value ? `?stand=${encodeURIComponent(standSelect.value)}` : "";
       const data = await api(`/api/projects/${encodeURIComponent(projectName)}/stats${query}`);

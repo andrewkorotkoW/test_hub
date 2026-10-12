@@ -12,18 +12,12 @@
   document.getElementById("project-title").textContent = `Известные дефекты — ${projectName}`;
   document.getElementById("project-link").href = `project.html?name=${encodeURIComponent(projectName)}`;
 
-  const pageError = document.getElementById("page-error");
   const standSelect = document.getElementById("xfail-stand-select");
   const checkAllBtn = document.getElementById("xfail-check-all-btn");
   const toolbarMsg = document.getElementById("xfail-toolbar-msg");
   const rowsBody = document.getElementById("xfail-rows");
 
   checkAllBtn.hidden = !canManage;
-
-  function showPageError(message) {
-    pageError.textContent = message;
-    pageError.hidden = false;
-  }
 
   function showToolbarMsg(message, isError) {
     toolbarMsg.textContent = message;

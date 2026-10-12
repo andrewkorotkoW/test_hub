@@ -26,6 +26,8 @@ var vm = require("vm");
 
 var SRC_PATH = path.join(__dirname, "..", "..", "ui", "coverage.js");
 var src = fs.readFileSync(SRC_PATH, "utf8");
+var COMMON_SRC_PATH = path.join(__dirname, "..", "..", "ui", "common.js");
+var commonSrc = fs.readFileSync(COMMON_SRC_PATH, "utf8");
 
 function extract(re, label) {
   var m = src.match(re);
@@ -33,8 +35,16 @@ function extract(re, label) {
   return m[0];
 }
 
+function extractCommon(re, label) {
+  var m = commonSrc.match(re);
+  if (!m) throw new Error("не найдено в ui/common.js: " + label);
+  return m[0];
+}
+
 var snippet = [
-  extract(/function pluralRu\(n, one, few, many\) \{[\s\S]*?\n  \}/, "pluralRu"),
+  // pluralRu общий для всех страниц (ui/common.js) — coverage.js больше не
+  // держит свою копию, см. миссию про вынос дублирующихся хелперов.
+  extractCommon(/function pluralRu\(n, one, few, many\) \{[\s\S]*?\n\}/, "pluralRu"),
   extract(/function pmBuildRouteGrid\(nodes, canvas\) \{[\s\S]*?\n  \}/, "pmBuildRouteGrid"),
   extract(/function pmSegmentBlocked\(x1, y1, x2, y2, obstacles\) \{[\s\S]*?\n  \}/, "pmSegmentBlocked"),
   extract(/function pmRouteOnGrid\(grid, sx, sy, tx, ty, obstacles\) \{[\s\S]*?\n  \}/, "pmRouteOnGrid"),

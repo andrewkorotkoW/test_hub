@@ -27,7 +27,6 @@
   document.getElementById("coverage-link").href = `coverage.html?name=${encodeURIComponent(projectName)}`;
   document.getElementById("xfail-link").href = `xfail.html?name=${encodeURIComponent(projectName)}`;
   document.getElementById("set-coverage-link").href = `coverage.html?name=${encodeURIComponent(projectName)}`;
-  const pageError = document.getElementById("page-error");
 
   // ---------------- вкладки: Дашборд/Запуск/Расписания/История/Флаки ----------------
   // Активная вкладка живёт в #hash (без хэша или с незнакомым значением — дашборд по
@@ -418,11 +417,6 @@
     return new Date(frame.ts * 1000).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
   }
 
-  function showPageError(message) {
-    pageError.textContent = message;
-    pageError.hidden = false;
-  }
-
   // ---------------- stands ----------------
   let standsByName = {};
   let standsList = [];
@@ -624,16 +618,6 @@
   // в sections-tree-logic.js (window.SectionsTreeLogic), подключённом раньше
   // этого файла; здесь только DOM (разметка, раскрытие, подсчёт «выбрано N из M»).
   const KIND_LABELS = { api: "tests/api", ui: "tests/ui", e2e: "tests/e2e" };
-
-  // N/100 -> "файл"/"файла"/"файлов" — для строки итога под пресетами.
-  function pluralRu(n, one, few, many) {
-    const m = Math.abs(n) % 100;
-    if (m >= 11 && m <= 14) return many;
-    const d = m % 10;
-    if (d === 1) return one;
-    if (d >= 2 && d <= 4) return few;
-    return many;
-  }
 
   function sectionMetaText(area) {
     const base = `${area.tests_count} тест.`;

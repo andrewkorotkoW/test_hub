@@ -40,6 +40,31 @@ function fmtDate(value) {
   return String(value).replace("T", " ");
 }
 
+// Русские множественные формы: pluralRu(5, "тест", "теста", "тестов") -> "тестов".
+function pluralRu(n, one, few, many) {
+  const m = Math.abs(n) % 100;
+  if (m >= 11 && m <= 14) return many;
+  const d = m % 10;
+  if (d === 1) return one;
+  if (d >= 2 && d <= 4) return few;
+  return many;
+}
+
+// Показывает текст в #page-error — элемент с этим id есть на каждой странице
+// с собственным шапка+сайдбар (см. <div id="page-error" class="error-box" hidden>
+// в ui/*.html), поэтому элемент ищется здесь же, без параметра.
+function showPageError(message) {
+  const el = document.getElementById("page-error");
+  if (!el) return;
+  el.textContent = message;
+  el.hidden = false;
+}
+
+function hidePageError() {
+  const el = document.getElementById("page-error");
+  if (el) el.hidden = true;
+}
+
 // Загружает текущего пользователя; при отсутствии сессии уводит на страницу логина.
 async function requireAuth() {
   try {
