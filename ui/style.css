@@ -1329,7 +1329,11 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 /* карточка проекта: крупный логотип, клик по карточке (и по логотипу) открывает проект */
 .project-card { text-align: center; }
 .project-card .logo-box { height: 120px; display: flex; align-items: center; justify-content: center; margin-bottom: 10px; }
-.project-card .project-logo-big { max-height: 120px; max-width: 100%; transition: transform .15s ease; }
+/* фиксированный квадрат + object-fit: contain — одинаковый отступ сверху/снизу
+   у любого лого независимо от его соотношения сторон и внутренних полей файла,
+   та же площадь, что у .logo-placeholder (круг с инициалами) — ряд логотипов
+   выглядит выровненным по верхнему краю. */
+.project-card .project-logo-big { width: 96px; height: 96px; object-fit: contain; transition: transform .15s ease; }
 .project-card:hover .project-logo-big { transform: scale(1.05); }
 .project-card .logo-placeholder { width: 96px; height: 96px; border-radius: 50%; background: var(--accent, #2f6fed); color: #fff;
   font-size: 34px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
@@ -1587,7 +1591,7 @@ a.sentry-row:hover { background: var(--surface-hover); }
   .kpi-tile { padding: 10px 12px; }
   .kpi-tile-value { font-size: 18px; }
   .project-card .logo-box { height: 90px; }
-  .project-card .project-logo-big { max-height: 90px; }
+  .project-card .project-logo-big { width: 72px; height: 72px; }
   .project-card .logo-placeholder { width: 72px; height: 72px; font-size: 26px; }
 }
 
