@@ -450,7 +450,7 @@ def test_recalc_node_with_tests_but_no_run_yet_is_grey_with_nonzero_count(
     """Узел, у которого есть покрывающие тесты, но на стенде ещё ни разу не было
     завершённого прогона (run_id is None) — тоже серый, но, в отличие от узла без
     тестов вовсе, tests_count.total > 0 (это различие использует всплывашка в UI,
-    см. ui/coverage.js::showProductMapTip)."""
+    см. ui/coverage-scheme-dom.js::showProductMapTip)."""
     _write_map(pm_project_dir / "tests")
     conn = get_connection()
     try:

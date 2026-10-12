@@ -80,7 +80,7 @@ def test_coverage_js_persists_view_mode_choice_in_localstorage():
     (нормализация значения из localStorage) уже покрыто чистым юнит-тестом
     normalizeViewMode в tests/js/test_coverage_traffic_logic.js — не дублируем
     здесь тем же способом, только состыковка с DOM."""
-    js = (UI_DIR / "coverage.js").read_text()
+    js = (UI_DIR / "coverage-traffic-dom.js").read_text()
     assert "TrafficLogic.VIEW_MODE_KEY" in js
     assert "localStorage.getItem(TrafficLogic.VIEW_MODE_KEY)" in js
     assert 'localStorage.setItem(TrafficLogic.VIEW_MODE_KEY, viewMode)' in js
@@ -95,9 +95,9 @@ def test_coverage_js_persists_view_mode_choice_in_localstorage():
 def test_coverage_js_card_click_builds_href_only_for_non_empty_sections():
     """Сборка href по клику (project.html?name=&set=#run) выделена в чистую
     TrafficLogic.sectionHref (покрыта юнит-тестами: urlencode, null для пустого
-    раздела) — здесь только то, что coverage.js действительно её использует и
-    что серая карточка физически не получает data-href/обработчик клика."""
-    js = (UI_DIR / "coverage.js").read_text()
+    раздела) — здесь только то, что coverage-traffic-dom.js действительно её
+    использует и что серая карточка физически не получает data-href/обработчик клика."""
+    js = (UI_DIR / "coverage-traffic-dom.js").read_text()
     assert "TrafficLogic.sectionHref(projectName, section)" in js
     assert 'data-href="${escapeHtml(href)}"' in js
     # closest(".traffic-card[data-href]") — карточка без data-href (пустой
@@ -108,8 +108,8 @@ def test_coverage_js_card_click_builds_href_only_for_non_empty_sections():
 def test_coverage_js_uses_sections_and_kpi_from_traffic_logic():
     """Подстраховка от регрессии: рендер светофора действительно вызывает
     buildSections/mergeUncoveredAreas/computeKpi/assignColumns из
-    coverage-traffic-logic.js, а не дублирует логику в самом coverage.js."""
-    js = (UI_DIR / "coverage.js").read_text()
+    coverage-traffic-logic.js, а не дублирует логику в coverage-traffic-dom.js."""
+    js = (UI_DIR / "coverage-traffic-dom.js").read_text()
     for call in (
         "TrafficLogic.buildSections(tree, statusMap, AreasLogic.AREA_LABELS_RU)",
         "TrafficLogic.mergeUncoveredAreas(treeSections, summary.zero_coverage_areas",

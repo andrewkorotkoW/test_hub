@@ -5,6 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Test Hub — покрытие</title>
   <link rel="stylesheet" href="style.css">
+  <!-- Без ?name= странице нечего показывать — редиректим до того, как грузятся
+       остальные скрипты сценария (ui/coverage-setup.js и coverage-*-dom.js
+       рассчитывают, что projectName уже есть, см. их шапки). -->
+  <script>
+    if (!new URLSearchParams(window.location.search).get("name")) {
+      window.location.href = "projects.html";
+    }
+  </script>
   <script src="common.js"></script>
   <script src="tour.js"></script>
 </head>
@@ -224,6 +232,15 @@
   <script src="coverage-areas-logic.js"></script>
   <script src="coverage-traffic-logic.js"></script>
   <script src="coverage-scheme-logic.js"></script>
+  <!-- coverage-setup.js и coverage-*-dom.js делят один lexical scope с coverage.js
+       (классические <script>, без type="module") — см. шапку coverage-setup.js. -->
+  <script src="coverage-setup.js"></script>
+  <script src="coverage-scheme-dom.js"></script>
+  <script src="coverage-traffic-dom.js"></script>
+  <script src="coverage-map-dom.js"></script>
+  <script src="coverage-treemap-dom.js"></script>
+  <script src="coverage-diagrams-dom.js"></script>
+  <script src="coverage-tree-dom.js"></script>
   <script src="coverage.js"></script>
 </body>
 </html>

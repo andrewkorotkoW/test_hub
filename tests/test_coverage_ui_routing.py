@@ -34,11 +34,27 @@ async def test_coverage_js_served(client):
 
 
 async def test_coverage_js_calls_all_five_router_endpoints(client):
-    """Замок соответствия между ui/coverage.js и app/routers/coverage.py: если один
-    из 5 путей роутера переименуют без обновления фронта, этот тест это поймает
-    раньше браузерного прогона."""
-    resp = await client.get("/coverage.js")
-    js = resp.text
+    """Замок соответствия между сценарием «Покрытие» и app/routers/coverage.py: если
+    один из 5 путей роутера переименуют без обновления фронта, этот тест это поймает
+    раньше браузерного прогона.
+
+    Сценарий разнесён по нескольким файлам (ui/coverage-setup.js, ui/coverage-*-dom.js,
+    ui/coverage.js — делят один lexical scope, см. шапку coverage-setup.js), поэтому
+    вызовы собираем по всем им, а не только по финальному coverage.js: route/test —
+    в coverage-map-dom.js (openRouteDetail/openTestDetail), остальные — в coverage.js."""
+    js = ""
+    for name in (
+        "coverage-setup.js",
+        "coverage-scheme-dom.js",
+        "coverage-traffic-dom.js",
+        "coverage-map-dom.js",
+        "coverage-treemap-dom.js",
+        "coverage-diagrams-dom.js",
+        "coverage-tree-dom.js",
+        "coverage.js",
+    ):
+        resp = await client.get(f"/{name}")
+        js += resp.text
     for pattern in (
         r"/api/projects/\$\{[^}]*\}/coverage`",
         r"/api/projects/\$\{[^}]*\}/coverage/recalc`",
