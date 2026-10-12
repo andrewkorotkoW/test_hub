@@ -733,6 +733,11 @@ tbody tr.clickable:hover { background: var(--surface-hover); }
 }
 
 /* ---------- флаки-детектор ---------- */
+/* имя теста обрезается многоточием (полное — в title) — иначе длинные
+   имена растягивали таблицу шире .page (max-width:1100px) и прятали
+   кнопку «Прогнать» за горизонтальным скроллом table-scroll */
+.flaky-table td:first-child { max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flaky-table td:last-child { white-space: nowrap; }
 .flaky-dots { display: flex; gap: 3px; flex-wrap: wrap; }
 .flaky-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--unknown); }
 .flaky-dot.passed { background: var(--passed); }
