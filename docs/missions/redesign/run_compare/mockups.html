@@ -1,0 +1,387 @@
+<!doctype html>
+<title>test_hub · Сравнение прогонов и причины падений</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+/* Токены — строго из DESIGN.md, без новых цветов (см. redesign/run_window/mockups.html — тот же приём).
+   Данные в макете реальные: run 65 (develop, 13.10 00:30–06:01) против run 64 (develop, 09.10) и
+   run 66 (k8s, 4 воркера, две волны 429). */
+:root{
+  --bg:#0f1223; --bg-sidebar:#151a2e; --surface:#1b2036; --surface-hover:#232945; --border:#262c47;
+  --text:#e7e9f5; --text-muted:#9298b8;
+  --accent:#2563eb; --accent-text:#ffffff; --danger:#dc2626;
+  --passed:#22c55e; --failed:#ff4d6d; --broken:#f59e0b; --skipped:#8b93a7; --xfail:#f5b642; --flaky:#a78bfa;
+  --running:#2563eb; --stand:#38d6ff;
+  --font:"Golos Text",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --r-sm:6px; --r-md:8px; --r-lg:10px; --r-card:16px; --r-pill:999px;
+  --shadow-card:0 8px 24px rgba(0,0,0,.35);
+  --proj:#2563eb; --proj-ink:#ffffff;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    --bg:#f5f6f8; --bg-sidebar:#ffffff; --surface:#ffffff; --surface-hover:#f3f4f6; --border:#e1e4e9;
+    --text:#1f2430; --text-muted:#6b7280; --passed:#16a34a; --failed:#dc2626; --broken:#d97706; --skipped:#6b7280; --xfail:#e0a020; --flaky:#a855f7; --stand:#0284c7;
+    --shadow-card:0 1px 3px rgba(15,23,42,.08); color-scheme:light;
+  }
+}
+:root[data-theme="light"]{
+  --bg:#f5f6f8; --bg-sidebar:#ffffff; --surface:#ffffff; --surface-hover:#f3f4f6; --border:#e1e4e9;
+  --text:#1f2430; --text-muted:#6b7280; --passed:#16a34a; --failed:#dc2626; --broken:#d97706; --skipped:#6b7280; --xfail:#e0a020; --flaky:#a855f7; --stand:#0284c7;
+  --shadow-card:0 1px 3px rgba(15,23,42,.08); color-scheme:light;
+}
+*{box-sizing:border-box}
+html{background:var(--bg)}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;line-height:1.45;font-variant-numeric:tabular-nums}
+h1,h2,h3{margin:0}
+.num{font-family:var(--mono)}
+.label{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);font-weight:600}
+.muted{color:var(--text-muted)}
+.small{font-size:12px}
+a{color:inherit}
+
+/* ---------- панель управления мокапом (не часть макета) ---------- */
+.ctl{position:sticky;top:0;z-index:30;background:var(--surface);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.ctl .title{font-weight:700;font-size:14px;margin-right:auto}
+.ctl .title small{display:block;font-weight:400;color:var(--text-muted);font-size:12px;margin-top:2px}
+.tabs{display:flex;gap:4px;background:var(--surface-hover);padding:4px;border-radius:var(--r-lg)}
+.tabs button{border:0;background:transparent;color:var(--text-muted);font:inherit;font-weight:600;padding:6px 12px;border-radius:var(--r-sm);cursor:pointer;white-space:nowrap}
+.tabs button[aria-current="true"]{background:var(--accent);color:var(--accent-text)}
+button:focus-visible,select:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.theme-btn{border:1px solid var(--border);background:var(--surface);color:var(--text);font:inherit;padding:6px 12px;border-radius:var(--r-md);cursor:pointer}
+
+/* ---------- каркас ---------- */
+.page-sec{display:none;padding:24px 20px 48px}
+.page-sec.on{display:block}
+.wrap{max-width:1360px;margin:0 auto}
+.wrap-head{margin:0 0 14px}
+.wrap-head h2{font-size:18px;font-weight:700}
+.wrap-head p{margin:4px 0 0;color:var(--text-muted);max-width:90ch;font-size:13px}
+.frame{background:var(--bg);border:1px solid var(--border);border-radius:18px;overflow:hidden;box-shadow:var(--shadow-card);display:flex;min-height:720px}
+.side{background:var(--bg-sidebar);border-right:1px solid var(--border);padding:16px 12px;display:flex;flex-direction:column;gap:4px;width:200px;flex:0 0 200px}
+.side .brand{font-weight:700;padding:6px 10px 16px;font-size:15px}
+.side a{display:block;padding:9px 10px;border-radius:var(--r-md);color:var(--text-muted);text-decoration:none;font-weight:500;font-size:13px}
+.side a.on{background:color-mix(in srgb,var(--proj) 16%,transparent);color:var(--text)}
+.body-scroll{flex:1;min-width:0;padding:16px 18px;display:grid;gap:14px;align-content:start}
+.head-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.head-row h1{font-size:18px;font-weight:700}
+.ptabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin:0;overflow-x:auto}
+.ptabs a{padding:9px 12px;font-size:13px;font-weight:600;color:var(--text-muted);text-decoration:none;border-bottom:2px solid transparent;white-space:nowrap}
+.ptabs a.on{color:var(--text);border-color:var(--proj)}
+.ptabs a .cnt{font-family:var(--mono);font-size:11px;color:var(--text-muted);margin-left:5px}
+.ptabs a.on .cnt{color:var(--text)}
+
+/* ---------- компоненты из DESIGN.md ---------- */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-card);padding:16px 18px;min-width:0}
+.card h3{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);margin:0 0 10px}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:var(--r-pill);font-size:12px;font-weight:600;white-space:nowrap}
+.pill i{width:7px;height:7px;border-radius:50%;background:currentColor}
+.p-passed{color:var(--passed);background:color-mix(in srgb,var(--passed) 15%,transparent)}
+.p-failed{color:var(--failed);background:color-mix(in srgb,var(--failed) 15%,transparent)}
+.p-stand{color:var(--stand);background:color-mix(in srgb,var(--stand) 15%,transparent)}
+.p-xfail{color:var(--xfail);background:color-mix(in srgb,var(--xfail) 18%,transparent)}
+.p-skipped{color:var(--skipped);background:color-mix(in srgb,var(--skipped) 16%,transparent)}
+.select{border:1px solid var(--border);background:var(--surface);color:var(--text);font:inherit;padding:7px 10px;border-radius:var(--r-md)}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:12px 14px}
+.kpi .label{margin-bottom:6px}
+.kpi .v{font-family:var(--mono);font-size:22px;font-weight:700;line-height:1.1;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.kpi .v .was{font-size:14px;color:var(--text-muted);font-weight:500}
+.kpi .d{font-size:12px;font-weight:600;margin-top:4px}
+.d.up{color:var(--passed)}.d.down{color:var(--failed)}.d.flat{color:var(--text-muted)}
+.chip{display:inline-flex;align-items:center;gap:7px;padding:5px 10px;border-radius:var(--r-pill);border:1px solid var(--border);background:var(--surface);font-size:12px;white-space:nowrap;cursor:pointer;font-family:var(--font);color:var(--text)}
+.chip i{width:7px;height:7px;border-radius:50%;flex:0 0 auto}
+.chip b{font-family:var(--mono);font-weight:600}
+.chip.active{border-color:var(--proj);background:color-mix(in srgb,var(--proj) 14%,transparent)}
+.chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+
+/* ---------- группы сравнения (сворачиваемые, как разделы в «Тест-кейсах») ---------- */
+.group{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-card);overflow:hidden}
+.group-head{display:flex;align-items:center;gap:10px;padding:12px 16px;cursor:pointer;background:none;border:0;width:100%;color:var(--text);font:inherit;text-align:left}
+.group-head:hover{background:var(--surface-hover)}
+.group-head .chev{width:14px;color:var(--text-muted);transition:transform .12s}
+.group[open] .group-head .chev{transform:rotate(90deg)}
+.group-head b{font-weight:700}
+.group-head .cnt{font-family:var(--mono);font-weight:700;padding:1px 8px;border-radius:var(--r-pill)}
+.group-head .hint{color:var(--text-muted);font-size:12px;margin-left:auto}
+.group-body{border-top:1px solid var(--border)}
+.test-row{display:grid;grid-template-columns:10px minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:8px 16px;border-bottom:1px solid color-mix(in srgb,var(--border) 60%,transparent);cursor:pointer}
+.test-row:last-child{border-bottom:0}
+.test-row:hover{background:var(--surface-hover)}
+.test-row.hidden{display:none}
+.test-row .dot{width:8px;height:8px;border-radius:50%}
+.test-row .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px}
+.test-row .nm small{color:var(--text-muted);font-family:var(--mono);font-size:11px;margin-right:6px}
+.test-row .tag{font-size:11px;font-weight:600;padding:2px 8px;border-radius:var(--r-pill);white-space:nowrap}
+.tag.stand{color:var(--stand);background:color-mix(in srgb,var(--stand) 14%,transparent)}
+.tag.code{color:var(--failed);background:color-mix(in srgb,var(--failed) 14%,transparent)}
+.tag.fixed{color:var(--passed);background:color-mix(in srgb,var(--passed) 14%,transparent)}
+.tag.known{color:var(--text-muted);background:color-mix(in srgb,var(--text) 8%,transparent)}
+.test-row .dur{font-family:var(--mono);font-size:11px;color:var(--text-muted);white-space:nowrap;min-width:90px;text-align:right}
+.test-row .dur b{color:var(--text);font-weight:600}
+.test-row .dur.slower b{color:var(--failed)}.test-row .dur.faster b{color:var(--passed)}
+.st-passed{background:var(--passed)}.st-failed{background:var(--failed)}.st-broken{background:var(--broken)}.st-skipped{background:var(--skipped)}.st-xfail{background:var(--xfail)}
+
+/* ---------- история: бейдж относительно предыдущего ---------- */
+table{width:100%;border-collapse:collapse}
+thead th{text-align:left;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);font-weight:600;padding:9px 12px;border-bottom:1px solid var(--border)}
+td{padding:9px 12px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle}
+tbody tr:last-child td{border-bottom:0}
+tbody tr:hover{background:var(--surface-hover)}
+.delta{font-family:var(--mono);font-size:12px;font-weight:600;display:inline-flex;gap:6px}
+.delta .g{color:var(--passed)}.delta .r{color:var(--failed)}.delta .n{color:var(--text-muted)}
+
+/* ---------- причины: светофор + таймлайн ---------- */
+.traffic{display:flex;gap:0;border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden;background:var(--surface)}
+.traffic button{flex:1;border:0;background:transparent;color:var(--text);font:inherit;padding:12px 14px;cursor:pointer;text-align:left;border-right:1px solid var(--border);display:grid;gap:3px}
+.traffic button:last-child{border-right:0}
+.traffic button:hover{background:var(--surface-hover)}
+.traffic button.active{background:color-mix(in srgb,var(--proj) 12%,transparent);box-shadow:inset 0 -2px 0 var(--proj)}
+.traffic .v{font-family:var(--mono);font-size:22px;font-weight:700;line-height:1}
+.traffic .v i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:8px;vertical-align:middle}
+.traffic .n{font-size:12px;color:var(--text-muted)}
+.timeline{position:relative}
+.timeline svg{width:100%;height:150px;display:block}
+svg text{font-family:var(--mono);font-size:10px;fill:var(--text-muted)}
+.note{border-left:3px solid var(--stand);padding:8px 12px;background:color-mix(in srgb,var(--stand) 8%,transparent);border-radius:0 var(--r-md) var(--r-md) 0;font-size:13px}
+.tg{background:var(--bg);border:1px solid var(--border);border-radius:var(--r-lg);padding:12px 14px;font-size:13px;line-height:1.55;max-width:64ch}
+.tg .from{font-weight:700;margin-bottom:4px}
+.tg .old{color:var(--text-muted);text-decoration:line-through;display:block;margin-top:8px}
+.g2{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:14px}
+@media (max-width:1000px){.g2{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,1fr)}.side{display:none}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="ctl">
+  <div class="title">test_hub · окно прогона: «Сравнить с…» и «Причины»<small>Макет на реальных данных: run 65 ↔ run 64 (develop), волны 429 — run 66 (k8s, 4 воркера). Кликабельно: вкладки, группы, фильтры по причине.</small></div>
+  <div class="tabs" role="tablist">
+    <button role="tab" aria-current="true" data-page="p1">1 · Сравнить с…</button>
+    <button role="tab" data-page="p2">2 · Причины и волны</button>
+  </div>
+  <button class="theme-btn" id="themeBtn" type="button">Светлая тема</button>
+</div>
+
+<!-- ======================= Страница 1: сравнение прогонов ======================= -->
+<section class="page-sec on" id="p1">
+  <div class="wrap">
+    <div class="wrap-head">
+      <h2>Вкладка «Сравнить с…» в окне прогона</h2>
+      <p>База по умолчанию — предыдущий завершённый прогон на том же стенде с тем же target. Четыре группы, из них две важные (новое и починенное) раскрыты, «падало и падает» — свёрнуто как известное. Дельта времени показывается там, где тест стал быстрее/медленнее больше чем вдвое.</p>
+    </div>
+    <div class="frame">
+      <aside class="side">
+        <div class="brand">Test Hub</div>
+        <a href="#">Проекты</a><a href="#" class="on">Прогоны</a><a href="#">Покрытие</a><a href="#">Статистика</a><a href="#">Xfail</a><a href="#">Расписания</a>
+      </aside>
+      <div class="body-scroll">
+        <div class="head-row">
+          <h1>VSHGU · прогон #65</h1>
+          <span class="pill p-failed"><i></i>failed</span>
+          <span class="muted small">develop · all · 13.10 00:30 → 06:01 · <span class="num">5:31:21</span> · запустил qa</span>
+        </div>
+        <nav class="ptabs">
+          <a href="#">Сплит</a><a href="#">Лог</a><a href="#">Отчёт</a>
+          <a href="#" class="on">Сравнить с…</a>
+          <a href="#" onclick="go('p2');return false">Причины <span class="cnt">40</span></a>
+        </nav>
+
+        <div class="head-row">
+          <span class="label">База сравнения</span>
+          <select class="select" aria-label="Базовый прогон">
+            <option>#64 · develop · all · 09.10 13:32 · 3:36 (предыдущий на том же стенде)</option>
+            <option>#58 · develop · smoke · 07.10</option>
+            <option>#55 · develop · ui · 05.10</option>
+          </select>
+          <span class="muted small">Сравниваются финальные статусы (после реранов)</span>
+        </div>
+
+        <div class="kpis">
+          <div class="kpi"><div class="label">Passed</div><div class="v">307 <span class="was">было 300</span></div><div class="d up">+7</div></div>
+          <div class="kpi"><div class="label">Failed + broken</div><div class="v">40 <span class="was">было 9</span></div><div class="d down">+31 · из них 36 — стенд</div></div>
+          <div class="kpi"><div class="label">Skipped</div><div class="v">182 <span class="was">было 218</span></div><div class="d flat">−36 (добавлены xfail)</div></div>
+          <div class="kpi"><div class="label">Длительность</div><div class="v">5:31 <span class="was">было 3:36</span></div><div class="d down">+1:55 · ai_chat +2:02</div></div>
+        </div>
+
+        <details class="group" open>
+          <summary class="group-head"><span class="chev">▸</span><b>Новые падения</b><span class="cnt p-failed">31</span><span class="hint">было passed → стало failed/broken</span></summary>
+          <div class="group-body">
+            <div class="test-row"><i class="dot st-broken"></i><div class="nm"><small>ui/ai_chat/admin</small>test_upload_formats[pdf] … и ещё 25 ai_chat</div><span class="tag stand">LLM · 180 с таймаут</span><div class="dur slower"><b>9:48</b> ← 1:12</div></div>
+            <div class="test-row"><i class="dot st-failed"></i><div class="nm"><small>ui/helpdesk/admin</small>test_users::test_view_user_card</div><span class="tag stand">401 · потеря сессии</span><div class="dur">0:14</div></div>
+            <div class="test-row"><i class="dot st-failed"></i><div class="nm"><small>ui/knowledge_base/admin_statistics</small>test_admin_sees_user_achievement_history</div><span class="tag stand">401 · потеря сессии</span><div class="dur">0:09</div></div>
+            <div class="test-row"><i class="dot st-failed"></i><div class="nm"><small>ui/dictionaries/admin</small>test_admin_dictionaries_crud::test_create_item_persists_after_reload</div><span class="tag code">тест · wait_loaded</span><div class="dur">0:46</div></div>
+            <div class="test-row"><i class="dot st-failed"></i><div class="nm"><small>ui/dictionaries/admin</small>test_admin_dictionaries_crud::test_edit_item_renames_and_persists</div><span class="tag code">тест · wait_loaded</span><div class="dur">0:51</div></div>
+            <div class="test-row"><i class="dot st-failed"></i><div class="nm"><small>ui/helpdesk/admin</small>test_dictionaries::test_dictionary_crud[category]</div><span class="tag code">тест · DataTables /search</span><div class="dur">0:20</div></div>
+            <div class="test-row"><i class="dot st-failed"></i><div class="nm"><small>api/tickets</small>test_tickets_messages_api::test_add_message_and_order</div><span class="tag code">продукт · контракт</span><div class="dur">0:05</div></div>
+          </div>
+        </details>
+
+        <details class="group" open>
+          <summary class="group-head"><span class="chev">▸</span><b>Починилось</b><span class="cnt p-passed">2</span><span class="hint">было failed → стало passed</span></summary>
+          <div class="group-body">
+            <div class="test-row"><i class="dot st-passed"></i><div class="nm"><small>api/create_activity/external_content</small>test_external_content_api::test_external_content_flow</div><span class="tag fixed">passed</span><div class="dur">0:03</div></div>
+            <div class="test-row"><i class="dot st-passed"></i><div class="nm"><small>ui/practical_tasks</small>test_reviewer_sees_additional_materials</div><span class="tag fixed">xfail → xpass</span><div class="dur faster"><b>1:31</b> ← 2:28</div></div>
+          </div>
+        </details>
+
+        <details class="group">
+          <summary class="group-head"><span class="chev">▸</span><b>Падало и падает</b><span class="cnt p-skipped">3</span><span class="hint">известное — свёрнуто</span></summary>
+          <div class="group-body">
+            <div class="test-row"><i class="dot st-broken"></i><div class="nm"><small>api/notifications</small>test_notifications_crud_api::test_create_notification_visible_in_list_and_by_id</div><span class="tag known">ReadTimeout 30 с · оба прогона</span><div class="dur">0:30</div></div>
+            <div class="test-row"><i class="dot st-broken"></i><div class="nm"><small>api/notifications</small>test_notifications_crud_api::test_user_session_sees_notification</div><span class="tag known">ReadTimeout 30 с · оба прогона</span><div class="dur">0:30</div></div>
+            <div class="test-row"><i class="dot st-broken"></i><div class="nm"><small>api/notifications</small>test_notifications_lists_api::test_notifications_list_has_expected_fields</div><span class="tag known">ReadTimeout 30 с · оба прогона</span><div class="dur">0:30</div></div>
+          </div>
+        </details>
+
+        <details class="group">
+          <summary class="group-head"><span class="chev">▸</span><b>Стали быстрее / медленнее</b><span class="cnt p-skipped">6</span><span class="hint">дельта больше чем вдвое, статус не менялся</span></summary>
+          <div class="group-body">
+            <div class="test-row"><i class="dot st-passed"></i><div class="nm"><small>ui/cas/admin</small>test_admin_cas_users::test_admin_check_cas_user</div><span class="tag known">networkidle → wait_loaded</span><div class="dur faster"><b>0:46</b> ← 1:30</div></div>
+            <div class="test-row"><i class="dot st-passed"></i><div class="nm"><small>ui/test_constructor</small>test_07_admin_adds_question_from_bank_to_test</div><span class="tag known">networkidle → wait_loaded</span><div class="dur faster"><b>0:15</b> ← 0:44</div></div>
+            <div class="test-row"><i class="dot st-passed"></i><div class="nm"><small>api/cas</small>test_external_cas_assign_api::test_dismiss_users</div><span class="tag known">sleep(60) → wait_until</span><div class="dur faster"><b>0:05</b> ← 1:05</div></div>
+            <div class="test-row"><i class="dot st-passed"></i><div class="nm"><small>api/cas</small>test_external_cas_bulk_sync_api::test_bulk_sync_users</div><span class="tag known">sleep(30) → retry</span><div class="dur faster"><b>0:03</b> ← 0:33</div></div>
+          </div>
+        </details>
+
+        <div class="card">
+          <h3>Как это видно в «Истории» (бейдж относительно предыдущего прогона)</h3>
+          <table>
+            <thead><tr><th>#</th><th>Стенд · target</th><th>Статус</th><th>Итог</th><th>Δ к предыдущему</th><th>Длительность</th></tr></thead>
+            <tbody>
+              <tr><td class="num">66</td><td>k8s · АСУО+helpdesk</td><td><span class="pill p-failed"><i></i>failed</span></td><td class="num">193 / 96 / 34</td><td><span class="delta"><span class="r">−54</span><span class="r">+87</span><span class="n">· 95 стенд</span></span></td><td class="num">1:10</td></tr>
+              <tr><td class="num">65</td><td>develop · all</td><td><span class="pill p-failed"><i></i>failed</span></td><td class="num">307 / 40 / 37</td><td><span class="delta"><span class="g">+7</span><span class="r">+31</span><span class="n">· 36 стенд</span></span></td><td class="num">5:31</td></tr>
+              <tr><td class="num">64</td><td>develop · all</td><td><span class="pill p-failed"><i></i>failed</span></td><td class="num">300 / 9 / —</td><td><span class="delta"><span class="n">база</span></span></td><td class="num">3:36</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= Страница 2: причины и волны ======================= -->
+<section class="page-sec" id="p2">
+  <div class="wrap">
+    <div class="wrap-head">
+      <h2>Вкладка «Причины» в окне прогона</h2>
+      <p>При завершении прогона сообщение каждого падения классифицируется: 429 → троттлинг, 5xx/ReadTimeout/RemoteDisconnected → стенд не ответил, 401 → потеря сессии, остальное — тест или продукт. Светофор фильтрует список, таймлайн подсвечивает волны (≥5 падений одной инфраструктурной причины за ≤2 минуты). Падения «стенд» не попадают во «Флаки».</p>
+    </div>
+    <div class="frame">
+      <aside class="side">
+        <div class="brand">Test Hub</div>
+        <a href="#">Проекты</a><a href="#" class="on">Прогоны</a><a href="#">Покрытие</a><a href="#">Статистика</a><a href="#">Xfail</a><a href="#">Расписания</a>
+      </aside>
+      <div class="body-scroll">
+        <div class="head-row">
+          <h1>VSHGU · прогон #66</h1>
+          <span class="pill p-failed"><i></i>failed</span>
+          <span class="muted small">k8s · 4 воркера · 13.10 09:42 → 10:52 · <span class="num">1:09:41</span> · 328 тестов</span>
+        </div>
+        <nav class="ptabs">
+          <a href="#">Сплит</a><a href="#">Лог</a><a href="#">Отчёт</a>
+          <a href="#" onclick="go('p1');return false">Сравнить с…</a>
+          <a href="#" class="on">Причины <span class="cnt">96</span></a>
+        </nav>
+
+        <div class="traffic" role="group" aria-label="Причины падений">
+          <button class="active" data-cause="all"><span class="v">96</span><span class="n">всего падений</span></button>
+          <button data-cause="429"><span class="v"><i style="background:var(--stand)"></i>70</span><span class="n">троттлинг 429 · стенд</span></button>
+          <button data-cause="401"><span class="v"><i style="background:var(--stand)"></i>10</span><span class="n">потеря сессии 401 · стенд</span></button>
+          <button data-cause="5xx"><span class="v"><i style="background:var(--stand)"></i>14</span><span class="n">не ответил / таймаут · стенд</span></button>
+          <button data-cause="code"><span class="v"><i style="background:var(--failed)"></i>2</span><span class="n">тест или продукт</span></button>
+        </div>
+
+        <div class="g2">
+          <div class="card">
+            <h3>Таймлайн прогона — волны инфраструктурных причин</h3>
+            <div class="timeline">
+              <svg viewBox="0 0 760 150" role="img" aria-label="Таймлайн run 66: две волны 429 — 09:43–09:50 и 10:44–10:47">
+                <!-- сетка времени 09:42 → 10:52 = 70 мин на 700px, x = 30 + мин*10 -->
+                <line x1="30" y1="110" x2="730" y2="110" stroke="var(--border)"/>
+                <g>
+                  <text x="30" y="128">09:42</text><text x="180" y="128">09:57</text><text x="330" y="128">10:12</text><text x="480" y="128">10:27</text><text x="630" y="128">10:42</text><text x="700" y="128">10:52</text>
+                </g>
+                <!-- волны -->
+                <rect x="40" y="18" width="70" height="92" rx="6" fill="color-mix(in srgb,var(--stand) 18%,transparent)" stroke="var(--stand)" stroke-dasharray="4 3"/>
+                <text x="45" y="32" style="fill:var(--stand);font-weight:600">09:43–09:50 · 70 × 429</text>
+                <rect x="650" y="18" width="30" height="92" rx="6" fill="color-mix(in srgb,var(--stand) 18%,transparent)" stroke="var(--stand)" stroke-dasharray="4 3"/>
+                <text x="505" y="32" style="fill:var(--stand);font-weight:600">10:44–10:47 · 15 × 429</text>
+                <!-- тесты: зелёные точки — passed, красные столбики — падения (высота = число за минуту) -->
+                <g fill="var(--passed)" opacity=".8">
+                  <circle cx="35" cy="104" r="2"/><circle cx="120" cy="104" r="2"/><circle cx="135" cy="104" r="2"/><circle cx="150" cy="104" r="2"/><circle cx="170" cy="104" r="2"/><circle cx="200" cy="104" r="2"/><circle cx="230" cy="104" r="2"/><circle cx="260" cy="104" r="2"/><circle cx="290" cy="104" r="2"/><circle cx="320" cy="104" r="2"/><circle cx="350" cy="104" r="2"/><circle cx="380" cy="104" r="2"/><circle cx="410" cy="104" r="2"/><circle cx="440" cy="104" r="2"/><circle cx="470" cy="104" r="2"/><circle cx="500" cy="104" r="2"/><circle cx="530" cy="104" r="2"/><circle cx="560" cy="104" r="2"/><circle cx="590" cy="104" r="2"/><circle cx="620" cy="104" r="2"/><circle cx="700" cy="104" r="2"/><circle cx="720" cy="104" r="2"/>
+                </g>
+                <g fill="var(--stand)">
+                  <rect x="46" y="60" width="8" height="50"/><rect x="56" y="40" width="8" height="70"/><rect x="66" y="36" width="8" height="74"/><rect x="76" y="48" width="8" height="62"/><rect x="86" y="58" width="8" height="52"/><rect x="96" y="74" width="8" height="36"/>
+                  <rect x="654" y="70" width="8" height="40"/><rect x="664" y="54" width="8" height="56"/><rect x="674" y="86" width="6" height="24"/>
+                </g>
+                <g fill="var(--failed)"><rect x="300" y="98" width="6" height="12"/><rect x="688" y="98" width="6" height="12"/></g>
+                <text x="30" y="12">падений в минуту</text>
+              </svg>
+            </div>
+            <div class="note">Две волны на всех четырёх воркерах одновременно: лимит 360 запросов/мин на реплику, реплика одна. Перегон тех же 96 тестов в один поток — 92 passed. Вердикт test_hub: <b>«стенд, не код»</b>, во «Флаки» не учитывается.</div>
+          </div>
+
+          <div class="card">
+            <h3>Уведомление в Telegram по итогам</h3>
+            <div class="tg">
+              <div class="from">Test Hub · VSHGU · k8s · прогон #66</div>
+              <div>❌ 193 passed · 96 упало · 34 xfail · 1:09:41</div>
+              <div>Из 96 падений <b>94 — стенд</b>: 70 × троттлинг 429 (две волны, 09:43–09:50 и 10:44–10:47), 10 × потеря сессии, 14 × таймаут/не ответил. <b>Тест или продукт — 2</b>: test_add_message_and_order, test_info_banner_toggle_ui.</div>
+              <div>Сравнение с #64: passed −54, новых падений 87 (из них стенд 94).</div>
+              <span class="old">было: «VSHGU · k8s · прогон #66 завершён: failed. passed 193, failed 75, broken 21.»</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Список падений <span class="muted" id="listNote">— все причины</span></h3>
+          <div id="causeList">
+            <div class="test-row" data-cause="429"><i class="dot st-failed"></i><div class="nm"><small>api/programs</small>test_create_program_api::test_create_program_success</div><span class="tag stand">429 · троттлинг</span><div class="dur">09:43:22</div></div>
+            <div class="test-row" data-cause="429"><i class="dot st-failed"></i><div class="nm"><small>api/ratings</small>test_ratings_negative_api::test_create_rating_missing_fields_422[payload0]</div><span class="tag stand">429 · троттлинг</span><div class="dur">09:44:05</div></div>
+            <div class="test-row" data-cause="429"><i class="dot st-failed"></i><div class="nm"><small>api/test_health.py</small>test_auth_me_returns_200</div><span class="tag stand">429 · троттлинг</span><div class="dur">09:45:10</div></div>
+            <div class="test-row" data-cause="429"><i class="dot st-failed"></i><div class="nm"><small>api/users</small>test_create_user_api::test_create_user_success</div><span class="tag stand">429 · троттлинг</span><div class="dur">09:47:31</div></div>
+            <div class="test-row" data-cause="401"><i class="dot st-broken"></i><div class="nm"><small>api/tickets</small>test_tickets_crud_api::test_create_ticket</div><span class="tag stand">401 · потеря сессии</span><div class="dur">09:48:02</div></div>
+            <div class="test-row" data-cause="401"><i class="dot st-broken"></i><div class="nm"><small>ui/helpdesk/admin</small>test_dictionaries::test_dictionary_crud[tag]</div><span class="tag stand">401 · потеря сессии</span><div class="dur">09:43:44</div></div>
+            <div class="test-row" data-cause="5xx"><i class="dot st-broken"></i><div class="nm"><small>ui/helpdesk/admin</small>test_users::test_configure_ticket_table_columns_from_list</div><span class="tag stand">таймаут 30 с · не ответил</span><div class="dur">09:51:34</div></div>
+            <div class="test-row" data-cause="429"><i class="dot st-broken"></i><div class="nm"><small>ui/test_constructor</small>test_15_admin_creates_feedback_with_sequence</div><span class="tag stand">429 · троттлинг</span><div class="dur">10:46:54</div></div>
+            <div class="test-row" data-cause="429"><i class="dot st-failed"></i><div class="nm"><small>ui/users</small>test_admin_enters_admin_panel</div><span class="tag stand">429 · троттлинг</span><div class="dur">10:47:07</div></div>
+            <div class="test-row" data-cause="code"><i class="dot st-failed"></i><div class="nm"><small>api/tickets</small>test_tickets_messages_api::test_add_message_and_order</div><span class="tag code">продукт · порядок сообщений</span><div class="dur">10:46:40</div></div>
+            <div class="test-row" data-cause="code"><i class="dot st-failed"></i><div class="nm"><small>ui/banner</small>test_info_banner_ui::test_info_banner_toggle_ui</div><span class="tag code">тест · не включился баннер</span><div class="dur">09:49:58</div></div>
+            <div class="test-row" data-cause="429 more"><i class="dot st-failed"></i><div class="nm muted">… ещё 85 строк</div><span class="tag stand">429 / 401 / 5xx</span><div class="dur"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+  // Страницы макета
+  function go(id){
+    document.querySelectorAll('.page-sec').forEach(s => s.classList.toggle('on', s.id === id));
+    document.querySelectorAll('.tabs [data-page]').forEach(b => b.setAttribute('aria-current', b.dataset.page === id ? 'true' : 'false'));
+    window.scrollTo({top:0});
+  }
+  document.querySelectorAll('.tabs [data-page]').forEach(b => b.addEventListener('click', () => go(b.dataset.page)));
+
+  // Тема: явный выбор пишется в data-theme (как в test_hub), без выбора — системная
+  const themeBtn = document.getElementById('themeBtn');
+  const isLight = () => document.documentElement.dataset.theme === 'light' ||
+    (!document.documentElement.dataset.theme && matchMedia('(prefers-color-scheme: light)').matches);
+  const paintTheme = () => themeBtn.textContent = isLight() ? 'Тёмная тема' : 'Светлая тема';
+  themeBtn.addEventListener('click', () => { document.documentElement.dataset.theme = isLight() ? 'dark' : 'light'; paintTheme(); });
+  paintTheme();
+
+  // Светофор причин фильтрует список
+  const note = document.getElementById('listNote');
+  const names = {all:'— все причины', '429':'— только троттлинг 429 (70)', '401':'— только потеря сессии (10)', '5xx':'— только таймауты/не ответил (14)', code:'— только тест или продукт (2)'};
+  document.querySelectorAll('.traffic button').forEach(btn => btn.addEventListener('click', () => {
+    document.querySelectorAll('.traffic button').forEach(b => b.classList.toggle('active', b === btn));
+    const c = btn.dataset.cause;
+    document.querySelectorAll('#causeList .test-row').forEach(r => {
+      r.classList.toggle('hidden', c !== 'all' && !r.dataset.cause.split(' ').includes(c));
+    });
+    note.textContent = names[c];
+  }));
+</script>
