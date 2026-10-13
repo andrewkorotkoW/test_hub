@@ -181,6 +181,131 @@ def test_format_report_lists_up_to_15_failed_tests_and_counts_rest():
     assert "Длительность: —" in text
 
 
+# ------------------------------------------------------------------ format_report: строка причин + ограничение списка
+# (docs/missions/2026-10-13_run_compare_and_causes.md, п.5)
+
+def _report_with_tests(tests, counts=None):
+    total_failed = sum(1 for t in tests if t["status"] in ("failed", "broken"))
+    return {
+        "id": 42,
+        "project": "p",
+        "status": "failed",
+        "duration": 10.0,
+        "counts": counts or {"passed": 0, "failed": total_failed, "broken": 0, "skipped": 0},
+        "tests": tests,
+    }
+
+
+def test_format_report_causes_line_matches_mission_example_wording():
+    """Пример из docs/missions/2026-10-13_run_compare_and_causes.md, п.5: «Из 96
+    падений 94 — стенд: 70 × троттлинг 429 (две волны, 09:43–09:50 и 10:44–10:47),
+    10 × потеря сессии, 14 × таймаут/не ответил. Тест или продукт — 2: …»."""
+    report = _report_with_tests([], counts={"passed": 0, "failed": 96, "broken": 0, "skipped": 0})
+    causes = {
+        "summary": {"throttling": 70, "session": 10, "stand": 14, "code": 2, "total": 96},
+        "waves": [
+            {"cause": "throttling", "start_ts": "2026-10-10T09:43:00", "end_ts": "2026-10-10T09:50:00", "count": 55},
+            {"cause": "throttling", "start_ts": "2026-10-10T10:44:00", "end_ts": "2026-10-10T10:47:00", "count": 15},
+        ],
+        "tests": [
+            {"full_name": "tests.api#test_code_one", "status": "failed", "cause": "code"},
+            {"full_name": "tests.api#test_code_two", "status": "failed", "cause": "code"},
+        ],
+    }
+    text = format_report(report, causes)
+    assert (
+        "Из 96 падений 94 — стенд: 70 × троттлинг 429 (две волны, 09:43–09:50 и 10:44–10:47), "
+        "10 × потеря сессии, 14 × таймаут/не ответил. Тест или продукт — 2: test_code_one, test_code_two"
+    ) in text
+
+
+def test_format_report_causes_line_absent_when_no_infra_failures():
+    report = _report_with_tests([], counts={"passed": 0, "failed": 2, "broken": 0, "skipped": 0})
+    causes = {"summary": {"throttling": 0, "session": 0, "stand": 0, "code": 2, "total": 2}, "waves": [], "tests": []}
+    text = format_report(report, causes)
+    assert "стенд:" not in text
+
+
+def test_format_report_causes_line_single_wave_uses_singular_wording():
+    report = _report_with_tests([], counts={"passed": 0, "failed": 5, "broken": 0, "skipped": 0})
+    causes = {
+        "summary": {"throttling": 5, "session": 0, "stand": 0, "code": 0, "total": 5},
+        "waves": [{"cause": "throttling", "start_ts": "2026-01-01T10:00:00", "end_ts": "2026-01-01T10:02:00", "count": 5}],
+        "tests": [],
+    }
+    text = format_report(report, causes)
+    assert "5 × троттлинг 429 (волна 10:00–10:02)" in text
+
+
+def test_format_report_bad_tests_list_restricted_to_code_causes_only():
+    """Список «Упавшие тесты» должен исключать стендовые причины (throttling/
+    session/stand) — они уже видны в сводной строке причин, перечислять их
+    избыточно (см. п.5 миссии)."""
+    tests = [
+        {"name": "tests.api#test_throttling", "status": "failed"},
+        {"name": "tests.api#test_session", "status": "failed"},
+        {"name": "tests.api#test_stand", "status": "broken"},
+        {"name": "tests.api#test_code", "status": "failed"},
+    ]
+    report = _report_with_tests(tests)
+    causes = {
+        "summary": {"throttling": 1, "session": 1, "stand": 1, "code": 1, "total": 4},
+        "waves": [],
+        "tests": [
+            {"full_name": "tests.api#test_throttling", "status": "failed", "cause": "throttling"},
+            {"full_name": "tests.api#test_session", "status": "failed", "cause": "session"},
+            {"full_name": "tests.api#test_stand", "status": "broken", "cause": "stand"},
+            {"full_name": "tests.api#test_code", "status": "failed", "cause": "code"},
+        ],
+    }
+    text = format_report(report, causes)
+    listed = [line for line in text.splitlines() if line.startswith("  - ")]
+    assert len(listed) == 1
+    assert "test_code" in listed[0]
+    assert "test_throttling" not in text
+    assert "test_session" not in text
+    assert "test_stand" not in text
+
+
+def test_format_report_without_causes_lists_all_failed_tests_as_before():
+    """Без causes (старые вызовы/недоступность API) — прежнее поведение: список
+    «Упавшие тесты» включает все failed/broken, стенд от кода не отличается."""
+    tests = [
+        {"name": "tests.api#test_throttling", "status": "failed"},
+        {"name": "tests.api#test_code", "status": "failed"},
+    ]
+    report = _report_with_tests(tests)
+    text = format_report(report)
+    listed = [line for line in text.splitlines() if line.startswith("  - ")]
+    assert len(listed) == 2
+
+
+def test_format_report_compare_line_shows_delta_passed_and_new_failures_count():
+    """«Сравнение с #64: passed −54, новых падений 87» — п.3 задачи (здесь без
+    unicode-минуса — _compare_line форматирует стандартным Python ':+d')."""
+    report = _report_with_tests([])
+    compare = {
+        "base": {"id": 64},
+        "kpis": {"passed": {"now": 10, "was": 64}},
+        "groups": {"new_failures": [{"full_name": f"tests.api#test_{i}"} for i in range(87)]},
+    }
+    text = format_report(report, compare=compare)
+    assert "Сравнение с #64: passed -54, новых падений 87" in text
+
+
+def test_format_report_compare_line_absent_without_compare_arg():
+    report = _report_with_tests([])
+    text = format_report(report)
+    assert "Сравнение с #" not in text
+
+
+def test_format_report_compare_line_absent_when_base_missing():
+    report = _report_with_tests([])
+    compare = {"base": {}, "kpis": {"passed": {"now": 1, "was": 1}}, "groups": {"new_failures": []}}
+    text = format_report(report, compare=compare)
+    assert "Сравнение с #" not in text
+
+
 # ------------------------------------------------------------------ доступ
 def test_is_allowed_respects_allowlist(monkeypatch):
     monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {1, 2, 3})
