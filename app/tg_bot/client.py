@@ -83,6 +83,14 @@ class HubClient:
         resp = await self._request("GET", f"/api/runs/{run_id}/report")
         return resp.json()
 
+    async def get_run_causes(self, run_id: int) -> dict:
+        resp = await self._request("GET", f"/api/runs/{run_id}/causes")
+        return resp.json()
+
+    async def get_run_compare(self, run_id: int) -> dict:
+        resp = await self._request("GET", f"/api/runs/{run_id}/compare")
+        return resp.json()
+
     async def get_report_png(self, run_id: int) -> bytes:
         resp = await self._request("GET", f"/api/runs/{run_id}/report.png")
         return resp.content

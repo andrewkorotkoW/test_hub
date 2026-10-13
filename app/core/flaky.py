@@ -36,6 +36,15 @@ def _finished_run_ids(conn: sqlite3.Connection, project: str, stand: str, limit:
     return [row["id"] for row in rows][::-1]  # по возрастанию id = в хронологическом порядке
 
 
+def _cause_by_full_name(conn: sqlite3.Connection, run_id: int) -> dict[str, str | None]:
+    return {
+        row["full_name"]: row["cause"]
+        for row in conn.execute(
+            "SELECT full_name, cause FROM run_test_results WHERE run_id = ?", (run_id,)
+        ).fetchall()
+    }
+
+
 def recalc(project: str, stand: str, test_history: int = DEFAULT_HISTORY) -> list[dict]:
     """Пересчитывает флаки-статистику по последним `test_history` завершённым
     прогонам проекта на стенде и перезаписывает flaky_stats для этой пары
@@ -48,22 +57,45 @@ def recalc(project: str, stand: str, test_history: int = DEFAULT_HISTORY) -> lis
     результата — точное время старта эта функция не отдаёт, так что для тестов
     внутри одного прогона это лучшее доступное приближение к порядку выполнения).
     flips — число смен статуса между соседними элементами последовательности,
-    score = flips / (runs - 1)."""
+    score = flips / (runs - 1).
+
+    Падения, классифицированные app.core.failure_causes как инфраструктурные
+    (throttling/session/stand, т.е. cause != 'code' в run_test_results — см.
+    docs/missions/2026-10-13_run_compare_and_causes.md, п.5), не должны считаться
+    за fails/flips: волна 429 не тест сделала нестабильным, а стенд. Для них
+    эффективный статус (только для подсчёта fails/flips, не для last_statuses)
+    наследуется от предыдущего элемента последовательности — так инфраструктурный
+    всплеск не создаёт ни fail, ни искусственный flip между соседними реальными
+    статусами. Прогоны без строк в run_test_results (старые, до этой фичи) не
+    знают cause — для них поведение прежнее: каждый failed/broken учитывается как
+    есть."""
     conn = get_connection()
     try:
         run_ids = _finished_run_ids(conn, project, stand, test_history)
 
-        by_test: dict[str, list[str]] = {}
+        by_test: dict[str, list[tuple[str, str | None]]] = {}
         for run_id in run_ids:
+            cause_by_full_name = _cause_by_full_name(conn, run_id)
             for entry in allure_report.parse_results(_allure_dir(run_id)):
-                by_test.setdefault(entry["name"], []).append(entry["status"])
+                name = entry["name"]
+                by_test.setdefault(name, []).append((entry["status"], cause_by_full_name.get(name)))
 
         now = datetime.now().isoformat(timespec="seconds")
         stats = []
-        for test_name, statuses in sorted(by_test.items()):
+        for test_name, entries in sorted(by_test.items()):
+            statuses = [status for status, _cause in entries]
             runs_count = len(statuses)
-            fails = sum(1 for s in statuses if s == "failed")
-            flips = sum(1 for a, b in zip(statuses, statuses[1:]) if a != b)
+            effective: list[str] = []
+            prev: str | None = None
+            for status, cause in entries:
+                if status in ("failed", "broken") and cause not in (None, "code"):
+                    eff = prev if prev is not None else "passed"
+                else:
+                    eff = status
+                effective.append(eff)
+                prev = eff
+            fails = sum(1 for s in effective if s == "failed")
+            flips = sum(1 for a, b in zip(effective, effective[1:]) if a != b)
             score = flips / (runs_count - 1) if runs_count > 1 else 0.0
             stats.append({
                 "project": project,

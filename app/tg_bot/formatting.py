@@ -72,8 +72,23 @@ def format_status(report: dict) -> str:
     return "\n".join(lines)
 
 
-def _bad_tests(report: dict) -> list[dict]:
-    return [t for t in report.get("tests", []) if t.get("status") in ("failed", "broken")]
+def _cause_by_full_name(causes: dict | None) -> dict[str, str | None]:
+    if not causes:
+        return {}
+    return {t["full_name"]: t.get("cause") for t in causes.get("tests") or []}
+
+
+def _bad_tests(report: dict, causes: dict | None = None) -> list[dict]:
+    """Упавшие/сломанные тесты прогона. Если известны причины падения (causes —
+    ответ GET /runs/{id}/causes, см. docs/missions/2026-10-13_run_compare_and_causes.md),
+    список ограничивается code-падениями — стендовые (throttling/session/stand)
+    и так видны в сводной строке _causes_line, перечислять их здесь избыточно.
+    Без causes (старые вызовы, недоступность API) — прежнее поведение: все failed/broken."""
+    bad = [t for t in report.get("tests", []) if t.get("status") in ("failed", "broken")]
+    cause_by_name = _cause_by_full_name(causes)
+    if not cause_by_name:
+        return bad
+    return [t for t in bad if cause_by_name.get(t.get("name")) not in failure_causes.INFRA_CAUSES]
 
 
 def _short_reason(test: dict) -> str:
@@ -92,6 +107,96 @@ def _short_test_label(name: str) -> str:
     return short
 
 
+CAUSE_LABELS = {
+    "throttling": "троттлинг 429",
+    "session": "потеря сессии",
+    "stand": "таймаут/не ответил",
+}
+
+
+MAX_CODE_NAMES = 3
+
+
+_WAVE_COUNT_WORDS = {
+    2: "две", 3: "три", 4: "четыре", 5: "пять", 6: "шесть", 7: "семь", 8: "восемь",
+    9: "девять", 10: "десять",
+}
+
+
+def _wave_label(count: int) -> str:
+    """Русское согласование числительного с «волна» — 2-4/5+ (не считая 11-14,
+    волн столько в одном прогоне в принципе не бывает, но правило общее)."""
+    if 2 <= count % 10 <= 4 and not 12 <= count % 100 <= 14:
+        return "волны"
+    return "волн"
+
+
+def _waves_text(waves: list[dict]) -> str:
+    """«две волны, 09:43–09:50 и 10:44–10:47» — пример из миссии; при одной волне
+    просто «волна HH:MM–HH:MM» без числительного."""
+    spans = [f"{w['start_ts'][11:16]}–{w['end_ts'][11:16]}" for w in waves]
+    if len(waves) == 1:
+        return f"волна {spans[0]}"
+    count_word = _WAVE_COUNT_WORDS.get(len(waves), str(len(waves)))
+    return f"{count_word} {_wave_label(len(waves))}, " + " и ".join(spans)
+
+
+def _causes_line(causes: dict | None) -> str | None:
+    """Строка причин падений после _counts_line — только если среди падений есть
+    инфраструктурные (throttling/session/stand), см. п.5 миссии
+    2026-10-13_run_compare_and_causes.md. causes — ответ GET /runs/{id}/causes."""
+    if not causes:
+        return None
+    summary = causes.get("summary") or {}
+    infra_total = sum(summary.get(c, 0) for c in failure_causes.INFRA_CAUSES)
+    if not infra_total:
+        return None
+    total = summary.get("total", 0)
+
+    waves_by_cause: dict[str, list[dict]] = {}
+    for wave in causes.get("waves") or []:
+        waves_by_cause.setdefault(wave["cause"], []).append(wave)
+
+    parts = []
+    for cause in failure_causes.INFRA_CAUSES:
+        count = summary.get(cause, 0)
+        if not count:
+            continue
+        waves = waves_by_cause.get(cause)
+        suffix = f" ({_waves_text(waves)})" if waves else ""
+        parts.append(f"{count} × {CAUSE_LABELS[cause]}{suffix}")
+
+    line = f"Из {total} падений {infra_total} — стенд: {', '.join(parts)}."
+
+    code_count = summary.get("code", 0)
+    if code_count:
+        code_tests = [
+            t for t in causes.get("tests") or []
+            if t.get("cause") == "code" and t.get("status") in ("failed", "broken")
+        ]
+        names = [_short_test_label(t.get("full_name") or "") for t in code_tests]
+        shown = ", ".join(names[:MAX_CODE_NAMES])
+        remaining = len(names) - MAX_CODE_NAMES
+        if remaining > 0:
+            shown += f" и ещё {remaining}"
+        suffix = f": {shown}" if shown else ""
+        line += f" Тест или продукт — {code_count}{suffix}"
+    return line
+
+
+def _compare_line(compare: dict | None) -> str | None:
+    """Строка «Сравнение с #N» — п.3 задачи, по ответу GET /runs/{id}/compare."""
+    if not compare:
+        return None
+    base_id = (compare.get("base") or {}).get("id")
+    if base_id is None:
+        return None
+    passed = (compare.get("kpis") or {}).get("passed") or {}
+    delta_passed = (passed.get("now") or 0) - (passed.get("was") or 0)
+    new_failures = len((compare.get("groups") or {}).get("new_failures") or [])
+    return f"Сравнение с #{base_id}: passed {delta_passed:+d}, новых падений {new_failures}"
+
+
 def _error_text(test: dict) -> str:
     parts = [p for p in (test.get("message"), test.get("trace")) if p]
     text = "\n\n".join(parts).strip()
@@ -102,7 +207,11 @@ def _error_text(test: dict) -> str:
     return text
 
 
-def format_report(report: dict) -> str:
+def format_report(report: dict, causes: dict | None = None, compare: dict | None = None) -> str:
+    """causes/compare — ответы GET /runs/{id}/causes и GET /runs/{id}/compare
+    (см. app/tg_bot/client.py), подтягиваются вызывающей стороной только для
+    завершённых прогонов (app/tg_bot/handlers.py); без них — прежнее поведение
+    (строка причин и сравнения не добавляются, список упавших — все failed/broken)."""
     status_ru = STATUS_RU.get(report["status"], report["status"])
     duration = report.get("duration")
     duration_str = f"{duration:.1f}с" if isinstance(duration, (int, float)) else "—"
@@ -115,7 +224,13 @@ def format_report(report: dict) -> str:
         _counts_line(report.get("counts") or {}),
         f"Длительность: {duration_str}",
     ]
-    bad_tests = _bad_tests(report)
+    causes_line = _causes_line(causes)
+    if causes_line:
+        lines.append(causes_line)
+    compare_line = _compare_line(compare)
+    if compare_line:
+        lines.append(compare_line)
+    bad_tests = _bad_tests(report, causes)
     if bad_tests:
         lines.append("Упавшие тесты:")
         shown = bad_tests[:MAX_FAILED_LISTED]

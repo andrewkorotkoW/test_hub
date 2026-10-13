@@ -214,6 +214,28 @@ async def _render_tree(
     await _safe_edit(message, text, keyboard)
 
 
+async def _report_extras(client: HubClient, run_id: int) -> tuple[dict | None, dict | None]:
+    """Причины падений и сравнение с предыдущим прогоном — для строк, которые
+    format_report добавляет после _counts_line (см. docs/missions/2026-10-13_run_compare_and_causes.md,
+    п.5). Best-effort: сбой любого из двух запросов (например, 404 от /compare,
+    если на стенде это первый прогон) не должен мешать показать сам отчёт — так же,
+    как report.png ниже не блокирует подпись. isinstance-проверка — на случай
+    неожиданного (не словарь) ответа клиента, не только HTTPError."""
+    causes: dict | None = None
+    compare: dict | None = None
+    try:
+        result = await client.get_run_causes(run_id)
+        causes = result if isinstance(result, dict) else None
+    except httpx.HTTPError as exc:
+        logger.warning("tg_bot: не удалось получить причины падений прогона #%s: %s", run_id, exc)
+    try:
+        result = await client.get_run_compare(run_id)
+        compare = result if isinstance(result, dict) else None
+    except httpx.HTTPError as exc:
+        logger.warning("tg_bot: не удалось получить сравнение прогона #%s: %s", run_id, exc)
+    return causes, compare
+
+
 async def _watch_run(
     bot: Bot, client: HubClient, run_chats: dict[int, int], run_id: int, failed_cache: dict[int, list[dict]]
 ) -> None:
@@ -227,8 +249,9 @@ async def _watch_run(
         if report["status"] in TERMINAL_STATUSES:
             chat_id = run_chats.pop(run_id, None)
             if chat_id is not None:
-                caption = format_report(report)
-                failed = _bad_tests(report)
+                causes, compare = await _report_extras(client, run_id)
+                caption = format_report(report, causes, compare)
+                failed = _bad_tests(report, causes)
                 failed_cache[run_id] = failed
                 keyboard = build_report_keyboard(run_id, failed)
                 try:
@@ -876,8 +899,9 @@ async def cb_run_report(
         logger.warning("tg_bot: не удалось получить отчёт прогона #%s: %s", run_id, exc)
         await _safe_edit(query.message, f"Не удалось получить отчёт прогона #{run_id}.", build_run_keyboard(run_id))
         return
-    caption = format_report(report)
-    failed = _bad_tests(report)
+    causes, compare = await _report_extras(client, run_id) if report["status"] in TERMINAL_STATUSES else (None, None)
+    caption = format_report(report, causes, compare)
+    failed = _bad_tests(report, causes)
     if failed_cache is not None:
         failed_cache[run_id] = failed
     keyboard = build_report_keyboard(run_id, failed)
@@ -1216,8 +1240,9 @@ async def cmd_report(
     except httpx.HTTPError as exc:
         await _reply_http_error(message, exc, "получить отчёт", not_found=f"Прогон #{run_id} не найден.")
         return
-    caption = format_report(report)
-    failed = _bad_tests(report)
+    causes, compare = await _report_extras(client, run_id) if report["status"] in TERMINAL_STATUSES else (None, None)
+    caption = format_report(report, causes, compare)
+    failed = _bad_tests(report, causes)
     if failed_cache is not None:
         failed_cache[run_id] = failed
     keyboard = build_report_keyboard(run_id, failed)
@@ -1354,8 +1379,9 @@ async def cmd_last(
     except httpx.HTTPError as exc:
         await _reply_http_error(message, exc, "получить отчёт")
         return
-    caption = format_report(report)
-    failed = _bad_tests(report)
+    causes, compare = await _report_extras(client, run_id) if report["status"] in TERMINAL_STATUSES else (None, None)
+    caption = format_report(report, causes, compare)
+    failed = _bad_tests(report, causes)
     if failed_cache is not None:
         failed_cache[run_id] = failed
     keyboard = build_report_keyboard(run_id, failed)
