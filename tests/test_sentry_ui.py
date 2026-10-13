@@ -119,7 +119,9 @@ def test_render_sentry_tab_shows_disconnected_and_empty_messages():
 def test_render_sentry_tab_renders_rows_with_new_badge_enabled():
     match = re.search(r"function renderSentryTab\(\) \{(.*?)\n  \}", PROJECT_RUN_WINDOW_JS, re.DOTALL)
     body = match.group(1)
-    assert "SentryLogic.sentryIssueRowHtml(i, { withNewBadge: true })" in body
+    # строка с раскрывающейся выжимкой события (sentryIssueItemHtml), бейдж «новое» включён
+    assert "SentryLogic.sentryIssueItemHtml(i, { withNewBadge: true })" in body
+    assert "SentryLogic.bindSentryDetails(runWindowBody" in PROJECT_RUN_WINDOW_JS
 
 
 def test_window_tabs_include_sentry_only_when_can_see_sentry():

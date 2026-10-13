@@ -171,3 +171,84 @@ def latest_event(issue_id: str) -> dict[str, Any]:
 
     _raise_for_status(resp, f"latest_event({issue_id})")
     return resp.json()
+
+
+EVENT_FRAMES_LIMIT = 8
+EVENT_CRUMBS_LIMIT = 6
+EVENT_TAG_KEYS = ("environment", "url", "transaction", "server_name", "release", "http.method")
+
+
+def event_summary(raw: dict[str, Any]) -> dict[str, Any]:
+    """Сжатая выжимка из события Sentry (GET /issues/{id}/events/latest/) для
+    раскрывающейся строки issue в UI — вместо похода по ссылке. Берём то, по
+    чему QA понимает причину без Sentry: сообщение, log_context (Laravel кладёт
+    туда notification_id/user_id и текст исключения — см. issue 16398 на
+    k8s-vshgu-lms), исключения с кадрами из кода приложения (inApp, последние
+    EVENT_FRAMES_LIMIT, со строкой кода), последние хлебные крошки (artisan-
+    команда, SQL, лог) и ключевые теги. Чистая функция — тестируется на
+    записанном JSON без сети."""
+    entries = raw.get("entries") or []
+    message = None
+    exceptions: list[dict[str, Any]] = []
+    crumbs: list[dict[str, Any]] = []
+    for entry in entries:
+        kind = entry.get("type")
+        data = entry.get("data") or {}
+        if kind == "message":
+            message = data.get("formatted") or data.get("message")
+        elif kind == "exception":
+            for exc in data.get("values") or []:
+                frames_raw = (exc.get("stacktrace") or {}).get("frames") or []
+                in_app = [f for f in frames_raw if f.get("inApp")] or frames_raw
+                frames = []
+                for f in in_app[-EVENT_FRAMES_LIMIT:]:
+                    code = None
+                    for line_no, line in f.get("context") or []:
+                        if line_no == f.get("lineNo"):
+                            code = (line or "").strip()
+                    frames.append({
+                        "file": f.get("filename") or f.get("absPath"),
+                        "line": f.get("lineNo"),
+                        "function": f.get("function"),
+                        "code": code,
+                    })
+                exceptions.append({"type": exc.get("type"), "value": exc.get("value"), "frames": frames})
+        elif kind == "breadcrumbs":
+            for crumb in (data.get("values") or [])[-EVENT_CRUMBS_LIMIT:]:
+                text = crumb.get("message")
+                if not text and crumb.get("data"):
+                    text = ", ".join(f"{k}={v}" for k, v in crumb["data"].items())
+                crumbs.append({
+                    "ts": (crumb.get("timestamp") or "")[11:19],
+                    "category": crumb.get("category"),
+                    "level": crumb.get("level"),
+                    "message": (text or "")[:300],
+                })
+    tags = {t.get("key"): t.get("value") for t in raw.get("tags") or [] if t.get("key") in EVENT_TAG_KEYS}
+    context = raw.get("context") or {}
+    log_context = context.get("log_context") if isinstance(context.get("log_context"), dict) else None
+    return {
+        "event_id": raw.get("eventID") or raw.get("id"),
+        "date": raw.get("dateCreated"),
+        "title": raw.get("title"),
+        "message": message,
+        "log_context": log_context,
+        "exceptions": exceptions,
+        "breadcrumbs": crumbs,
+        "tags": tags,
+    }
+
+
+def latest_event_summary(issue_id: str, *, use_cache: bool = True) -> dict[str, Any]:
+    """event_summary(latest_event(issue_id)) с тем же кэшем на CACHE_TTL, что
+    и список issues: раскрытие одной и той же строки подряд не ходит в Sentry
+    второй раз."""
+    cache_key = ("event", settings.TH_SENTRY_ORG, issue_id)
+    now = time.monotonic()
+    if use_cache:
+        cached = _cache.get(cache_key)
+        if cached is not None and cached[0] > now:
+            return cached[1]
+    summary = event_summary(latest_event(issue_id))
+    _cache[cache_key] = (now + CACHE_TTL, summary)
+    return summary

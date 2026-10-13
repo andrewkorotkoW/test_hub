@@ -252,3 +252,73 @@ def test_latest_event_401_raises_unauthorized(monkeypatch):
     _install(monkeypatch, lambda req: httpx.Response(401, json={}))
     with pytest.raises(sentry_client.SentryUnauthorized):
         sentry_client.latest_event("123")
+
+
+# ------------------------------------------------------------------ event_summary / latest_event_summary
+
+def _raw_event():
+    """По мотивам реального события issue 16398 (k8s-vshgu-lms, 13.10.2026) —
+    message-событие крона без исключения, плюс искусственное исключение с кадрами,
+    чтобы проверить обе ветки."""
+    return {
+        "eventID": "abc123",
+        "dateCreated": "2026-10-13T12:28:04Z",
+        "title": "Не удалось отправить уведомление в канале: system",
+        "tags": [
+            {"key": "environment", "value": "development"},
+            {"key": "server_name", "value": "lms-cron-29864908-h486b"},
+            {"key": "release", "value": "48d05486d"},
+            {"key": "browser", "value": "ignored"},
+        ],
+        "context": {"log_context": {"code": 0, "message": "Call to a member function notify() on null",
+                                    "notification_id": 175, "user_id": 788}},
+        "entries": [
+            {"type": "message", "data": {"formatted": "Не удалось отправить уведомление в канале: system"}},
+            {"type": "exception", "data": {"values": [{
+                "type": "TypeError", "value": "hasOneOfRoles(): null given",
+                "stacktrace": {"frames": [
+                    {"filename": "vendor/laravel/Pipeline.php", "lineNo": 1, "function": "then", "inApp": False},
+                    {"filename": "app/Http/Controllers/Admin/UserCrudController.php", "lineNo": 252,
+                     "function": "setupAssignRoleOperation", "inApp": True,
+                     "context": [[251, "$user = User::find($id);"], [252, "$this->roles->hasOneOfRoles($user, $roles);"], [253, "}"]]},
+                ]},
+            }]}},
+            {"type": "breadcrumbs", "data": {"values": [
+                {"timestamp": "2026-10-13T12:28:00Z", "category": "artisan.command", "message": "Starting Artisan command: notification:send"},
+                {"timestamp": "2026-10-13T12:28:04Z", "category": "db.sql.query", "data": {"sql": "select * from notifications"}},
+            ]}},
+        ],
+    }
+
+
+def test_event_summary_extracts_message_context_frames_crumbs_tags():
+    s = sentry_client.event_summary(_raw_event())
+    assert s["event_id"] == "abc123"
+    assert s["message"] == "Не удалось отправить уведомление в канале: system"
+    assert s["log_context"]["notification_id"] == 175 and s["log_context"]["user_id"] == 788
+    assert s["tags"] == {"environment": "development", "server_name": "lms-cron-29864908-h486b", "release": "48d05486d"}
+    exc = s["exceptions"][0]
+    assert exc["type"] == "TypeError"
+    # только inApp-кадры, со строкой кода по lineNo
+    assert [f["file"] for f in exc["frames"]] == ["app/Http/Controllers/Admin/UserCrudController.php"]
+    assert exc["frames"][0]["code"] == "$this->roles->hasOneOfRoles($user, $roles);"
+    assert s["breadcrumbs"][0]["category"] == "artisan.command"
+    assert s["breadcrumbs"][1]["message"] == "sql=select * from notifications"  # data → k=v, когда нет message
+    assert s["breadcrumbs"][1]["ts"] == "12:28:04"
+
+
+def test_event_summary_tolerates_empty_event():
+    s = sentry_client.event_summary({})
+    assert s["message"] is None and s["exceptions"] == [] and s["breadcrumbs"] == [] and s["tags"] == {}
+
+
+def test_latest_event_summary_caches_and_does_not_leak_token(monkeypatch):
+    calls = _install(monkeypatch, lambda req: httpx.Response(200, json=_raw_event()))
+    first = sentry_client.latest_event_summary("16398")
+    second = sentry_client.latest_event_summary("16398")
+    assert first["log_context"]["user_id"] == 788
+    assert first == second
+    assert len(calls) == 1, "второй вызов должен прийти из кэша"
+    assert calls[0].url.path == "/api/0/issues/16398/events/latest/"
+    assert calls[0].headers["Authorization"] == f"Bearer {TOKEN}"
+    assert TOKEN not in str(first)

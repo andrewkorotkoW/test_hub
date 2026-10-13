@@ -333,6 +333,14 @@ class SentryIssuesResponse(BaseModel):
     issues: list[SentryIssueOut] = Field(default_factory=list)
 
 
+class SentryEventResponse(BaseModel):
+    """GET /api/sentry/issues/{id}/event — выжимка последнего события issue
+    (app/core/sentry.py::event_summary) для раскрывающейся строки в UI."""
+    connected: bool
+    reason: Optional[str] = None
+    event: Optional[dict] = None
+
+
 class TestCaseAttachment(BaseModel):
     id: int
     step_n: int

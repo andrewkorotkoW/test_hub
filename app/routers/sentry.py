@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from ..config import settings
 from ..core import sentry as sentry_client
 from ..deps import get_db, require_roles
-from ..schemas import SentryIssueOut, SentryIssuesResponse
+from ..schemas import SentryEventResponse, SentryIssueOut, SentryIssuesResponse
 
 router = APIRouter(prefix="/api", tags=["sentry"])
 
@@ -160,3 +160,21 @@ def get_run_sentry_issues(
         windowed.append(_issue_out(issue, is_new=is_new))
 
     return SentryIssuesResponse(connected=True, issues=windowed)
+
+
+@router.get("/sentry/issues/{issue_id}/event")
+def get_sentry_issue_event(
+    issue_id: str,
+    _user: sqlite3.Row = Depends(require_roles("qa")),
+) -> SentryEventResponse:
+    """Выжимка последнего события issue для раскрывающейся строки в карточке
+    дашборда и вкладке «Sentry» прогона — чтобы читать причину на месте, а не
+    ходить по ссылке. Привязки к стенду не нужно: issue уже пришёл из списка
+    по стенду; доступ — те же роли, что и у списков."""
+    if not settings.TH_SENTRY_URL or not settings.TH_SENTRY_TOKEN or not settings.TH_SENTRY_ORG:
+        return SentryEventResponse(connected=False, reason="Sentry не настроен")
+    try:
+        event = sentry_client.latest_event_summary(issue_id)
+    except sentry_client.SentryError as exc:
+        return SentryEventResponse(connected=False, reason=str(exc))
+    return SentryEventResponse(connected=True, event=event)

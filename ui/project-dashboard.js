@@ -458,10 +458,13 @@
       </div>
       <div class="sentry-rows">
         ${issues.length
-          ? issues.slice(0, SENTRY_CARD_ROWS).map((i) => SentryLogic.sentryIssueRowHtml(i)).join("")
+          ? issues.slice(0, SENTRY_CARD_ROWS).map((i) => SentryLogic.sentryIssueItemHtml(i)).join("")
           : `<p class="muted">Issues за последние сутки нет.</p>`}
       </div>
     `;
+    // клик по строке раскрывает выжимку последнего события (сообщение, log_context,
+    // кадры кода, крошки) — без похода по ссылке в Sentry
+    SentryLogic.bindSentryDetails(sentryCardBody, (id) => api(`/api/sentry/issues/${encodeURIComponent(id)}/event`));
   }
 
   async function loadSentryCard() {

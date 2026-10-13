@@ -260,3 +260,52 @@ async def test_run_sentry_propagates_client_error_as_disconnected(qa_client, tmp
     data = resp.json()
     assert data["connected"] is False
     assert "токен" in data["reason"]
+
+
+# ------------------------------------------------------------------ /sentry/issues/{id}/event — выжимка события
+
+async def test_qa_gets_event_summary(qa_client, monkeypatch):
+    _configure_sentry(monkeypatch)
+    monkeypatch.setattr(
+        sentry_client, "latest_event_summary",
+        lambda issue_id, **kw: {"event_id": "e1", "message": f"issue {issue_id}", "log_context": {"user_id": 788},
+                                "exceptions": [], "breadcrumbs": [], "tags": {}},
+    )
+    resp = await qa_client.get("/api/sentry/issues/16398/event")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["connected"] is True and body["reason"] is None
+    assert body["event"]["message"] == "issue 16398"
+    assert body["event"]["log_context"] == {"user_id": 788}
+
+
+async def test_manager_forbidden_on_event_summary(qa_client, monkeypatch):
+    _configure_sentry(monkeypatch)
+    manager = await _own_client("manager", "manager")
+    try:
+        resp = await manager.get("/api/sentry/issues/16398/event")
+    finally:
+        await manager.aclose()
+    assert resp.status_code == 403
+
+
+async def test_event_summary_disconnected_when_sentry_not_configured(qa_client, monkeypatch):
+    monkeypatch.setattr(settings, "TH_SENTRY_URL", "")
+    monkeypatch.setattr(settings, "TH_SENTRY_TOKEN", "")
+    monkeypatch.setattr(settings, "TH_SENTRY_ORG", "")
+    resp = await qa_client.get("/api/sentry/issues/16398/event")
+    assert resp.status_code == 200
+    assert resp.json() == {"connected": False, "reason": "Sentry не настроен", "event": None}
+
+
+async def test_event_summary_propagates_client_error_as_disconnected(qa_client, monkeypatch):
+    _configure_sentry(monkeypatch)
+
+    def boom(issue_id, **kw):
+        raise sentry_client.SentryUnavailable("Sentry не отвечает (таймаут)")
+
+    monkeypatch.setattr(sentry_client, "latest_event_summary", boom)
+    resp = await qa_client.get("/api/sentry/issues/16398/event")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["connected"] is False and "таймаут" in body["reason"] and body["event"] is None

@@ -130,6 +130,63 @@ test("sentryIssueRowHtml: level и title экранируются от HTML-ин
   assert.ok(html.indexOf("&quot;alert(1)&quot;") !== -1);
 });
 
+// ------------------------------------------------------------------ sentryIssueItemHtml / sentryEventHtml
+
+var sentryIssueItemHtml = SentryLogic.sentryIssueItemHtml;
+var sentryEventHtml = SentryLogic.sentryEventHtml;
+
+test("sentryIssueItemHtml: строка-переключатель с data-issue-id, ссылка в Sentry отдельной «↗», детали скрыты", function () {
+  var html = sentryIssueItemHtml(baseIssue({ id: "16398" }));
+  assert.ok(html.indexOf('data-issue-id="16398"') !== -1);
+  assert.ok(html.indexOf('class="sentry-row sentry-row-toggle"') !== -1, "строка — переключатель, а не ссылка");
+  assert.ok(html.indexOf('aria-expanded="false"') !== -1);
+  assert.ok(html.indexOf('class="sentry-ext" href="https://sentry.example.ru/issues/1/"') !== -1);
+  assert.ok(html.indexOf('class="sentry-details" hidden') !== -1);
+});
+
+test("sentryIssueItemHtml: без permalink нет «↗», withNewBadge даёт бейдж и is-new", function () {
+  var html = sentryIssueItemHtml(baseIssue({ permalink: null, is_new: true }), { withNewBadge: true });
+  assert.ok(html.indexOf("sentry-ext") === -1);
+  assert.ok(html.indexOf("sentry-new-badge") !== -1);
+  assert.ok(html.indexOf("is-new") !== -1);
+});
+
+function sampleEvent() {
+  // по мотивам issue 16398 (k8s-vshgu-lms, 13.10.2026): message-событие крона + искусственное исключение
+  return {
+    date: "2026-10-13T12:28:04Z",
+    message: "Не удалось отправить уведомление в канале: system",
+    log_context: { code: 0, message: "Call to a member function notify() on null", notification_id: 175, user_id: 788 },
+    exceptions: [{ type: "TypeError", value: "hasOneOfRoles(): Argument #1 ($user) must be of type User, null given",
+      frames: [{ file: "app/Http/Controllers/Admin/UserCrudController.php", line: 252, function: "setupAssignRoleOperation", code: "$this->roles->hasOneOfRoles($user, [...]);" }] }],
+    breadcrumbs: [{ ts: "12:28:04", category: "artisan.command", message: "Starting Artisan command: notification:send" }],
+    tags: { environment: "development", server_name: "lms-cron-29864908-h486b", release: "48d05486d", url: "<b>x</b>" },
+  };
+}
+
+test("sentryEventHtml: сообщение, log_context, исключение с кадром и кодом, крошки, теги", function () {
+  var html = sentryEventHtml(sampleEvent());
+  assert.ok(html.indexOf("Не удалось отправить уведомление в канале: system") !== -1);
+  assert.ok(html.indexOf("<dt>notification_id</dt><dd>175</dd>") !== -1);
+  assert.ok(html.indexOf("<b>TypeError</b>") !== -1);
+  assert.ok(html.indexOf("UserCrudController.php:252</code>") !== -1);
+  assert.ok(html.indexOf("hasOneOfRoles($user") !== -1, "строка кода кадра");
+  assert.ok(html.indexOf("artisan.command") !== -1);
+  assert.ok(html.indexOf("env: development") !== -1);
+  assert.ok(html.indexOf("release 48d05486d") !== -1);
+});
+
+test("sentryEventHtml: значения экранируются (url с тегом не становится разметкой)", function () {
+  var html = sentryEventHtml(sampleEvent());
+  assert.ok(html.indexOf("<b>x</b>") === -1);
+  assert.ok(html.indexOf("&lt;b&gt;x&lt;/b&gt;") !== -1);
+});
+
+test("sentryEventHtml: пустое событие и null не падают", function () {
+  assert.ok(sentryEventHtml(null).indexOf("muted") !== -1);
+  assert.ok(sentryEventHtml({}).indexOf("нет подробностей") !== -1);
+});
+
 var failed = 0;
 tests.forEach(function (t) {
   try {

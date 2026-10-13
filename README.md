@@ -459,10 +459,21 @@ Telegram: команда `/xfail <проект> [стенд]` и кнопка «
 issues (уровень, заголовок, сколько раз сработало). В окне прогона (карточка
 «Сплит») — вкладка «Sentry»: issues, попавшие в окно прогона (`started` …
 `finished` + 5 минут), новые за это окно помечены бейджем «новое». Клик по
-строке ведёт по прямой ссылке (`permalink`) на issue в Sentry. Блок и вкладка
-видны только ролям qa и superadmin — остальным API (`app/routers/sentry.py`,
-`GET /api/projects/{name}/stands/{stand}/sentry/issues`,
-`GET /api/runs/{id}/sentry`) отвечает 403.
+строке **раскрывает выжимку последнего события** прямо на месте, без похода в
+Sentry: дата, environment, хост и релиз, URL запроса, сообщение, `log_context`
+(Laravel кладёт туда id сущностей и текст исключения — например
+`notification_id`/`user_id` у ошибок крона), исключения с кадрами из кода
+приложения и строкой кода, последние хлебные крошки (artisan-команда,
+SQL-запросы, записи лога). Ссылка на issue в Sentry — отдельная «↗» в строке.
+Выжимку отдаёт `GET /api/sentry/issues/{id}/event` (`app/core/sentry.py::
+event_summary`, кэш 60 с); при ошибке Sentry вместо выжимки показывается её
+причина. Блок и вкладка видны только ролям qa и superadmin — остальным API
+(`app/routers/sentry.py`, `GET /api/projects/{name}/stands/{stand}/sentry/issues`,
+`GET /api/runs/{id}/sentry`, `GET /api/sentry/issues/{id}/event`) отвечает 403.
+
+Относительный период для карточки (`since=-24h`) передаётся в Sentry как
+`firstSeen:-24h` — со знаком сравнения (`firstSeen:>-24h`) Sentry отвечает 400
+«Invalid date», ISO-даты окна прогона идут как `firstSeen:>…`.
 
 ## Расписания (ночные прогоны)
 

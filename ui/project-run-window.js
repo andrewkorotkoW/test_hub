@@ -121,7 +121,7 @@
     }
     const issues = runSentryData.issues || [];
     if (!issues.length) return `<p class="muted">Issues за окно прогона не найдено.</p>`;
-    return `<div class="sentry-rows">${issues.map((i) => SentryLogic.sentryIssueRowHtml(i, { withNewBadge: true })).join("")}</div>`;
+    return `<div class="sentry-rows">${issues.map((i) => SentryLogic.sentryIssueItemHtml(i, { withNewBadge: true })).join("")}</div>`;
   }
 
   // «Эфир»/«Видео» (docs/missions/2026-10-01_live_stream.md, п.1-3) — какая из двух
@@ -193,6 +193,8 @@
       runWindowBody.innerHTML = renderConsoleBox(selectedTestLog);
     } else if (activeWindowTab === "sentry") {
       runWindowBody.innerHTML = renderSentryTab();
+      // делегированный обработчик вешается один раз на контейнер (guard внутри)
+      SentryLogic.bindSentryDetails(runWindowBody, (id) => api(`/api/sentry/issues/${encodeURIComponent(id)}/event`));
     } else {
       const reqLines = RunWindowSplitLogic.filterRequestLines(selectedTestLog);
       runWindowBody.innerHTML = reqLines.length
