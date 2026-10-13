@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from ..config import settings
+from ..core import failure_causes
 
 MAX_FAILED_LISTED = 15
 
@@ -76,10 +77,9 @@ def _bad_tests(report: dict) -> list[dict]:
 
 
 def _short_reason(test: dict) -> str:
-    message = (test.get("message") or "").strip()
-    if not message:
-        return ""
-    return message.splitlines()[0][:MAX_REASON_LEN]
+    """Обёртка над app.core.failure_causes.short_reason — общей логикой для бота
+    и GET /runs/{id}/causes (см. docs/missions/2026-10-13_run_compare_and_causes.md)."""
+    return failure_causes.short_reason(test.get("message"))
 
 
 def _short_test_label(name: str) -> str:

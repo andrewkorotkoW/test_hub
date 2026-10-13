@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import re
 import secrets
@@ -33,8 +34,10 @@ from fastapi import HTTPException, Request, Response, status
 
 from ..config import settings
 from ..db import get_connection
-from . import allure_report, flaky, test_cases, xfail_registry
+from . import allure_report, failure_causes, flaky, test_cases, xfail_registry
 from .ws import hub
+
+logger = logging.getLogger(__name__)
 
 _COLLECT_RE = re.compile(r"^(?P<file>[\w./-]+\.py)::(?P<rest>.+)$")
 
@@ -232,6 +235,52 @@ async def discover(project_path: str, venv: str) -> dict:
     if not tree and proc.returncode != 0:
         return {"error": text.strip()[-2000:] or f"pytest завершился с кодом {proc.returncode}", "tree": {}}
     return {"tree": tree}
+
+
+def _nodeid_to_full_name(nodeid: str) -> str:
+    """pytest nodeid -> allure fullName. Своя копия по тому же соглашению модулей,
+    что и app/routers/runs.py/app/core/flaky.py (allure_pytest.utils.allure_full_name)."""
+    file_part, _, rest = nodeid.partition("::")
+    module = file_part[:-3] if file_part.endswith(".py") else file_part
+    module = module.replace("/", ".")
+    if not rest:
+        return module
+    segments = rest.split("::")
+    test = segments[-1].split("[")[0]
+    class_name = f".{segments[-2]}" if len(segments) > 1 else ""
+    return f"{module}{class_name}#{test}"
+
+
+def _full_name_index(tree: dict) -> dict[str, str]:
+    index: dict[str, str] = {}
+    for file_path, classes in tree.items():
+        for cls_name, tests in classes.items():
+            for test_name in tests:
+                nodeid = f"{file_path}::{cls_name}::{test_name}" if cls_name else f"{file_path}::{test_name}"
+                index.setdefault(_nodeid_to_full_name(nodeid), nodeid)
+    return index
+
+
+async def _record_run_results(run_id: int, project: str, stand: str | None) -> None:
+    """Готовит nodeid<->fullName индекс (через discover(), асинхронный — поэтому
+    не внутри failure_causes.record_run_results, которая зовётся синхронно из
+    to_thread) и уходит в отдельный поток писать run_test_results. Обёрнуто здесь,
+    а не в _finalize, чтобы не раздувать её — см. docs/missions/2026-10-13_run_compare_and_causes.md."""
+    conn = get_connection()
+    try:
+        project_row = conn.execute("SELECT path, venv FROM projects WHERE name = ?", (project,)).fetchone()
+    finally:
+        conn.close()
+
+    nodeid_by_full_name: dict[str, str] = {}
+    if project_row is not None:
+        try:
+            discovered = await discover(project_row["path"], project_row["venv"])
+            nodeid_by_full_name = _full_name_index(discovered.get("tree") or {})
+        except Exception:
+            logger.exception("_record_run_results: discover упал для run_id=%s (project=%s)", run_id, project)
+
+    await asyncio.to_thread(failure_causes.record_run_results, run_id, project, stand, nodeid_by_full_name)
 
 
 def count_target_tests(tree: dict, target: str) -> int:
@@ -468,6 +517,7 @@ async def _finalize(run_id: int, status: str, started_at: float, counts: dict[st
         # здесь. Независимы друг от друга — ни один не знает про другой.
         asyncio.create_task(asyncio.to_thread(flaky.recalc, row["project"], row["stand"]))
         asyncio.create_task(asyncio.to_thread(xfail_registry.recalc, row["project"], row["stand"], run_id))
+        asyncio.create_task(_record_run_results(run_id, row["project"], row["stand"]))
 
     if row is not None:
         # Скриншоты шагов тест-кейсов из allure-вложений этого прогона (см.
