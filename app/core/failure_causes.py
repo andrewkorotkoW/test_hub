@@ -232,6 +232,11 @@ def record_run_results(
     прогона просто не обновится (вызывающая сторона, _finalize, не должна упасть)."""
     try:
         results = allure_report.parse_results(_allure_dir(run_id))
+        # parse_results отдаёт файлы в порядке имён (uuid) — для теста с реранами это
+        # случайный порядок, и «последняя запись побеждает» давала финальный статус
+        # наугад: у run 66 выходило 129 падений вместо 96 из runs.counts. Сортируем по
+        # времени завершения, чтобы последней была действительно последняя попытка.
+        results.sort(key=lambda e: e.get("stop_ts") or "")
         finished_ts_by_nodeid = _test_end_timestamps(run_id)
 
         conn = get_connection()
@@ -249,7 +254,10 @@ def record_run_results(
                     "VALUES (?, ?, ?, ?, ?, ?, ?)",
                     (
                         run_id, nodeid, full_name, test_status, entry.get("duration"), cause,
-                        finished_ts_by_nodeid.get(nodeid),
+                        # Под xdist (stands.workers > 0) раннер не пишет test_end — статусы
+                        # есть только в «[gwN] … STATUS nodeid»-строках, и без запасного
+                        # времени из allure волны 429 на k8s (run 66) не находились вовсе.
+                        finished_ts_by_nodeid.get(nodeid) or entry.get("stop_ts"),
                     ),
                 )
             conn.commit()

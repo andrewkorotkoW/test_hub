@@ -11,6 +11,7 @@ import logging
 import os
 import shutil
 import subprocess
+from datetime import datetime
 from pathlib import Path
 
 from ..config import settings
@@ -98,10 +99,18 @@ def _parse_result(path: Path) -> dict | None:
     start, stop = data.get("start"), data.get("stop")
     duration = (stop - start) / 1000.0 if isinstance(start, (int, float)) and isinstance(stop, (int, float)) else None
     details = data.get("statusDetails") or {}
+    # stop_ts — момент завершения теста по allure (ISO, локальное время, как ts в run_events):
+    # под xdist событий test_end в run_events нет, и это единственный источник времени
+    # падения для волн (failure_causes.detect_waves).
+    stop_ts = (
+        datetime.fromtimestamp(stop / 1000.0).isoformat(timespec="seconds")
+        if isinstance(stop, (int, float)) else None
+    )
     return {
         "name": data.get("fullName") or data.get("name") or path.stem,
         "status": status if status in STATUSES else "unknown",
         "duration": duration,
+        "stop_ts": stop_ts,
         "message": details.get("message"),
         "trace": details.get("trace"),
     }

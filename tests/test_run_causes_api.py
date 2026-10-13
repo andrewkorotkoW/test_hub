@@ -2,6 +2,7 @@
 часть 3) — summary по 4 причинам, waves, tests со short_reason; ленивый пересчёт
 (failure_causes.ensure_run_results) для прогона без строк в run_test_results."""
 import json
+from datetime import datetime
 
 import pytest
 
@@ -226,3 +227,51 @@ async def test_causes_lazy_recompute_is_idempotent_on_second_request(qa_client, 
     finally:
         conn.close()
     assert count == 1
+
+
+def test_record_run_results_xdist_run_takes_time_and_final_status_from_allure(db_path, isolated_allure_dir):
+    """Прогон под xdist (stands.workers > 0, run 66 на k8s 13.10.2026): событий test_end
+    в run_events нет вовсе, поэтому (а) finished_ts берётся из allure `stop` — иначе
+    detect_waves не находила волны 429; (б) при реране финальный статус — у последней
+    по времени попытки, а не у последнего файла по имени (uuid — случайный порядок:
+    для run 66 получалось 129 падений вместо финальных)."""
+    from app.config import settings
+    from app.core import failure_causes as fc
+
+    conn = get_connection()
+    try:
+        _insert_project_and_stand(conn)
+        run_id = _insert_run(conn, {"passed": 1, "failed": 1, "broken": 0, "skipped": 0})
+    finally:
+        conn.close()
+    run_dir = settings.ALLURE_RESULTS_DIR / str(run_id)
+    run_dir.mkdir(parents=True, exist_ok=True)
+    base_ms = 1_760_000_000_000
+    # реран: файл с passed сортируется по имени РАНЬШЕ, но по времени — ПОЗЖЕ файла с failed
+    (run_dir / "a-result.json").write_text(json.dumps({
+        "fullName": "tests.c#test_flaky", "status": "passed", "start": base_ms + 20_000, "stop": base_ms + 25_000,
+    }), encoding="utf-8")
+    (run_dir / "b-result.json").write_text(json.dumps({
+        "fullName": "tests.c#test_flaky", "status": "failed", "start": base_ms, "stop": base_ms + 5_000,
+        "statusDetails": {"message": "429 Too Many Requests"},
+    }), encoding="utf-8")
+    (run_dir / "c-result.json").write_text(json.dumps({
+        "fullName": "tests.c#test_429", "status": "failed", "start": base_ms, "stop": base_ms + 7_000,
+        "statusDetails": {"message": "429 Too Many Requests"},
+    }), encoding="utf-8")
+
+    fc.record_run_results(run_id, PROJECT, STAND, {})
+
+    conn = get_connection()
+    try:
+        rows = {r["nodeid"]: dict(r) for r in conn.execute(
+            "SELECT * FROM run_test_results WHERE run_id = ?", (run_id,)
+        ).fetchall()}
+    finally:
+        conn.close()
+    assert rows["tests.c#test_flaky"]["status"] == "passed"
+    assert rows["tests.c#test_flaky"]["cause"] is None
+    assert rows["tests.c#test_429"]["cause"] == "throttling"
+    expected_ts = datetime.fromtimestamp((base_ms + 7_000) / 1000).isoformat(timespec="seconds")
+    assert rows["tests.c#test_429"]["finished_ts"] == expected_ts
+    assert fc.detect_waves([{"cause": "throttling", "finished_ts": expected_ts}] * 5)
