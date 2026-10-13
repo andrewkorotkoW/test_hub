@@ -1692,9 +1692,26 @@ a.sentry-row:hover { background: var(--surface-hover); }
   color: var(--text-muted);
 }
 .tc-precondition b { color: var(--text); }
-.tc-steps-table { margin-top: 12px; }
-.tc-steps-table td:first-child { width: 32px; color: var(--text-muted); font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-.tc-steps-table td:nth-child(2) { width: 42%; }
+/* Таблица шагов — тот же вид, что «История»/«Флаки»: обёртка .table-wrap, общие th/td
+   и зебра из базовых правил; раскладка фиксированная, иначе длинный `код` в шагах
+   раздвигает колонку «Ожидаемый результат» за пределы .tc-card-pane. */
+.tc-steps-wrap { margin-top: 12px; border: 1px solid var(--border); border-radius: var(--radius); }
+.tc-steps-table { table-layout: fixed; width: 100%; }
+.tc-steps-table th:first-child, .tc-steps-table td:first-child { width: 44px; }
+.tc-steps-table th:nth-child(2), .tc-steps-table td:nth-child(2) { width: 50%; }
+.tc-steps-table td { vertical-align: top; overflow-wrap: anywhere; line-height: 1.45; }
+.tc-steps-table td:first-child { color: var(--text-muted); font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.tc-steps-table tbody tr:last-child td { border-bottom: 0; }
+.tc-steps-table code, .tc-precondition code {
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 12px;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+.tc-steps-table code { background: color-mix(in srgb, var(--text) 6%, transparent); }
 .tc-step-attachments { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
 .tc-thumb {
   width: 56px;

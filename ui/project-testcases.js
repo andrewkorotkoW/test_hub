@@ -116,20 +116,25 @@
       `<img class="tc-thumb tc-attachment-thumb" data-url="${escapeHtml(a.url)}" src="${escapeHtml(a.url)}" alt="Скриншот шага" loading="lazy">`
     ).join("")}</div>`;
   }
+  // Текст шагов приходит из md-черновиков с `кодом` в бэктиках — показываем его
+  // тем же <code>, что и nodeid автотеста выше, а не сырыми бэктиками.
+  function tcInlineHtml(text) {
+    return escapeHtml(text).replace(/`([^`\n]+)`/g, "<code>$1</code>");
+  }
   function tcStepsTableHtml(steps) {
     if (!steps || !steps.length) return `<p class="muted">Шагов нет.</p>`;
     const rows = steps.map((s) => `
       <tr>
-        <td>${s.n}</td>
-        <td>${escapeHtml(s.action)}${tcAttachmentThumbsHtml(s.attachments)}</td>
-        <td>${escapeHtml(s.expected)}</td>
+        <td class="num-col">${s.n}</td>
+        <td>${tcInlineHtml(s.action)}${tcAttachmentThumbsHtml(s.attachments)}</td>
+        <td>${tcInlineHtml(s.expected)}</td>
       </tr>
     `).join("");
-    return `<table class="tc-steps-table"><thead><tr><th>№</th><th>Действие</th><th>Ожидаемый результат</th></tr></thead><tbody>${rows}</tbody></table>`;
+    return `<div class="table-wrap tc-steps-wrap"><table class="tc-steps-table"><thead><tr><th class="num-col">№</th><th>Действие</th><th>Ожидаемый результат</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }
   function tcPreconditionHtml(c) {
     if (!c.precondition) return "";
-    return `<div class="tc-precondition"><b>Предусловия.</b> ${escapeHtml(c.precondition)}</div>`;
+    return `<div class="tc-precondition"><b>Предусловия.</b> ${tcInlineHtml(c.precondition)}</div>`;
   }
   function tcRequirementHtml(c) {
     if (!c.requirement) return "";
