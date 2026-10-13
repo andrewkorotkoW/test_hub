@@ -176,3 +176,53 @@ async def test_project_html_kpi_row_and_chart_row_grid_classes_present(client):
     assert 'class="kpi-row"' in html
     assert 'class="chart-row"' in html
     assert 'class="dashboard-feed-grid"' in html
+
+
+# ------------------------------------------------------------------ окно прогона: кнопки «Сравнить с…»/«Причины»
+# и столбец «Δ к предыдущему» в «Истории» (docs/missions/2026-10-13_run_compare_and_causes.md, п.4)
+
+async def test_run_view_toggle_has_compare_and_causes_buttons(client):
+    resp = await client.get("/project.html")
+    html = resp.text
+    assert 'id="run-view-toggle"' in html
+    m = re.search(r'<div class="run-view-toggle" id="run-view-toggle"[^>]*>(.*?)</div>', html, re.DOTALL)
+    assert m, "не найден блок переключателя видов окна прогона"
+    body = m.group(1)
+    assert 'data-view="compare"' in body
+    assert "Сравнить с…" in body
+    assert 'data-view="causes"' in body
+    assert 'id="run-causes-btn"' in body
+
+
+def test_history_table_header_has_delta_prev_column():
+    m = re.search(
+        r'<div class="tab-panel" data-tab-panel="history"[^>]*>(.*?)<div class="tab-panel" data-tab-panel="flaky"',
+        PROJECT_HTML,
+        re.DOTALL,
+    )
+    assert m, "не найдено содержимое вкладки «История»"
+    body = m.group(1)
+    assert "<th>Δ к предыдущему</th>" in body
+    assert 'id="history-rows"' in body
+
+
+def test_project_dashboard_js_renders_history_delta_from_run_compare_logic():
+    """ui/project-dashboard.js должен оформлять delta_prev через общую чистую
+    логику ui/run-compare-logic.js (RunCompareLogic.historyDelta), а не изобретать
+    свою разметку — чтобы цвета/формат совпадали с остальным UI сравнения."""
+    project_dashboard_js = (REPO_ROOT / "ui" / "project-dashboard.js").read_text()
+    assert "RunCompareLogic.historyDelta(" in project_dashboard_js
+
+
+def test_project_run_compare_js_uses_run_compare_logic_for_tabs():
+    """ui/project-run-compare.js (вкладки «Сравнить с…»/«Причины») должен строить
+    разметку через ту же чистую логику ui/run-compare-logic.js, которую гоняют
+    юнит-тесты tests/js/test_run_compare_logic.js — иначе тесты логики ничего не
+    гарантируют про реально используемый код."""
+    project_run_compare_js = (REPO_ROOT / "ui" / "project-run-compare.js").read_text()
+    assert "RunCompareLogic" in project_run_compare_js
+
+
+def test_run_compare_logic_js_is_included_in_project_html_script_tags():
+    assert '<script src="run-compare-logic.js"' in PROJECT_HTML
+    assert '<script src="project-run-compare.js"' in PROJECT_HTML
