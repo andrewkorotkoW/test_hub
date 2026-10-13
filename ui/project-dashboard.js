@@ -443,7 +443,10 @@
 
   function renderSentryCard(data) {
     if (!data || !data.connected) {
-      sentryCardBody.innerHTML = `<p class="muted">Sentry не подключён</p>`;
+      // reason отдаёт бэкенд (app/routers/sentry.py): «Sentry не настроен», «ошибка запроса
+      // (HTTP 400)», таймаут — без него любая ошибка выглядела как «Sentry не подключён».
+      const reason = data && data.reason ? escapeHtml(data.reason) : "Sentry не подключён";
+      sentryCardBody.innerHTML = `<p class="muted">${reason}</p>`;
       return;
     }
     const issues = data.issues || [];

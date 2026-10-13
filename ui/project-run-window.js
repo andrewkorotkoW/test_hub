@@ -116,7 +116,8 @@
   // рендер не трогает selectedTestLog/selectedTestFrames.
   function renderSentryTab() {
     if (!runSentryData || !runSentryData.connected) {
-      return `<p class="muted">Sentry не подключён</p>`;
+      const reason = runSentryData && runSentryData.reason ? escapeHtml(runSentryData.reason) : "Sentry не подключён";
+      return `<p class="muted">${reason}</p>`;
     }
     const issues = runSentryData.issues || [];
     if (!issues.length) return `<p class="muted">Issues за окно прогона не найдено.</p>`;

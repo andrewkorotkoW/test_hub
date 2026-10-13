@@ -112,8 +112,11 @@ def list_issues(
     use_cache: bool = True,
 ) -> list[SentryIssue]:
     """issues Sentry-проекта `project` для окружения `environment`. `since`,
-    если задан, добавляется в query как `firstSeen:>{since}` (ISO-строка или
-    относительное значение вроде "-24h" — как принимает сам Sentry).
+    если задан, добавляется в query: ISO-строка — как `firstSeen:>{since}`,
+    относительное значение ("-24h", "+1h") — как `firstSeen:{since}`: Sentry
+    принимает «+/-duration или ISO 8601» и на `firstSeen:>-24h` отвечает 400
+    «Invalid date» (живой sentry.devspark.ru, 13.10.2026) — из-за этого карточка
+    на дашборде показывала «Sentry не подключён» при рабочем токене.
 
     Поднимает SentryUnauthorized/SentryRateLimited/SentryUnavailable вместо
     возврата пустого списка — так роутер может превратить ошибку в понятную
@@ -123,7 +126,7 @@ def list_issues(
 
     query = f"environment:{environment}"
     if since:
-        query += f" firstSeen:>{since}"
+        query += f" firstSeen:{since}" if since[:1] in "+-" else f" firstSeen:>{since}"
 
     cache_key = (settings.TH_SENTRY_ORG, project, environment, query)
     now = time.monotonic()

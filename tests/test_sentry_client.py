@@ -88,7 +88,18 @@ def test_list_issues_request_url_and_query(monkeypatch):
     assert request.url.path == "/api/0/projects/vshgu/frontend/issues/"
     query = request.url.params["query"]
     assert "environment:develop" in query
-    assert "firstSeen:>-24h" in query
+    # Относительный интервал — без знака сравнения: Sentry принимает «+/-duration
+    # или ISO 8601» и на `firstSeen:>-24h` отвечает 400 (живой инстанс, 13.10.2026).
+    assert "firstSeen:-24h" in query
+    assert "firstSeen:>" not in query
+
+
+def test_list_issues_iso_since_uses_greater_than(monkeypatch):
+    calls = _install(monkeypatch, lambda req: httpx.Response(200, json=[]))
+
+    sentry_client.list_issues("frontend", "develop", since="2026-10-13T00:30:00")
+
+    assert "firstSeen:>2026-10-13T00:30:00" in calls[0].url.params["query"]
 
 
 def test_list_issues_sends_bearer_token_header(monkeypatch):
