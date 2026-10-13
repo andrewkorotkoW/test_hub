@@ -78,6 +78,17 @@ CREATE TABLE IF NOT EXISTS run_events (
     kind TEXT NOT NULL DEFAULT 'line'
 );
 
+CREATE TABLE IF NOT EXISTS run_test_results (
+    run_id INTEGER NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+    nodeid TEXT NOT NULL,
+    full_name TEXT NOT NULL,
+    status TEXT NOT NULL,
+    duration REAL,
+    cause TEXT,
+    finished_ts TEXT,
+    PRIMARY KEY (run_id, nodeid)
+);
+
 CREATE TABLE IF NOT EXISTS run_test_videos (
     run_id INTEGER NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
     nodeid TEXT NOT NULL,

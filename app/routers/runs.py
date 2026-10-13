@@ -14,7 +14,7 @@ from fastapi import (
 from fastapi.responses import Response
 
 from ..config import settings
-from ..core import allure_report, charts, live, runner
+from ..core import allure_report, charts, failure_causes, live, runner
 from ..core.ws import hub
 from ..db import get_connection
 from ..deps import get_current_user, get_db, require_roles
@@ -66,6 +66,40 @@ def _full_name_index(tree: dict) -> dict[str, str]:
                 nodeid = f"{file_path}::{cls_name}::{test_name}" if cls_name else f"{file_path}::{test_name}"
                 index.setdefault(_nodeid_to_full_name(nodeid), nodeid)
     return index
+
+
+def _bucket_counts(counts: dict) -> tuple[int, int, int]:
+    """passed/failed(+broken)/skipped — своя копия app.core.stats._project_dynamics_point
+    (runs.counts не различает xfail отдельно от skipped, то же упрощение)."""
+    passed = int(counts.get("passed", 0) or 0)
+    failed = int(counts.get("failed", 0) or 0) + int(counts.get("broken", 0) or 0)
+    skipped = int(counts.get("skipped", 0) or 0)
+    return passed, failed, skipped
+
+
+def _bucket_status(entry: dict) -> str:
+    """Своя копия app.core.stats._bucket_status: broken схлопывается в failed,
+    skipped с xfail-сигналом в сообщении — отдельным статусом 'xfail'."""
+    test_status = entry["status"]
+    if test_status == "broken":
+        return "failed"
+    if test_status == "skipped" and entry.get("message") and "xfail" in entry["message"].lower():
+        return "xfail"
+    return test_status
+
+
+def _is_speed_change(prev_duration, cur_duration) -> bool:
+    """Статус не менялся, длительность отличается больше чем вдвое и минимум на
+    5 секунд (docs/missions/2026-10-13_run_compare_and_causes.md, группа speed)."""
+    if prev_duration is None or cur_duration is None:
+        return False
+    delta = abs(cur_duration - prev_duration)
+    if delta < 5:
+        return False
+    bigger, smaller = max(prev_duration, cur_duration), min(prev_duration, cur_duration)
+    if smaller <= 0:
+        return bigger >= 5
+    return bigger / smaller > 2
 
 
 def _get_project_or_404(conn: sqlite3.Connection, name: str) -> sqlite3.Row:
@@ -153,6 +187,25 @@ async def create_run(
     return _run_payload(row)
 
 
+def _delta_prev(conn: sqlite3.Connection, row: sqlite3.Row) -> dict | None:
+    """Δ к предыдущему прогону на том же стенде — столбец «Истории» (столбец
+    «Δ к предыдущему» в UI, см. мокап docs/missions/redesign/run_compare/mockups.html).
+    None, если это первый прогон на стенде (сравнивать не с чем)."""
+    prev_id = failure_causes.prev_run_id_on_stand(conn, row["project"], row["stand"], row["id"])
+    if prev_id is None:
+        return None
+    prev_row = conn.execute("SELECT counts FROM runs WHERE id = ?", (prev_id,)).fetchone()
+    prev_counts = json.loads(prev_row["counts"]) if prev_row and prev_row["counts"] else {}
+    cur_counts = json.loads(row["counts"]) if row["counts"] else {}
+    cur_passed, cur_failed, _ = _bucket_counts(cur_counts)
+    prev_passed, prev_failed, _ = _bucket_counts(prev_counts)
+    return {
+        "passed": cur_passed - prev_passed,
+        "failed": cur_failed - prev_failed,
+        "stand_failures": failure_causes.stand_failure_count(row["id"]),
+    }
+
+
 @router.get("/projects/{name}/runs")
 def list_runs(
     name: str,
@@ -169,7 +222,12 @@ def list_runs(
         rows = conn.execute(
             "SELECT * FROM runs WHERE project = ? ORDER BY id DESC", (name,)
         ).fetchall()
-    return [_run_payload(r) for r in rows]
+    payloads = []
+    for r in rows:
+        payload = _run_payload(r)
+        payload["delta_prev"] = _delta_prev(conn, r)
+        payloads.append(payload)
+    return payloads
 
 
 @router.get("/runs/{run_id}/report")
@@ -264,6 +322,132 @@ async def list_run_tests(
         }
         for t in results
     ]
+
+
+@router.get("/runs/{run_id}/causes")
+async def get_run_causes(
+    run_id: int,
+    conn: sqlite3.Connection = Depends(get_db),
+    _user: sqlite3.Row = Depends(get_current_user),
+) -> dict:
+    """Вкладка «Причины» окна прогона: классификация падений (троттлинг/потеря
+    сессии/стенд не ответил/код) + волны. Статус/длительность/текст ошибки — из
+    allure_report.parse_results (как и остальные ручки тут), причина/время
+    завершения — из закэшированной run_test_results (failure_causes.classify не
+    гоняется заново на каждый запрос); ensure_run_results лениво досчитывает её
+    для прогонов, запущенных до этой фичи."""
+    row = _get_run_or_404(conn, run_id)
+    await failure_causes.ensure_run_results(run_id)
+
+    cached_by_full_name = {
+        r["full_name"]: r
+        for r in conn.execute(
+            "SELECT * FROM run_test_results WHERE run_id = ?", (run_id,)
+        ).fetchall()
+    }
+    results = allure_report.parse_results(runner.allure_dir(run_id))
+
+    summary = {cause: 0 for cause in failure_causes.ALL_CAUSES}
+    tests = []
+    for entry in results:
+        cached_row = cached_by_full_name.get(entry["name"])
+        cause = cached_row["cause"] if cached_row else None
+        if cause in summary:
+            summary[cause] += 1
+        tests.append({
+            "nodeid": cached_row["nodeid"] if cached_row else entry["name"],
+            "full_name": entry["name"],
+            "status": entry["status"],
+            "cause": cause,
+            "finished_ts": cached_row["finished_ts"] if cached_row else None,
+            "duration": entry.get("duration"),
+            "short_reason": failure_causes.short_reason(entry.get("message")),
+        })
+    summary["total"] = sum(summary[c] for c in failure_causes.ALL_CAUSES)
+    waves = failure_causes.detect_waves(
+        [{"cause": t["cause"], "finished_ts": t["finished_ts"]} for t in tests]
+    )
+    return {"summary": summary, "waves": waves, "tests": tests}
+
+
+@router.get("/runs/{run_id}/compare")
+async def get_run_compare(
+    run_id: int,
+    base: int | None = None,
+    conn: sqlite3.Connection = Depends(get_db),
+    _user: sqlite3.Row = Depends(get_current_user),
+) -> dict:
+    """Вкладка «Сравнить с…»: группы new_failures/fixed/still_failing/speed между
+    `run_id` (текущий, финальные статусы после реранов) и `base` (по умолчанию —
+    предыдущий завершённый прогон того же project/stand/target/marker, см.
+    failure_causes.default_base_run_id)."""
+    row = _get_run_or_404(conn, run_id)
+    base_id = base if base is not None else failure_causes.default_base_run_id(
+        conn, row["project"], row["stand"], row["target"], row["marker"], run_id
+    )
+    if base_id is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No base run available for comparison")
+    base_row = _get_run_or_404(conn, base_id)
+
+    await failure_causes.ensure_run_results(run_id)
+    await failure_causes.ensure_run_results(base_id)
+
+    cur_results = allure_report.parse_results(runner.allure_dir(run_id))
+    base_results = allure_report.parse_results(runner.allure_dir(base_id))
+    cur_map = {e["name"]: e for e in cur_results}
+    base_map = {e["name"]: e for e in base_results}
+
+    cur_cached = {
+        r["full_name"]: r
+        for r in conn.execute("SELECT * FROM run_test_results WHERE run_id = ?", (run_id,)).fetchall()
+    }
+    base_cached = {
+        r["full_name"]: r
+        for r in conn.execute("SELECT * FROM run_test_results WHERE run_id = ?", (base_id,)).fetchall()
+    }
+
+    groups: dict[str, list[dict]] = {"new_failures": [], "fixed": [], "still_failing": [], "speed": []}
+    for full_name, cur_entry in cur_map.items():
+        base_entry = base_map.get(full_name)
+        if base_entry is None:
+            continue
+        cur_bucket = _bucket_status(cur_entry)
+        base_bucket = _bucket_status(base_entry)
+        cur_row = cur_cached.get(full_name)
+        base_row_cached = base_cached.get(full_name)
+        nodeid = (cur_row["nodeid"] if cur_row else None) or (base_row_cached["nodeid"] if base_row_cached else None) or full_name
+        item = {
+            "nodeid": nodeid,
+            "full_name": full_name,
+            "status": cur_entry["status"],
+            "prev_status": base_entry["status"],
+            "cause": cur_row["cause"] if cur_row else None,
+            "duration": cur_entry.get("duration"),
+            "prev_duration": base_entry.get("duration"),
+            "short_reason": failure_causes.short_reason(cur_entry.get("message")),
+        }
+        if base_bucket == "passed" and cur_bucket == "failed":
+            groups["new_failures"].append(item)
+        elif base_bucket in ("failed", "xfail") and cur_bucket == "passed":
+            item["was_xfail"] = base_bucket == "xfail"
+            groups["fixed"].append(item)
+        elif base_bucket == "failed" and cur_bucket == "failed":
+            groups["still_failing"].append(item)
+        elif base_bucket == cur_bucket and _is_speed_change(base_entry.get("duration"), cur_entry.get("duration")):
+            groups["speed"].append(item)
+
+    cur_counts = json.loads(row["counts"]) if row["counts"] else {}
+    base_counts = json.loads(base_row["counts"]) if base_row["counts"] else {}
+    cur_passed, cur_failed, cur_skipped = _bucket_counts(cur_counts)
+    base_passed, base_failed, base_skipped = _bucket_counts(base_counts)
+
+    kpis = {
+        "passed": {"now": cur_passed, "was": base_passed},
+        "failed": {"now": cur_failed, "was": base_failed, "stand": failure_causes.stand_failure_count(run_id)},
+        "skipped": {"now": cur_skipped, "was": base_skipped},
+        "duration": {"now": row["duration"], "was": base_row["duration"]},
+    }
+    return {"base": _run_payload(base_row), "kpis": kpis, "groups": groups}
 
 
 @router.get("/runs/{run_id}/tests/{nodeid:path}/log")
