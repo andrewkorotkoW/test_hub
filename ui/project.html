@@ -199,6 +199,8 @@
           <div class="run-view-toggle" id="run-view-toggle" hidden>
             <button type="button" data-view="split" aria-current="true">Сплит</button>
             <button type="button" data-view="log" aria-current="false">Весь лог</button>
+            <button type="button" data-view="compare" aria-current="false" hidden>Сравнить с…</button>
+            <button type="button" id="run-causes-btn" data-view="causes" aria-current="false" hidden>Причины</button>
           </div>
           <label class="run-follow-toggle" id="run-follow-toggle" hidden>
             <input type="checkbox" id="run-follow-checkbox" checked> Следить за прогоном
@@ -226,6 +228,37 @@
         </div>
 
         <div id="run-log" class="run-log"></div>
+
+        <div id="run-compare" class="run-compare" hidden>
+          <div class="cmp-head stand-row">
+            <label for="cmp-base-select">База сравнения</label>
+            <select id="cmp-base-select"></select>
+            <span class="muted small">Сравниваются финальные статусы (после реранов)</span>
+          </div>
+          <div id="cmp-error" class="error-box" hidden></div>
+          <div id="cmp-kpis" class="cmp-kpis"></div>
+          <div id="cmp-groups"></div>
+        </div>
+
+        <div id="run-causes" class="run-causes" hidden>
+          <div id="rc-error" class="error-box" hidden></div>
+          <div id="rc-traffic" class="rc-traffic" role="group" aria-label="Причины падений"></div>
+          <div class="rc-grid">
+            <div class="card">
+              <h3>Таймлайн прогона</h3>
+              <div class="rc-timeline" id="rc-timeline"></div>
+              <div class="rc-note" id="rc-note" hidden></div>
+            </div>
+            <div class="card">
+              <h3>Уведомление в Telegram</h3>
+              <div class="rc-tg" id="rc-tg"></div>
+            </div>
+          </div>
+          <div class="card">
+            <h3>Список падений <span class="muted" id="rc-list-note"></span></h3>
+            <div id="rc-list" class="rc-list"></div>
+          </div>
+        </div>
 
         <img id="report-chart" class="report-chart" alt="График отчёта прогона" hidden>
         <div id="report-section" hidden>
@@ -330,7 +363,7 @@
       <div class="table-wrap table-scroll">
         <table>
           <thead>
-            <tr><th>ID</th><th>Статус</th><th>Стенд</th><th>Цель</th><th>Начат</th><th>Длительность</th><th>Кем запущен</th></tr>
+            <tr><th>ID</th><th>Статус</th><th>Стенд</th><th>Цель</th><th>Начат</th><th>Δ к предыдущему</th><th>Длительность</th><th>Кем запущен</th></tr>
           </thead>
           <tbody id="history-rows"></tbody>
         </table>
@@ -506,6 +539,7 @@
   <script src="run-live-logic.js"></script>
   <script src="sentry-logic.js"></script>
   <script src="run-window-split-logic.js"></script>
+  <script src="run-compare-logic.js"></script>
   <!-- project-setup.js и project-*.js делят один lexical scope с project.js
        (классические <script>, без type="module") — см. шапку project-setup.js. -->
   <script src="project-setup.js"></script>
@@ -515,6 +549,7 @@
   <script src="project-sections-picker.js"></script>
   <script src="project-build.js"></script>
   <script src="project-run-window.js"></script>
+  <script src="project-run-compare.js"></script>
   <script src="project-dashboard.js"></script>
   <script src="project-testcases.js"></script>
   <script src="project.js"></script>

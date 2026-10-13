@@ -24,6 +24,12 @@
   let hasMarkup = false;
   let viewMode = "split";
   let runSentryData = null;
+  // Завершённость прогона (docs/missions/2026-10-13_run_compare_and_causes.md) —
+  // отдельно от hasMarkup: «Сравнить с…»/«Причины» имеют смысл только для
+  // passed/failed/cancelled, независимо от того, есть ли у прогона разметка по
+  // nodeid (старые прогоны без разметки всё равно можно сравнивать по allure).
+  const FINISHED_STATUSES = ["passed", "failed", "cancelled"];
+  let isFinished = false;
   // «Эфир»/«Видео» (docs/missions/2026-10-01_live_stream.md) — liveFrame держит только
   // последний кадр прогона (сервер тоже хранит один на run_id, см. app/core/live.py),
   // followEnabled — «Следить за прогоном», выключается кликом по тесту вручную (см.

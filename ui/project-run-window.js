@@ -284,19 +284,30 @@
   // showSplit — вычисляется каждый раз заново, а не хранится отдельным флагом:
   // hasMarkup остаётся ложным для старых прогонов без разметки по nodeid, тогда
   // «Весь лог» — единственный вид, переключатель и список тестов скрыты.
+  // «Сравнить с…»/«Причины» (docs/missions/2026-10-13_run_compare_and_causes.md)
+  // доступны только у завершённых прогонов (isFinished) — независимо от hasMarkup.
   function applyViewMode() {
+    if ((viewMode === "compare" || viewMode === "causes") && !isFinished) viewMode = "split";
     const showSplit = hasMarkup && viewMode === "split";
+    const showCompare = isFinished && viewMode === "compare";
+    const showCauses = isFinished && viewMode === "causes";
     runSplit.hidden = !showSplit;
-    logBox.hidden = showSplit;
-    runViewToggle.hidden = !hasMarkup;
+    runCompareView.hidden = !showCompare;
+    runCausesView.hidden = !showCauses;
+    logBox.hidden = showSplit || showCompare || showCauses;
+    runViewToggle.hidden = !(hasMarkup || isFinished);
     runViewToggle.querySelectorAll("button[data-view]").forEach((b) => {
+      if (b.dataset.view === "split") b.hidden = !hasMarkup;
+      else if (b.dataset.view === "compare" || b.dataset.view === "causes") b.hidden = !isFinished;
       b.setAttribute("aria-current", String(b.dataset.view === viewMode));
     });
+    if (showCompare) loadCompareTab();
+    if (showCauses) loadCausesTab();
   }
 
   runViewToggle.addEventListener("click", (ev) => {
     const btn = ev.target.closest("button[data-view]");
-    if (!btn) return;
+    if (!btn || btn.hidden) return;
     viewMode = btn.dataset.view;
     applyViewMode();
   });
@@ -402,6 +413,7 @@
     selectedTestFrames = [];
     hasMarkup = false;
     viewMode = "split";
+    isFinished = false;
     runSentryData = null;
     liveFrame = null;
     followEnabled = true;
@@ -410,6 +422,7 @@
     runTestsCount.textContent = "";
     runWindowPlaceholder.hidden = false;
     runWindowContent.hidden = true;
+    resetCompareState();
     applyViewMode();
   }
 
@@ -492,7 +505,11 @@
       runLabelBadge.hidden = !payload.label;
       if (payload.label) runLabelBadge.textContent = `сборка: ${payload.label}`;
       runDeviceBadge.hidden = !payload.mobile;
+      isFinished = FINISHED_STATUSES.includes(payload.status);
+      currentReportPayload = payload;
       renderReport(payload, runId);
+      updateCausesButton(payload);
+      applyViewMode();
       return payload;
     } catch (err) {
       showPageError(`Не удалось загрузить отчёт: ${err.message}`);

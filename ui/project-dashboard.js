@@ -520,11 +520,29 @@
   }
 
   // ---------------- history ----------------
+  // Δ к предыдущему прогону на том же стенде (docs/missions/2026-10-13_run_compare_
+  // and_causes.md) — чистое оформление RunCompareLogic.historyDelta поверх
+  // delta_prev из GET .../runs. lastRunsList — тот же список, на который опирается
+  // выбор базы сравнения на вкладке «Сравнить с…» (ui/project-run-compare.js), чтобы
+  // не дёргать ручку второй раз только за списком последних прогонов стенда.
+  let lastRunsList = [];
+
+  function historyDeltaHtml(r) {
+    const d = RunCompareLogic.historyDelta(r.delta_prev);
+    if (!d) return `<span class="delta"><span class="n">база</span></span>`;
+    return `<span class="delta">`
+      + `<span class="${d.passedCls}">${d.passedText}</span>`
+      + `<span class="${d.failedCls}">${d.failedText}</span>`
+      + (d.standText ? `<span class="n">· ${escapeHtml(d.standText)}</span>` : "")
+      + `</span>`;
+  }
+
   async function loadHistory() {
     try {
       const runs = await api(`/api/projects/${encodeURIComponent(projectName)}/runs`);
+      lastRunsList = runs;
       if (!runs.length) {
-        historyRows.innerHTML = `<tr><td colspan="7" class="muted">Прогонов ещё не было.</td></tr>`;
+        historyRows.innerHTML = `<tr><td colspan="8" class="muted">Прогонов ещё не было.</td></tr>`;
       } else {
         historyRows.innerHTML = runs.map((r) => `
           <tr class="clickable" data-run-id="${r.id}">
@@ -542,6 +560,7 @@
               ` : ""}
             </td>
             <td>${fmtDate(r.started)}</td>
+            <td>${historyDeltaHtml(r)}</td>
             <td>${fmtDuration(r.duration)}</td>
             <td>${escapeHtml(r.requested_by || "—")}</td>
           </tr>
@@ -549,7 +568,7 @@
       }
       await renderDashboard(runs);
     } catch (err) {
-      historyRows.innerHTML = `<tr><td colspan="7" class="error-box">Не удалось загрузить историю: ${escapeHtml(err.message)}</td></tr>`;
+      historyRows.innerHTML = `<tr><td colspan="8" class="error-box">Не удалось загрузить историю: ${escapeHtml(err.message)}</td></tr>`;
       await renderDashboard([]);
     }
   }

@@ -30,6 +30,12 @@
   --queued: #64748b;
   --running: #2563eb;
   --cancelled: #6b7280;
+  /* причина падения «стенд» (троттлинг/потеря сессии/не ответил) — вкладки
+     «Сравнить с…»/«Причины» (docs/missions/2026-10-13_run_compare_and_causes.md);
+     значение и в тёмной, и в светлой теме — то же, что в мокапе
+     docs/missions/redesign/run_compare/mockups.html (--stand), совпадает с
+     gradientEnd из DESIGN.md, не новый цвет */
+  --stand: #38d6ff;
   --radius: 8px;
   /* отдельный радиус карточек аналитического дашборда — не трогает --radius,
      на который завязаны мелкие элементы (кнопки, инпуты, пилюли) */
@@ -70,6 +76,7 @@
   --text: #1f2430;
   --text-muted: #6b7280;
   --shadow-card: 0 1px 3px rgba(15, 23, 42, .08);
+  --stand: #0284c7;
 }
 
 * { box-sizing: border-box; }
@@ -505,6 +512,89 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
 .run-view-toggle button { border: none; border-radius: 0; margin: 0; padding: 6px 12px; font-size: 12px; }
 .run-view-toggle button + button { border-left: 1px solid var(--border); }
 .run-view-toggle button[aria-current="true"] { background: var(--accent); color: var(--accent-text); }
+
+/* ---------- окно прогона · вкладки «Сравнить с…» и «Причины» (docs/missions/
+   2026-10-13_run_compare_and_causes.md, раскладка — docs/missions/redesign/
+   run_compare/mockups.html) ---------- */
+.run-compare[hidden], .run-causes[hidden] { display: none; }
+.run-compare { display: grid; gap: 14px; }
+
+.cmp-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+.cmp-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 900px) { .cmp-kpis { grid-template-columns: repeat(2, 1fr); } }
+.cmp-kpi { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
+.cmp-kpi .label { margin-bottom: 6px; }
+.cmp-kpi .v { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 22px; font-weight: 700; line-height: 1.1; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.cmp-kpi .v .was { font-size: 14px; color: var(--text-muted); font-weight: 500; }
+.cmp-kpi .d { font-size: 12px; font-weight: 600; margin-top: 4px; }
+.cmp-kpi .d.up { color: var(--passed); }
+.cmp-kpi .d.down { color: var(--failed); }
+.cmp-kpi .d.flat { color: var(--text-muted); }
+
+.cmp-group { background: var(--surface); border: 1px solid var(--border); border-radius: var(--card-radius); overflow: hidden; }
+.cmp-group + .cmp-group { margin-top: 12px; }
+.cmp-group-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; cursor: pointer; background: none; border: 0; width: 100%; color: var(--text); font: inherit; text-align: left; list-style: none; }
+.cmp-group-head::-webkit-details-marker { display: none; }
+.cmp-group-head:hover { background: var(--surface-hover); }
+.cmp-group-head .chev { width: 14px; color: var(--text-muted); transition: transform .12s; }
+.cmp-group[open] .cmp-group-head .chev { transform: rotate(90deg); }
+.cmp-group-head b { font-weight: 700; }
+.cmp-group-head .cnt { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 700; padding: 1px 8px; border-radius: 999px; }
+.cmp-group-head .hint { color: var(--text-muted); font-size: 12px; margin-left: auto; }
+.cmp-group-body { border-top: 1px solid var(--border); }
+
+.cmp-row { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 8px 16px; border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent); cursor: pointer; }
+.cmp-row:last-child { border-bottom: 0; }
+.cmp-row:hover { background: var(--surface-hover); }
+/* .dot-status сам по себе (ui/style.css выше) задаёт только цвет по статусу —
+   размер/форма точки завязаны на предка .test-row (список слева в «Сплите»),
+   здесь свой предок (.cmp-row), поэтому форма точки повторяется явно */
+.cmp-row .dot-status { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
+.cmp-row .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
+.cmp-row .nm small { color: var(--text-muted); font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; margin-right: 6px; }
+.cmp-row .dur { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; color: var(--text-muted); white-space: nowrap; min-width: 90px; text-align: right; }
+.cmp-row .dur b { color: var(--text); font-weight: 600; }
+.cmp-row .dur.slower b { color: var(--failed); }
+.cmp-row .dur.faster b { color: var(--passed); }
+
+.cmp-tag { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.cmp-tag.stand { color: var(--stand); background: color-mix(in srgb, var(--stand) 14%, transparent); }
+.cmp-tag.code { color: var(--failed); background: color-mix(in srgb, var(--failed) 14%, transparent); }
+.cmp-tag.fixed { color: var(--passed); background: color-mix(in srgb, var(--passed) 14%, transparent); }
+.cmp-tag.known { color: var(--text-muted); background: color-mix(in srgb, var(--text) 8%, transparent); }
+
+/* ---------- окно прогона · «Причины» ---------- */
+.rc-traffic { display: flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--surface); flex-wrap: wrap; }
+.rc-traffic button { flex: 1 1 140px; border: 0; background: transparent; color: var(--text); font: inherit; padding: 12px 14px; cursor: pointer; text-align: left; border-right: 1px solid var(--border); display: grid; gap: 3px; }
+.rc-traffic button:last-child { border-right: 0; }
+.rc-traffic button:hover { background: var(--surface-hover); }
+.rc-traffic button[aria-current="true"] { background: color-mix(in srgb, var(--accent) 12%, transparent); box-shadow: inset 0 -2px 0 var(--accent); }
+.rc-traffic .v { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 22px; font-weight: 700; line-height: 1; }
+.rc-traffic .v i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; vertical-align: middle; }
+.rc-traffic .n { font-size: 12px; color: var(--text-muted); }
+
+.rc-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 14px; }
+@media (max-width: 1000px) { .rc-grid { grid-template-columns: 1fr; } }
+
+.rc-timeline svg { width: 100%; height: 150px; display: block; }
+.rc-timeline svg text { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10px; fill: var(--text-muted); }
+.rc-bar-infra { fill: var(--stand); }
+.rc-bar-code { fill: var(--failed); }
+.rc-dot-passed { fill: var(--passed); opacity: .8; }
+.rc-wave-box { fill: color-mix(in srgb, var(--stand) 18%, transparent); stroke: var(--stand); stroke-dasharray: 4 3; }
+.rc-wave-label { fill: var(--stand); font-weight: 600; }
+
+.rc-note { border-left: 3px solid var(--stand); padding: 8px 12px; margin-top: 10px; background: color-mix(in srgb, var(--stand) 8%, transparent); border-radius: 0 var(--radius) var(--radius) 0; font-size: 13px; }
+
+.rc-tg { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; font-size: 13px; line-height: 1.55; }
+.rc-tg .from { font-weight: 700; margin-bottom: 4px; }
+
+/* ---------- история: Δ к предыдущему прогону на том же стенде ---------- */
+.delta { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; font-weight: 600; display: inline-flex; gap: 6px; white-space: nowrap; }
+.delta .g { color: var(--passed); }
+.delta .r { color: var(--failed); }
+.delta .n { color: var(--text-muted); }
 
 /* ---------- окно прогона · карточка «Сплит» (docs/missions/redesign/run_window) ---------- */
 .run-split { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 14px; align-items: start; margin-bottom: 14px; }
