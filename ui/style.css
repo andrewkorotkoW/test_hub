@@ -872,6 +872,10 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
    (идентификаторы тестов, длинные слова в «Причине» без пробелов). */
 .xfail-table { table-layout: fixed; width: 100%; }
 .xfail-table td { overflow-wrap: anywhere; }
+/* overflow-wrap: anywhere наследуется с td внутрь кнопки (inherited-свойство) и
+   резало «Проверить» посреди слова («Проверит»/«ь» на двух строках) — кнопке
+   это не нужно, у неё и так короткий фиксированный текст. */
+.xfail-check-btn { white-space: nowrap; overflow-wrap: normal; }
 
 /* ---------- superadmin tabs / inline confirm / json cell ---------- */
 .tabs { display: flex; gap: 6px; flex-wrap: wrap; }
