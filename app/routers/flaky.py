@@ -38,12 +38,19 @@ async def list_flaky(
     discovered = await runner.discover(project["path"], project["venv"])
     nodeid_by_full_name = flaky.full_name_index(discovered.get("tree") or {})
 
+    def _nodeid(key: str) -> str | None:
+        # ключ flaky_stats может нести значения параметров («fullName[tag-Теги-…]», см.
+        # flaky.test_key) — это allure-значения, а не pytest-id (ids=…), поэтому в nodeid их
+        # не подставляем: кнопка «Прогнать ×3» гонит весь параметризованный тест
+        base, _params = flaky.split_test_key(key)
+        return nodeid_by_full_name.get(base)
+
     items = [
         FlakyTestStat(
             project=r["project"],
             stand=r["stand"],
             test=r["test"],
-            nodeid=nodeid_by_full_name.get(r["test"]),
+            nodeid=_nodeid(r["test"]),
             runs=r["runs"],
             fails=r["fails"],
             flips=r["flips"],

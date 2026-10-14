@@ -2,10 +2,10 @@
 последних прогонов проекта на стенде.
 
 Источник статусов — allure-results уже завершённых прогонов (app.core.allure_report,
-как и app.core.coverage), идентификатор теста — allure fullName, а не pytest nodeid:
-он не завязан на дерево тестов конкретного момента и не требует запускать
-runner.discover() внутри recalc() (см. также app.core.coverage._nodeid_to_full_name,
-тот же формат). recalc() хранит агрегаты в таблице flaky_stats (app.db.SCHEMA) —
+как и app.core.coverage), идентификатор теста — allure fullName плюс параметры из
+allure `name` (test_key(): «fullName[params]»), а не pytest nodeid: он не завязан на
+дерево тестов конкретного момента и не требует запускать runner.discover() внутри
+recalc() (см. также app.core.coverage._nodeid_to_full_name, тот же формат). recalc() хранит агрегаты в таблице flaky_stats (app.db.SCHEMA) —
 вызывается раннером после каждого завершённого прогона (app/core/runner.py::_finalize),
 поэтому чтения (GET /flaky) работают с уже готовой таблицей, без пересчёта на лету.
 """
@@ -21,6 +21,35 @@ from ..db import get_connection
 from . import allure_report
 
 DEFAULT_HISTORY = 20
+
+# Статусы, при которых тест по-настоящему не запускался (xfail/xpass в allure — skipped,
+# пропуски по условию): для fails/flips нейтральны, см. recalc().
+NEUTRAL_STATUSES = ("skipped", "unknown")
+
+
+PARAMS_KEY_LIMIT = 80
+
+
+def test_key(entry: dict) -> str:
+    """Ключ теста в flaky_stats: allure fullName плюс значения параметров из allure
+    `parameters` (allure_report.parse_results → entry["params"], «tag-Теги-…»):
+    «tests.x#test_crud[blacklist-Черный список адресов-…]». fullName у allure-pytest
+    без параметров, и до 14.10.2026 все параметризованные кейсы схлопывались в одну
+    строку: xfail по одному параметру (blacklist у справочников хелпдеска) выглядел
+    как перепады у всего теста. Для непараметризованных ключ совпадает с fullName."""
+    name = entry.get("name") or ""
+    params = entry.get("params")
+    if params:
+        return f"{name}[{str(params)[:PARAMS_KEY_LIMIT]}]"
+    return name
+
+
+def split_test_key(key: str) -> tuple[str, str | None]:
+    """«fullName[params]» → (fullName, «params») или (fullName, None)."""
+    if key.endswith("]") and "[" in key:
+        base, _, params = key.partition("[")
+        return base, params[:-1]
+    return key, None
 
 
 def _allure_dir(run_id: int) -> Path:
@@ -78,7 +107,7 @@ def recalc(project: str, stand: str, test_history: int = DEFAULT_HISTORY) -> lis
             cause_by_full_name = _cause_by_full_name(conn, run_id)
             for entry in allure_report.parse_results(_allure_dir(run_id)):
                 name = entry["name"]
-                by_test.setdefault(name, []).append((entry["status"], cause_by_full_name.get(name)))
+                by_test.setdefault(test_key(entry), []).append((entry["status"], cause_by_full_name.get(name)))
 
         now = datetime.now().isoformat(timespec="seconds")
         stats = []
@@ -90,11 +119,20 @@ def recalc(project: str, stand: str, test_history: int = DEFAULT_HISTORY) -> lis
             for status, cause in entries:
                 if status in ("failed", "broken") and cause not in (None, "code"):
                     eff = prev if prev is not None else "passed"
+                elif status in NEUTRAL_STATUSES:
+                    # skipped — это xfail/xpass-xfail и пропуски по условию (env=stage,
+                    # «нет данных»): тест не запускался по-настоящему, и смена
+                    # passed↔skipped — не нестабильность. Наследуем предыдущий статус,
+                    # как и у инфраструктурных падений (13.10.2026: на дашборде VSHGU
+                    # 148 «флаки», из них больше половины — xfail, начавшие проходить).
+                    eff = prev if prev is not None else "passed"
                 else:
                     eff = status
                 effective.append(eff)
                 prev = eff
-            fails = sum(1 for s in effective if s == "failed")
+            # fails — по фактическим падениям (не по унаследованному эффективному статусу:
+            # skipped после failed иначе считался бы вторым падением), стендовые причины не в счёт
+            fails = sum(1 for status, cause in entries if status == "failed" and cause in (None, "code"))
             flips = sum(1 for a, b in zip(effective, effective[1:]) if a != b)
             score = flips / (runs_count - 1) if runs_count > 1 else 0.0
             stats.append({
@@ -154,7 +192,7 @@ def run_history_for_test(project: str, stand: str, test: str, limit: int = DEFAU
         history = []
         for run_id in run_ids:
             for entry in allure_report.parse_results(_allure_dir(run_id)):
-                if entry["name"] == test:
+                if test_key(entry) == test:
                     history.append({"run_id": run_id, "status": entry["status"]})
         return history
     finally:

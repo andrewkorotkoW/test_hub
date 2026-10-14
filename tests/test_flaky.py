@@ -268,3 +268,94 @@ def test_recalc_without_run_test_results_keeps_old_behavior(flaky_history):
     assert row["test"] == full_name
     assert row["fails"] == 2
     assert row["flips"] == 3
+
+
+# ------------------------------------------------------------------ 14.10.2026: skipped нейтрален, параметры не схлопываются
+
+def _write_allure_case(results_dir, filename, full_name, param_value, test_status):
+    """allure-pytest кладёт параметры в `parameters` (значения — repr, в кавычках),
+    а `name` — это allure-заголовок (allure.title), не pytest-имя с [id]."""
+    results_dir.mkdir(parents=True, exist_ok=True)
+    (results_dir / filename).write_text(
+        json.dumps({
+            "status": test_status, "fullName": full_name,
+            "name": "API: справочник — создание, редактирование и удаление записи",
+            "parameters": [{"name": "key", "value": f"'{param_value}'"}],
+        }),
+        encoding="utf-8",
+    )
+
+
+@pytest.fixture()
+def flaky_history_with_skips(db_path, isolated_allure_dir):
+    """xfail начал проходить: skipped, skipped, passed, passed — раньше это давало flip
+    и тест попадал во «Флаки», хотя ни разу не падал."""
+    from app.config import settings
+
+    conn = get_connection()
+    try:
+        _insert_project_and_stand(conn)
+        runs = [_insert_run(conn, "passed") for _ in range(4)]
+    finally:
+        conn.close()
+    full_name = "tests.test_flaky_sample#test_xfail_then_ok"
+    for run_id, st in zip(runs, ["skipped", "skipped", "passed", "passed"]):
+        _write_allure_result(settings.ALLURE_RESULTS_DIR / str(run_id), "00-result.json", full_name, st)
+    return full_name
+
+
+def test_recalc_skipped_is_neutral_for_fails_and_flips(flaky_history_with_skips):
+    row = flaky.recalc(PROJECT, STAND)[0]
+    assert row["test"] == flaky_history_with_skips
+    assert row["runs"] == 4
+    assert row["fails"] == 0
+    assert row["flips"] == 0, "переход skipped→passed — не нестабильность"
+    assert row["score"] == 0.0
+    assert row["last_statuses"] == ["skipped", "skipped", "passed", "passed"], "сырая история остаётся как есть"
+
+
+@pytest.fixture()
+def flaky_history_parametrized(db_path, isolated_allure_dir):
+    """Один fullName, два параметра: [tag] всегда passed, [blacklist] — xfail (skipped) и один
+    failed. До разделения по параметрам они склеивались в одну строку с ложными перепадами."""
+    from app.config import settings
+
+    conn = get_connection()
+    try:
+        _insert_project_and_stand(conn)
+        runs = [_insert_run(conn, "failed") for _ in range(3)]
+    finally:
+        conn.close()
+    full_name = "tests.api.helpdesk.test_dictionaries_api.TestDictionariesApi#test_dictionary_crud"
+    for i, run_id in enumerate(runs):
+        d = settings.ALLURE_RESULTS_DIR / str(run_id)
+        _write_allure_case(d, "00-result.json", full_name, "tag", "passed")
+        _write_allure_case(d, "01-result.json", full_name, "blacklist", "failed" if i == 1 else "skipped")
+    return full_name
+
+
+def test_recalc_separates_parametrized_cases_by_allure_name(flaky_history_parametrized):
+    stats = {s["test"]: s for s in flaky.recalc(PROJECT, STAND)}
+    base = flaky_history_parametrized
+    assert set(stats) == {f"{base}[tag]", f"{base}[blacklist]"}
+    assert stats[f"{base}[tag]"]["flips"] == 0 and stats[f"{base}[tag]"]["fails"] == 0
+    bl = stats[f"{base}[blacklist]"]
+    assert bl["fails"] == 1
+    assert bl["last_statuses"] == ["skipped", "failed", "skipped"]
+
+
+def test_run_history_for_test_matches_parametrized_key(flaky_history_parametrized):
+    base = flaky_history_parametrized
+    flaky.recalc(PROJECT, STAND)
+    history = flaky.run_history_for_test(PROJECT, STAND, f"{base}[blacklist]")
+    assert [h["status"] for h in history] == ["skipped", "failed", "skipped"]
+    assert flaky.run_history_for_test(PROJECT, STAND, base) == [], "по голому fullName параметризованный кейс не находится"
+
+
+def test_test_key_and_split_roundtrip():
+    assert flaky.test_key({"name": "tests.a#test_x", "params": "p1-p2"}) == "tests.a#test_x[p1-p2]"
+    assert flaky.test_key({"name": "tests.a#test_x", "params": None}) == "tests.a#test_x"
+    assert flaky.test_key({"name": "tests.a#test_x"}) == "tests.a#test_x"
+    assert len(flaky.test_key({"name": "t#f", "params": "x" * 200})) == len("t#f") + flaky.PARAMS_KEY_LIMIT + 2
+    assert flaky.split_test_key("tests.a#test_x[p1-p2]") == ("tests.a#test_x", "p1-p2")
+    assert flaky.split_test_key("tests.a#test_x") == ("tests.a#test_x", None)

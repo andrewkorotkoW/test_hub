@@ -106,8 +106,16 @@ def _parse_result(path: Path) -> dict | None:
         datetime.fromtimestamp(stop / 1000.0).isoformat(timespec="seconds")
         if isinstance(stop, (int, float)) else None
     )
+    # params — значения параметров pytest из allure `parameters` («tag», «blacklist»),
+    # без кавычек, через дефис: fullName у allure-pytest параметров не содержит, а `name` —
+    # это allure-заголовок (allure.title/dynamic.title), не pytest-имя. По params flaky
+    # различает параметризованные кейсы (flaky.test_key).
+    params = "-".join(
+        str(p.get("value", "")).strip("'\"") for p in (data.get("parameters") or []) if isinstance(p, dict)
+    )
     return {
         "name": data.get("fullName") or data.get("name") or path.stem,
+        "params": params or None,
         "status": status if status in STATUSES else "unknown",
         "duration": duration,
         "stop_ts": stop_ts,
