@@ -31,17 +31,21 @@
           </table>
         </div>
         <h3>Стенд</h3>
-        <form id="stand-form" class="form-row">
+        <form id="stand-form" class="stand-form">
           <input id="stand-name" placeholder="Имя" required>
           <input id="stand-url" placeholder="URL" required>
           <input id="stand-login" placeholder="Логин (необязательно)">
-          <input id="stand-sentry-project" placeholder="Sentry project (необязательно)">
-          <input id="stand-sentry-environment" placeholder="Sentry environment (необязательно)">
-          <input id="stand-workers" type="number" min="0" max="16" step="1" value="0" placeholder="Потоки (pytest -n)">
-          <button type="submit" class="primary">Сохранить</button>
-          <button type="button" id="stand-cancel-edit" hidden>Отмена</button>
+          <input id="stand-sentry-project" placeholder="Sentry project" title="Slug проекта в Sentry, например vshgu-dev-lms (необязательно)">
+          <input id="stand-sentry-environment" placeholder="Sentry environment" title="environment в Sentry, например development (необязательно)">
+          <label class="stand-form-workers" for="stand-workers">Потоки (pytest -n)
+            <input id="stand-workers" type="number" min="0" max="16" step="1" value="0" title="0 — последовательно; на k8s v2 4 потока — 27 мин вместо 1,5 ч">
+          </label>
+          <div class="stand-form-actions">
+            <button type="submit" class="primary">Сохранить</button>
+            <button type="button" id="stand-cancel-edit" hidden>Отмена</button>
+          </div>
         </form>
-        <p class="muted">Потоки (pytest -n): 0 — последовательно. На k8s v2 троттлинг снят, 4 потока — 27 мин вместо 1,5 ч.</p>
+        <p class="muted small">Sentry project/environment — для карточки «Ошибки продукта» и вкладки «Sentry» прогона. Потоки: 0 — последовательно; на k8s v2 с несколькими репликами 4 потока — 27 мин вместо 1,5 ч.</p>
       </div>
     </div>
   </main>
