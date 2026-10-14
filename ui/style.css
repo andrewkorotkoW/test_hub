@@ -849,9 +849,29 @@ tbody tr.flaky-high { background: rgba(220, 38, 38, 0.08); }
 /* ---------- реестр xfail ---------- */
 .badge.xfail-state { background: var(--xfail); }
 .badge.xpass-state { background: var(--passed); }
-.xfail-hint { font-size: 11px; color: var(--text-muted); display: block; margin-top: 2px; }
-.xfail-issue-input { width: 100%; min-width: 160px; }
+/* было margin-top: 2px — подпись почти прилипала к бейджу xpass, визуально сливались */
+.xfail-hint { font-size: 11px; color: var(--text-muted); display: block; margin-top: 6px; }
+/* min-width: 160px убран — с table-layout: fixed (xfail.html) эта колонка сама
+   по себе ýже 160px при обычных ширинах окна, и жёсткий min-width заставлял
+   поле вылезать за свою ячейку и расталкивать всю таблицу шире контейнера. */
+.xfail-issue-input { width: 100%; }
 tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
+/* Причина — самая длинная колонка, именно она раздувает .table-wrap до
+   горизонтального скролла (1537px при контейнере ~950px); ограничиваем
+   ширину и переносим текст целиком, не обрезая — полный текст причины и есть
+   смысл этой страницы, сокращать его тултипом (как у колонки «Тест») нельзя. */
+/* table-layout: fixed + colgroup (xfail.html) — без него браузер считает
+   «предпочтительную» ширину каждой колонки по контенту (auto-layout), и два
+   независимых max-width (по «Тест»/«Причина») давали непредсказуемый результат
+   при смене ширины окна: на ~1400px влезало ровно, на ~1000px колонка «Тест»
+   схлопывалась до одного слога на строку — ширины колонок начинают «ходить»
+   друг относительно друга, когда контент одной из них вдруг помещается в
+   меньше места, чем раньше. Фиксированные проценты устраняют это: сумма
+   колонок всегда равна ширине .table-wrap, независимо от контента и вьюпорта.
+   anywhere — на случай, если контент конкретной ячейки всё же не умещается
+   (идентификаторы тестов, длинные слова в «Причине» без пробелов). */
+.xfail-table { table-layout: fixed; width: 100%; }
+.xfail-table td { overflow-wrap: anywhere; }
 
 /* ---------- superadmin tabs / inline confirm / json cell ---------- */
 .tabs { display: flex; gap: 6px; flex-wrap: wrap; }
