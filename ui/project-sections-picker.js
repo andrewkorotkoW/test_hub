@@ -224,7 +224,11 @@
       const counts = SectionsTreeLogic.countCheckedByKind(data, new Set(checkedFileTargets(box)));
       let line = `Выбрано: ${counts.total} ${pluralRu(counts.total, "файл", "файла", "файлов")} · API ${counts.api} · UI ${counts.ui}`;
       if (counts.e2e) line += ` · E2E ${counts.e2e}`;
-      if (activePreset === "smoke") line += " · маркер: smoke";
+      // Читаем сам селект, а не activePreset — так строка верна и когда маркер
+      // выставлен вручную из списка, без клика по кнопке (см. ниже
+      // markerSelectEl.addEventListener("change", ...)).
+      const marker = markerSelectEl ? markerSelectEl.value : "";
+      if (marker) line += ` · маркер: ${marker}`;
       summaryLineEl.textContent = line;
     }
 
@@ -264,10 +268,28 @@
         if (preset === "smoke") {
           if (markerSelectEl) markerSelectEl.value = "smoke";
           checked = new Set(SectionsTreeLogic.allLeafTargets(data));
+        } else if (preset === "e2e") {
+          // e2e — тоже маркер pytest (@pytest.mark.e2e в auto_tests_vshgu), но
+          // псевдо-раздел tests/e2e уже содержит ровно эти тесты, включая
+          // размеченные прямо в tests/ui/* (app.core.sections._e2e_virtual_files)
+          // — отмечаем только их, не всё дерево целиком, как smoke. Маркер
+          // всё равно ставим — подстрахует, если в файле есть и другие тесты.
+          if (markerSelectEl) markerSelectEl.value = "e2e";
+          checked = new Set(SectionsTreeLogic.presetLeafTargets(data, preset));
         } else {
           checked = new Set(SectionsTreeLogic.presetLeafTargets(data, preset));
         }
         render();
+      });
+    }
+    // Маркер можно выставить и вручную из списка, без клика по кнопке — кнопка,
+    // соответствующая текущему значению (smoke/e2e), всё равно подсвечивается
+    // (чисто визуально: активный чекбокс выбора файлов этим не трогаем).
+    if (markerSelectEl) {
+      markerSelectEl.addEventListener("change", () => {
+        activePreset = markerSelectEl.value || null;
+        updatePresetButtons();
+        updateSummaryLine();
       });
     }
 

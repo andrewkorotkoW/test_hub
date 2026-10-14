@@ -36,23 +36,85 @@ def _skip_dir(name: str) -> bool:
     return name in _SKIP_DIR_NAMES or name.startswith(".")
 
 
-def _count_test_functions(path: Path) -> int:
+def _collect_test_function_nodes(path: Path) -> list[ast.FunctionDef | ast.AsyncFunctionDef]:
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     except (OSError, SyntaxError, UnicodeDecodeError, ValueError):
-        return 0
-    count = 0
+        return []
+    found: list[ast.FunctionDef | ast.AsyncFunctionDef] = []
 
     def _walk(nodes: list[ast.stmt]) -> None:
-        nonlocal count
         for node in nodes:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test_"):
-                count += 1
+                found.append(node)
             elif isinstance(node, ast.ClassDef):
                 _walk(node.body)
 
     _walk(tree.body)
+    return found
+
+
+def _count_test_functions(path: Path) -> int:
+    return len(_collect_test_function_nodes(path))
+
+
+def _is_e2e_marker(decorator: ast.expr) -> bool:
+    """`@pytest.mark.e2e` (голый или вызванный, например с доп. `allure.tag`
+    рядом — не важно) — единственная форма декоратора маркера, которая
+    встречается в auto_tests_vshgu (проверено grep'ом по tests/, нет ни
+    `from pytest import mark`, ни `@mark.e2e` на классе)."""
+    target = decorator.func if isinstance(decorator, ast.Call) else decorator
+    return (
+        isinstance(target, ast.Attribute)
+        and target.attr == "e2e"
+        and isinstance(target.value, ast.Attribute)
+        and target.value.attr == "mark"
+        and isinstance(target.value.value, ast.Name)
+        and target.value.value.id == "pytest"
+    )
+
+
+def _count_e2e_marked_tests(path: Path) -> int:
+    """Сколько тестов файла помечены `@pytest.mark.e2e` — сквозные сценарии
+    слушателя в auto_tests_vshgu размечены маркером прямо в tests/ui/*, не
+    вынесены в отдельную папку (см. docs/plans/2026-10-14_e2e_markers_mission.md
+    в auto_tests_vshgu), поэтому псевдо-раздел tests/e2e должен включать и их,
+    не только файлы, физически лежащие в tests/e2e (см. discover())."""
+    count = 0
+    for node in _collect_test_function_nodes(path):
+        if any(_is_e2e_marker(d) for d in node.decorator_list):
+            count += 1
     return count
+
+
+def _e2e_virtual_files(tests_root: Path, project_root: Path) -> list[dict]:
+    """Файлы псевдо-раздела tests/e2e: физически лежащие в tests/e2e (любые) +
+    файлы в tests/api|ui/<область>, где есть хотя бы один `@pytest.mark.e2e`
+    (сквозной сценарий слушателя, размеченный маркером на месте, см.
+    docstring _count_e2e_marked_tests). Один проход по всему tests/ вместо
+    отдельного скана tests/e2e — файл, который и физически в tests/e2e, и
+    помечен маркером, не задвоится.
+
+    `name` — путь относительно tests/ (видно, откуда файл: `e2e/lrs/test_x.py`
+    — буквально из папки, `ui/aos/user/test_y.py` — подтянут маркером).
+    `tests_count` — число тестов с маркером, если есть хоть один, иначе
+    (файл буквально в tests/e2e, но без маркера) общее число тестов файла."""
+    e2e_dir = tests_root / "e2e"
+    files = []
+    for path in sorted(tests_root.rglob("test_*.py")):
+        rel = path.relative_to(tests_root)
+        if any(_skip_dir(part) for part in rel.parts[:-1]):
+            continue
+        in_e2e_dir = e2e_dir in path.parents
+        marked_count = _count_e2e_marked_tests(path)
+        if not in_e2e_dir and not marked_count:
+            continue
+        files.append({
+            "name": rel.as_posix(),
+            "target": path.relative_to(project_root).as_posix(),
+            "tests_count": marked_count or _count_test_functions(path),
+        })
+    return files
 
 
 def _scan_files(dir_path: Path, project_root: Path) -> list[dict]:
@@ -98,7 +160,9 @@ def discover(project_path: str) -> dict:
     """Дерево разделов по факту файловой системы: {"kinds": [{"kind", "target",
     "areas": [{"area", "section", "target", "tests_count", "files": [...]}]}]}.
     e2e — один псевдо-раздел без разбивки на области (area=None), см. миссию и
-    app.core.stats._section_of_full_name."""
+    app.core.stats._section_of_full_name; его файлы — не только буквально
+    лежащие в tests/e2e, но и помеченные `@pytest.mark.e2e` где угодно в
+    tests/api|ui/* (см. _e2e_virtual_files)."""
     project_root = Path(project_path)
     tests_root = project_root / "tests"
     kinds = []
@@ -107,21 +171,19 @@ def discover(project_path: str) -> dict:
         if areas:
             kinds.append({"kind": kind, "target": f"tests/{kind}", "areas": areas})
 
-    e2e_dir = tests_root / "e2e"
-    if e2e_dir.is_dir():
-        files = _scan_files(e2e_dir, project_root)
-        if files:
-            kinds.append({
-                "kind": "e2e",
+    files = sorted(_e2e_virtual_files(tests_root, project_root), key=lambda f: f["name"])
+    if files:
+        kinds.append({
+            "kind": "e2e",
+            "target": "tests/e2e",
+            "areas": [{
+                "area": None,
+                "section": "e2e",
                 "target": "tests/e2e",
-                "areas": [{
-                    "area": None,
-                    "section": "e2e",
-                    "target": "tests/e2e",
-                    "tests_count": sum(f["tests_count"] for f in files),
-                    "files": files,
-                }],
-            })
+                "tests_count": sum(f["tests_count"] for f in files),
+                "files": files,
+            }],
+        })
     return {"kinds": kinds}
 
 

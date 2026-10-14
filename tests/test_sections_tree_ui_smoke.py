@@ -43,12 +43,25 @@ async def test_project_html_has_sections_tree_blocks_for_schedules_tab(client):
         assert needle in html
 
 
-def test_run_tab_has_four_presets_including_smoke():
+def test_run_tab_has_five_presets_including_smoke_and_e2e():
+    """E2E — тоже пресет-маркер (как Smoke), но не «отметить всё дерево»:
+    псевдо-раздел tests/e2e уже содержит ровно размеченные @pytest.mark.e2e
+    тесты (включая лежащие в tests/ui/*, см. app.core.sections
+    ._e2e_virtual_files), поэтому кнопка ведёт себя как API/UI — раскрывает
+    и отмечает только этот раздел, плюс подстраховочно ставит маркер e2e."""
     m = re.search(r'<div class="run-buttons" id="sections-presets-row">(.*?)</div>', PROJECT_HTML, re.DOTALL)
     assert m, "не найден блок пресетов вкладки «Запуск»"
     body = m.group(1)
     presets = re.findall(r'data-preset="(\w+)"', body)
-    assert presets == ["api", "ui", "smoke", "all"]
+    assert presets == ["api", "ui", "smoke", "e2e", "all"]
+
+
+def test_marker_select_lists_e2e_on_run_and_schedule_forms():
+    for select_id in ("marker-select", "sched-marker-select"):
+        m = re.search(rf'<select id="{select_id}">(.*?)</select>', PROJECT_HTML, re.DOTALL)
+        assert m, f"не найден селект {select_id}"
+        options = re.findall(r'<option value="([^"]*)"', m.group(1))
+        assert options == ["", "smoke", "api", "ui", "e2e"], options
 
 
 def test_schedules_tab_has_only_three_presets_no_smoke_button():
@@ -173,13 +186,39 @@ def test_summary_line_updates_on_manual_leaf_checkbox_change():
     assert "onLeafChange: updateSummaryLine," in body
 
 
-def test_update_summary_line_counts_total_api_ui_and_smoke_marker():
+def test_update_summary_line_shows_whatever_marker_is_currently_selected():
+    """Строка итога читает сам селект (не activePreset) — маркер показывается
+    и когда выставлен вручную из списка, без клика по кнопке."""
     m = re.search(r"function updateSummaryLine\(\) \{(.*?)\n    \}", PROJECT_SECTIONS_PICKER_JS, re.DOTALL)
     assert m, "не найдена updateSummaryLine()"
     body = m.group(1)
     assert "SectionsTreeLogic.countCheckedByKind(data, new Set(checkedFileTargets(box)))" in body
     assert "counts.total" in body and "counts.api" in body and "counts.ui" in body
-    assert 'line += " · маркер: smoke";' in body
+    assert 'const marker = markerSelectEl ? markerSelectEl.value : "";' in body
+    assert "if (marker) line += ` · маркер: ${marker}`;" in body
+
+
+def test_e2e_preset_click_checks_only_e2e_section_not_whole_tree():
+    """В отличие от smoke (отмечает allLeafTargets — весь проект), у e2e
+    псевдо-раздел tests/e2e уже содержит ровно нужные тесты — отмечаем
+    presetLeafTargets(data, "e2e"), не всё дерево."""
+    m = re.search(r'presetsRow\.addEventListener\("click", \(ev\) => \{(.*?)\n      \}\);', PROJECT_SECTIONS_PICKER_JS, re.DOTALL)
+    assert m, "не найден обработчик клика по пресетам"
+    body = m.group(1)
+    assert 'else if (preset === "e2e") {' in body
+    e2e_branch = re.search(r'else if \(preset === "e2e"\) \{(.*?)\n        \}', body, re.DOTALL).group(1)
+    assert 'markerSelectEl.value = "e2e";' in e2e_branch
+    assert 'SectionsTreeLogic.presetLeafTargets(data, preset)' in e2e_branch
+    assert "allLeafTargets" not in e2e_branch
+
+
+def test_marker_select_change_highlights_matching_preset_button_without_touching_checked_files():
+    m = re.search(r'markerSelectEl\.addEventListener\("change", \(\) => \{(.*?)\n      \}\);', PROJECT_SECTIONS_PICKER_JS, re.DOTALL)
+    assert m, "не найден обработчик change на селекте маркера"
+    body = m.group(1)
+    assert "activePreset = markerSelectEl.value || null;" in body
+    assert "updatePresetButtons();" in body
+    assert "checked" not in body  # визуальная подсветка, выбор файлов не трогает
 
 
 # ------------------------------------------------------------------ общий пикер на обеих вкладках

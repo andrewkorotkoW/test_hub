@@ -30,6 +30,33 @@ def test_count_test_functions_missing_file_returns_zero(tmp_path):
     assert sections._count_test_functions(tmp_path / "does_not_exist.py") == 0
 
 
+# ------------------------------------------------------------------ @pytest.mark.e2e (псевдо-раздел tests/e2e)
+
+def test_count_e2e_marked_tests_counts_only_decorated_functions(tmp_path):
+    path = tmp_path / "test_x.py"
+    path.write_text(
+        "import pytest\n\n"
+        "@pytest.mark.ui\n"
+        "@pytest.mark.e2e\n"
+        "def test_one():\n    assert True\n\n"
+        "@pytest.mark.ui\n"
+        "def test_two():\n    assert True\n\n"
+        "class TestGroup:\n"
+        "    @pytest.mark.e2e\n"
+        "    def test_three(self):\n        assert True\n"
+    )
+    assert sections._count_e2e_marked_tests(path) == 2
+
+
+def test_count_e2e_marked_tests_zero_when_no_marker_or_syntax_error(tmp_path):
+    path = tmp_path / "test_x.py"
+    path.write_text("import pytest\n\n@pytest.mark.smoke\ndef test_one():\n    assert True\n")
+    assert sections._count_e2e_marked_tests(path) == 0
+    broken = tmp_path / "test_broken.py"
+    broken.write_text("def test_x(:\n    pass\n")
+    assert sections._count_e2e_marked_tests(broken) == 0
+
+
 def _write_test(path, tests_count=1):
     path.parent.mkdir(parents=True, exist_ok=True)
     body = "\n".join(f"def test_{i}():\n    assert True\n" for i in range(tests_count))
@@ -69,6 +96,48 @@ def test_discover_builds_kinds_areas_files_tree(tmp_path):
     assert e2e_areas[0]["section"] == "e2e"
     assert e2e_areas[0]["target"] == "tests/e2e"
     assert e2e_areas[0]["tests_count"] == 1
+
+
+def test_discover_pulls_e2e_marked_files_from_ui_and_api_into_e2e_section(tmp_path):
+    """Сквозные сценарии слушателя в auto_tests_vshgu размечены @pytest.mark.e2e
+    прямо в tests/ui/*, не вынесены в отдельную папку (docs/plans/
+    2026-10-14_e2e_markers_mission.md) — псевдо-раздел tests/e2e должен
+    включать и их, с tests_count по размеченным тестам, а не по всем тестам
+    файла; файлы без маркера в tests/e2e остаются как есть."""
+    root = tmp_path / "proj"
+    (root / "tests" / "e2e").mkdir(parents=True)
+    (root / "tests" / "e2e" / "test_plain.py").write_text(
+        "def test_a():\n    assert True\ndef test_b():\n    assert True\n"
+    )
+    (root / "tests" / "ui" / "courses").mkdir(parents=True)
+    (root / "tests" / "ui" / "courses" / "test_flow.py").write_text(
+        "import pytest\n\n"
+        "@pytest.mark.ui\n"
+        "@pytest.mark.e2e\n"
+        "def test_one():\n    assert True\n\n"
+        "@pytest.mark.ui\n"
+        "def test_two():\n    assert True\n"  # не размечен — не входит в счётчик
+    )
+    (root / "tests" / "api" / "tickets").mkdir(parents=True)
+    (root / "tests" / "api" / "tickets" / "test_create.py").write_text(
+        "def test_plain():\n    assert True\n"  # без маркера — в e2e не попадает
+    )
+
+    tree = sections.discover(str(root))
+    kinds = {k["kind"]: k for k in tree["kinds"]}
+    e2e_files = {f["name"]: f for f in kinds["e2e"]["areas"][0]["files"]}
+
+    assert set(e2e_files) == {"e2e/test_plain.py", "ui/courses/test_flow.py"}
+    assert e2e_files["e2e/test_plain.py"]["target"] == "tests/e2e/test_plain.py"
+    assert e2e_files["e2e/test_plain.py"]["tests_count"] == 2  # без маркера — общее число тестов файла
+    assert e2e_files["ui/courses/test_flow.py"]["target"] == "tests/ui/courses/test_flow.py"
+    assert e2e_files["ui/courses/test_flow.py"]["tests_count"] == 1  # только размеченный тест
+    assert kinds["e2e"]["areas"][0]["tests_count"] == 3
+
+    # файл из tests/ui тем временем остаётся в своём обычном разделе ui со
+    # своим ПОЛНЫМ числом тестов (2) — присутствие в e2e ничего там не меняет.
+    ui_files = {f["name"]: f for f in kinds["ui"]["areas"][0]["files"]}
+    assert ui_files["test_flow.py"]["tests_count"] == 2
 
 
 def test_discover_files_in_nested_subfolders_are_included(tmp_path):
