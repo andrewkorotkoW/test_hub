@@ -136,12 +136,16 @@
     return chronoRuns.map((run) => activeXfail.filter((it) => it.last_run_id === run.id).length);
   }
 
-  function renderKpiRow(chronoRuns, chronoMetrics, flakyItemsAll, xfailItemsAll) {
+  // latestOverride — метрики прогона, выбранного DashboardChartsLogic.pickRunWithResults
+  // (первый с ≥ 20 результатами): плитки «Всего тестов / % passed / Упало / Длительность»
+  // иначе показывали точечный запуск одного файла («Всего тестов 2, 0 %», #70 14.10.2026);
+  // спарклайны по-прежнему идут по всей ленте.
+  function renderKpiRow(chronoRuns, chronoMetrics, flakyItemsAll, xfailItemsAll, latestOverride) {
     if (!chronoMetrics.length) {
       kpiRow.innerHTML = `<p class="muted">Прогонов пока не было — панель появится после первого запуска.</p>`;
       return;
     }
-    const latest = chronoMetrics[chronoMetrics.length - 1];
+    const latest = latestOverride || chronoMetrics[chronoMetrics.length - 1];
     const activeFlaky = flakyItemsAll.filter((it) => it.score >= FLAKY_THRESHOLD);
     const activeXfail = xfailItemsAll.filter((it) => it.state === "xfail");
 
@@ -529,16 +533,17 @@
         api(`/api/projects/${encodeURIComponent(projectName)}/flaky?min_runs=3`),
         api(`/api/projects/${encodeURIComponent(projectName)}/xfail`),
       ]);
-      renderKpiRow(chronoRuns, chronoMetrics, flakyAll.items || [], xfailAll.items || []);
+      // «последний прогон» для KPI и блоков с результатами тестов — первый с достаточным
+      // числом результатов (DashboardChartsLogic.pickRunWithResults): точечный запуск одного
+      // файла или упавший на старте прогон не должны превращать плитки, светофор и долгие
+      // тесты в «2 теста / 0 % / нет данных»
+      const sourceRun = DashboardChartsLogic.pickRunWithResults(runs, 20);
+      renderKpiRow(chronoRuns, chronoMetrics, flakyAll.items || [], xfailAll.items || [], sourceRun ? runMetrics(sourceRun) : null);
       renderBarChart(chronoMetrics);
       renderAreaChart(chronoMetrics);
       renderXfailPills(xfailAll.items || []);
 
-      // «последний прогон» для блоков с результатами тестов — первый с достаточным числом
-      // результатов (DashboardChartsLogic.pickRunWithResults): точечный запуск одного файла
-      // или упавший на старте прогон не должны превращать светофор и долгие тесты в «нет данных»
       let latestTests = [];
-      const sourceRun = DashboardChartsLogic.pickRunWithResults(runs, 20);
       if (sourceRun) {
         const report = await api(`/api/runs/${sourceRun.id}/report`);
         latestTests = report.tests || [];

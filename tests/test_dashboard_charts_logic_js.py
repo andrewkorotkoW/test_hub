@@ -24,6 +24,9 @@ def test_project_html_includes_charts_logic_before_dashboard_script():
 
 def test_dashboard_uses_run_with_results_and_charts():
     assert "DashboardChartsLogic.pickRunWithResults(runs, 20)" in DASHBOARD_JS
+    # плитки KPI тоже берут выбранный прогон, а не runs[0]
+    assert "sourceRun ? runMetrics(sourceRun) : null)" in DASHBOARD_JS
+    assert "const latest = latestOverride || chronoMetrics[chronoMetrics.length - 1];" in DASHBOARD_JS
     assert "DashboardChartsLogic.longestTestsBarsHtml(withDuration, { top: 10 })" in DASHBOARD_JS
     assert "DashboardChartsLogic.sentryHourlyBarsHtml(issues, { windowSeconds: p.windowSeconds" in DASHBOARD_JS
     assert 'id="sentry-period"' in PROJECT_HTML
