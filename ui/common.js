@@ -184,10 +184,21 @@ function runAxisLabel(m) {
   return `${d}.${mo}${hm ? " " + hm : ""}`;
 }
 
+// Chart.js рисует подписи осей/легенды своим дефолтным Helvetica — чтобы диаграммы не
+// отличались шрифтом от страницы, один раз подставляем --font-sans из DESIGN.md (style.css).
+function applyChartFontDefaults() {
+  if (!window.Chart || window.Chart.__thFontApplied) return;
+  const sans = getComputedStyle(document.documentElement).getPropertyValue("--font-sans").trim();
+  if (sans) Chart.defaults.font.family = sans;
+  Chart.defaults.font.size = 12;
+  window.Chart.__thFontApplied = true;
+}
+
 // Столбчатая диаграмма (passed/failed по прогонам на дашборде проекта, длительность
 // по прогонам на странице статистики) — датасеты уже полностью собраны вызывающим кодом.
 function buildBarChart(canvas, { labels, datasets, legend = true }) {
   if (!window.Chart) return null;
+  applyChartFontDefaults();
   return new Chart(canvas, {
     type: "bar",
     data: { labels, datasets },
@@ -208,6 +219,7 @@ function buildBarChart(canvas, { labels, datasets, legend = true }) {
 // доля passed по прогонам на странице статистики) — заливка градиентом проекта.
 function buildAreaChart(canvas, { labels, values, label }) {
   if (!window.Chart) return null;
+  applyChartFontDefaults();
   const ctx = canvas.getContext("2d");
   const gradient = ctx.createLinearGradient(0, 0, 0, canvas.clientHeight || 220);
   gradient.addColorStop(0, hexWithAlpha(cssVar("--gradient-start"), 0.55));

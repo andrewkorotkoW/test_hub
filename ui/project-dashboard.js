@@ -183,6 +183,7 @@
       renderDonutLegend(null);
       return;
     }
+    applyChartFontDefaults();
     donutChart = new Chart(canvas, {
       type: "doughnut",
       data: {

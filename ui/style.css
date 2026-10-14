@@ -50,7 +50,9 @@
   --glow-shadow: 0 0 0 1px var(--accent), 0 0 16px var(--accent);
   /* typography.fontFamily из DESIGN.md — Golos Text подключается из Google Fonts в <head>
      каждой страницы (display=swap); без сети остаётся системный стек */
-  font-family: "Golos Text", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-sans: "Golos Text", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-sans);
 }
 
 /* тёмная тема — значение по умолчанию, когда data-theme ещё не проставлен (см.
@@ -527,7 +529,7 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
 @media (max-width: 900px) { .cmp-kpis { grid-template-columns: repeat(2, 1fr); } }
 .cmp-kpi { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
 .cmp-kpi .label { margin-bottom: 6px; }
-.cmp-kpi .v { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 22px; font-weight: 700; line-height: 1.1; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.cmp-kpi .v { font-family: var(--font-mono); font-size: 22px; font-weight: 700; line-height: 1.1; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .cmp-kpi .v .was { font-size: 14px; color: var(--text-muted); font-weight: 500; }
 .cmp-kpi .d { font-size: 12px; font-weight: 600; margin-top: 4px; }
 .cmp-kpi .d.up { color: var(--passed); }
@@ -542,7 +544,7 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
 .cmp-group-head .chev { width: 14px; color: var(--text-muted); transition: transform .12s; }
 .cmp-group[open] .cmp-group-head .chev { transform: rotate(90deg); }
 .cmp-group-head b { font-weight: 700; }
-.cmp-group-head .cnt { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 700; padding: 1px 8px; border-radius: 999px; }
+.cmp-group-head .cnt { font-family: var(--font-mono); font-weight: 700; padding: 1px 8px; border-radius: 999px; }
 .cmp-group-head .hint { color: var(--text-muted); font-size: 12px; margin-left: auto; }
 .cmp-group-body { border-top: 1px solid var(--border); }
 
@@ -554,8 +556,8 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
    здесь свой предок (.cmp-row), поэтому форма точки повторяется явно */
 .cmp-row .dot-status { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
 .cmp-row .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
-.cmp-row .nm small { color: var(--text-muted); font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; margin-right: 6px; }
-.cmp-row .dur { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; color: var(--text-muted); white-space: nowrap; min-width: 90px; text-align: right; }
+.cmp-row .nm small { color: var(--text-muted); font-family: var(--font-mono); font-size: 11px; margin-right: 6px; }
+.cmp-row .dur { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); white-space: nowrap; min-width: 90px; text-align: right; }
 .cmp-row .dur b { color: var(--text); font-weight: 600; }
 .cmp-row .dur.slower b { color: var(--failed); }
 .cmp-row .dur.faster b { color: var(--passed); }
@@ -572,7 +574,7 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
 .rc-traffic button:last-child { border-right: 0; }
 .rc-traffic button:hover { background: var(--surface-hover); }
 .rc-traffic button[aria-current="true"] { background: color-mix(in srgb, var(--accent) 12%, transparent); box-shadow: inset 0 -2px 0 var(--accent); }
-.rc-traffic .v { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 22px; font-weight: 700; line-height: 1; }
+.rc-traffic .v { font-family: var(--font-mono); font-size: 22px; font-weight: 700; line-height: 1; }
 .rc-traffic .v i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; vertical-align: middle; }
 .rc-traffic .n { font-size: 12px; color: var(--text-muted); }
 
@@ -580,7 +582,7 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
 @media (max-width: 1000px) { .rc-grid { grid-template-columns: 1fr; } }
 
 .rc-timeline svg { width: 100%; height: 150px; display: block; }
-.rc-timeline svg text { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10px; fill: var(--text-muted); }
+.rc-timeline svg text { font-family: var(--font-mono); font-size: 10px; fill: var(--text-muted); }
 .rc-bar-infra { fill: var(--stand); }
 .rc-bar-code { fill: var(--failed); }
 .rc-dot-passed { fill: var(--passed); opacity: .8; }
@@ -593,7 +595,7 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
 .rc-tg .from { font-weight: 700; margin-bottom: 4px; }
 
 /* ---------- история: Δ к предыдущему прогону на том же стенде ---------- */
-.delta { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; font-weight: 600; display: inline-flex; gap: 6px; white-space: nowrap; }
+.delta { font-family: var(--font-mono); font-size: 12px; font-weight: 600; display: inline-flex; gap: 6px; white-space: nowrap; }
 .delta .g { color: var(--passed); }
 .delta .r { color: var(--failed); }
 .delta .n { color: var(--text-muted); }
@@ -698,7 +700,7 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
   align-items: center;
   justify-content: flex-end;
   padding: 0 14px;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   color: #fff;
 }
@@ -714,7 +716,7 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
 .console-box {
   background: #14161b;
   color: #d7dae0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.6;
   border-radius: var(--radius);
@@ -741,7 +743,7 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
 .run-log {
   background: #14161b;
   color: #d7dae0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   border-radius: var(--radius);
   padding: 10px 12px;
@@ -818,7 +820,7 @@ tbody tr.clickable:hover { background: var(--surface-hover); }
 .trace-pre {
   background: #14161b;
   color: #f2b8b5;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   padding: 10px 12px;
   border-radius: var(--radius);
@@ -862,7 +864,7 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
   margin: 6px 0 0;
   background: #14161b;
   color: #d7dae0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   padding: 8px 10px;
   border-radius: var(--radius);
@@ -968,7 +970,7 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 .share-links-list { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; }
 .share-link-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; font-size: 12px; }
 .share-link-row.revoked { opacity: .55; }
-.share-link-url { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.share-link-url { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); }
 .share-link-meta { flex: 0 0 100%; color: var(--text-muted); }
 .share-link-row button { padding: 4px 10px; font-size: 12px; }
 
@@ -1083,7 +1085,7 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
   border-radius: 6px;
   padding: 5px 9px;
   font-size: 11px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   color: var(--text-muted);
   text-align: left;
 }
@@ -1211,7 +1213,7 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 .area-row-body { flex: 1 1 auto; min-width: 0; }
 .area-row-title { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .area-row-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
-.area-row-count { flex: 0 0 auto; font-size: 12px; color: var(--text-muted); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.area-row-count { flex: 0 0 auto; font-size: 12px; color: var(--text-muted); font-family: var(--font-mono); }
 
 .pm-tip {
   position: fixed; z-index: 50; background: var(--surface); border: 1px solid var(--border);
@@ -1303,7 +1305,7 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 }
 .area-bar-row:hover { border-color: var(--border); color: var(--text); }
 .area-bar-row-active { border-color: var(--accent); background: rgba(37, 99, 235, 0.08); }
-.area-bar-label { flex: 0 0 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.area-bar-label { flex: 0 0 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); }
 .area-bar-count { flex: 0 0 auto; color: var(--text-muted); }
 .chart-axis-label { font-size: 10px; fill: var(--text-muted); }
 .chart-value-label { font-size: 11px; fill: var(--text); font-weight: 600; }
@@ -1358,7 +1360,7 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 .area-percent.good { color: var(--passed); font-weight: 600; }
 .area-percent.warn { color: var(--broken); font-weight: 600; }
 .area-percent.bad { color: var(--failed); font-weight: 600; }
-.area-row-label { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.area-row-label { font-family: var(--font-mono); }
 #areas-table tbody tr.clickable { cursor: pointer; }
 #areas-table tbody tr.clickable:hover { background: rgba(37, 99, 235, 0.06); }
 #areas-table tbody tr.area-row-selected { background: rgba(37, 99, 235, 0.1); }
@@ -1488,7 +1490,9 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
   animation: dash-fade-in .4s ease forwards;
 }
 .kpi-tile-label { font-size: 11px; text-transform: uppercase; letter-spacing: .03em; color: var(--text-muted); margin-bottom: 6px; }
-.kpi-tile-value { font-size: 22px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+/* typography.kpi из DESIGN.md — цифры KPI моноширинным, как и остальные числа (.num) */
+.kpi-tile-value { font-family: var(--font-mono); font-size: 22px; font-weight: 700; color: var(--text); margin-bottom: 8px; font-variant-numeric: tabular-nums; }
+.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .kpi-tile-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .kpi-spark { display: block; flex: 0 0 auto; }
 .kpi-trend { font-size: 14px; font-weight: 700; min-width: 14px; text-align: right; }
@@ -1509,7 +1513,7 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 }
 .chart-donut-center .value {
   font-size: 32px; font-weight: 700; color: var(--text);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
 .chart-donut-center .label { margin-top: 2px; font-size: 11px; color: var(--text-muted); text-align: center; }
@@ -1543,8 +1547,8 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 .hbar-chart { display: flex; flex-direction: column; gap: 5px; margin: 10px 0 6px; }
 .hbar-row { display: grid; grid-template-columns: minmax(160px, 36%) 1fr 64px; gap: 10px; align-items: center; font-size: 12.5px; }
 .hbar-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.2; }
-.hbar-name small { display: block; color: var(--text-muted); font-size: 10.5px; font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .01em; }
-.hbar-val { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.hbar-name small { display: block; color: var(--text-muted); font-size: 10.5px; font-family: var(--font-mono); letter-spacing: .01em; }
+.hbar-val { font-family: var(--font-mono); }
 .hbar-track { height: 10px; border-radius: 999px; background: color-mix(in srgb, var(--text) 8%, transparent); overflow: hidden; }
 .hbar-fill { display: block; height: 100%; border-radius: 999px; background: var(--accent); }
 .hbar-passed { background: var(--passed); }
@@ -1558,7 +1562,7 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 .sentry-period button[aria-current="true"] { background: var(--accent); color: #fff; }
 .sentry-hourly-wrap { margin: 2px 0 12px; }
 .sentry-hourly { width: 100%; height: 96px; display: block; }
-.sentry-hourly .chart-axis { font-size: 10px; fill: var(--text-muted); font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; }
+.sentry-hourly .chart-axis { font-size: 10px; fill: var(--text-muted); font-family: var(--font-mono); }
 .sentry-hourly .chart-axis-line { stroke: var(--border); stroke-width: 1; }
 .sentry-hourly-legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11.5px; margin-top: 4px; }
 .sentry-hourly-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
@@ -1674,9 +1678,9 @@ a.sentry-row:hover { background: var(--surface-hover); }
 }
 .sentry-details[hidden] { display: none; }
 .sentry-ev-meta { display: flex; gap: 12px; flex-wrap: wrap; color: var(--text-muted); font-size: 11.5px; }
-.sentry-ev-url { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-wrap: anywhere; }
+.sentry-ev-url { font-family: var(--font-mono); overflow-wrap: anywhere; }
 .sentry-ev-message { font-weight: 600; overflow-wrap: anywhere; }
-.sentry-ev-context { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 0; font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+.sentry-ev-context { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 0; font-family: var(--font-mono); font-size: 12px; }
 .sentry-ev-context dt { color: var(--text-muted); }
 .sentry-ev-context dd { margin: 0; overflow-wrap: anywhere; }
 .sentry-ev-exception { overflow-wrap: anywhere; }
@@ -1685,7 +1689,7 @@ a.sentry-row:hover { background: var(--surface-hover); }
 .sentry-ev-code { margin: 2px 0 0; padding: 4px 8px; background: color-mix(in srgb, var(--text) 6%, transparent); border-radius: 6px; font-size: 11.5px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .sentry-ev-crumbs .label { margin-bottom: 4px; }
 .sentry-ev-crumb { display: grid; grid-template-columns: 64px 110px 1fr; gap: 8px; font-size: 11.5px; overflow-wrap: anywhere; }
-.sentry-ev-crumb .num { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--text-muted); }
+.sentry-ev-crumb .num { font-family: var(--font-mono); color: var(--text-muted); }
 .sentry-ev-cat { color: var(--text-muted); }
 .sentry-level {
   flex: 0 0 auto;
@@ -1865,7 +1869,7 @@ a.sentry-row:hover { background: var(--surface-hover); }
 .tc-steps-table th:first-child, .tc-steps-table td:first-child { width: 44px; }
 .tc-steps-table th:nth-child(2), .tc-steps-table td:nth-child(2) { width: 50%; }
 .tc-steps-table td { vertical-align: top; overflow-wrap: anywhere; line-height: 1.45; }
-.tc-steps-table td:first-child { color: var(--text-muted); font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.tc-steps-table td:first-child { color: var(--text-muted); font-family: var(--font-mono); }
 .tc-steps-table tbody tr:last-child td { border-bottom: 0; }
 .tc-steps-table code, .tc-precondition code {
   background: var(--surface-hover);
@@ -1873,7 +1877,7 @@ a.sentry-row:hover { background: var(--surface-hover); }
   border-radius: 4px;
   padding: 1px 5px;
   font-size: 12px;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   overflow-wrap: anywhere;
 }
 .tc-steps-table code { background: color-mix(in srgb, var(--text) 6%, transparent); }
