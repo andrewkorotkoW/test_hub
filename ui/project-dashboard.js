@@ -324,16 +324,22 @@
     window.location.href = row.dataset.href;
   });
 
-  function renderLongestTests(tests) {
+  const longestTestsChart = document.getElementById("longest-tests-chart");
+  const longestTestsRun = document.getElementById("longest-tests-run");
+
+  function renderLongestTests(tests, run) {
     const withDuration = (tests || [])
       .filter((t) => typeof t.duration === "number")
-      .sort((a, b) => b.duration - a.duration)
-      .slice(0, 5);
+      .sort((a, b) => b.duration - a.duration);
+    longestTestsRun.textContent = run ? `— прогон #${run.id}${run.stand ? ` · ${run.stand}` : ""}` : "";
     if (!withDuration.length) {
+      longestTestsChart.innerHTML = "";
       longestTestsList.innerHTML = `<li class="muted">Нет данных последнего прогона.</li>`;
       return;
     }
-    longestTestsList.innerHTML = withDuration.map((t) => `
+    // бары топ-10 (ui/dashboard-charts-logic.js) + прежний список из пяти под ними
+    longestTestsChart.innerHTML = DashboardChartsLogic.longestTestsBarsHtml(withDuration, { top: 10 });
+    longestTestsList.innerHTML = withDuration.slice(0, 5).map((t) => `
       <li title="${escapeHtml(t.name)}">
         <span class="status-text ${escapeHtml(t.status)}">${escapeHtml(String(t.name).split("#").pop())}</span>
         — ${fmtDuration(t.duration)}
@@ -441,7 +447,8 @@
   // ui/sentry-logic.js (window.SentryLogic), юнит-тестируется через node.
   const SENTRY_CARD_ROWS = 5;
 
-  function renderSentryCard(data) {
+  function renderSentryCard(data, period) {
+    const p = period || { label: "24 ч", windowSeconds: 0, labelMode: "hour" };
     if (!data || !data.connected) {
       // reason отдаёт бэкенд (app/routers/sentry.py): «Sentry не настроен», «ошибка запроса
       // (HTTP 400)», таймаут — без него любая ошибка выглядела как «Sentry не подключён».
@@ -454,18 +461,31 @@
       <div class="sentry-summary">
         <span class="sentry-signal-dot ${SentryLogic.sentrySignalClass(issues.length)}"></span>
         <span class="kpi-tile-value">${issues.length}</span>
-        <span class="muted">новых issues за 24&nbsp;ч</span>
+        <span class="muted">новых issues за ${escapeHtml(p.label).replace(" ", "&nbsp;")}</span>
       </div>
+      ${DashboardChartsLogic.sentryHourlyBarsHtml(issues, { windowSeconds: p.windowSeconds, labelMode: p.labelMode, periodLabel: p.label })}
       <div class="sentry-rows">
         ${issues.length
           ? issues.slice(0, SENTRY_CARD_ROWS).map((i) => SentryLogic.sentryIssueItemHtml(i)).join("")
-          : `<p class="muted">Issues за последние сутки нет.</p>`}
+          : `<p class="muted">Issues за ${escapeHtml(p.label)} нет.</p>`}
       </div>
     `;
     // клик по строке раскрывает выжимку последнего события (сообщение, log_context,
     // кадры кода, крошки) — без похода по ссылке в Sentry
     SentryLogic.bindSentryDetails(sentryCardBody, (id) => api(`/api/sentry/issues/${encodeURIComponent(id)}/event`));
   }
+
+  // Период карточки, как в Sentry: 1 ч / 4 ч / 24 ч / 14 д. since — относительный формат
+  // Sentry («-4h», «-14d», app/core/sentry.py::list_issues); бакеты для графика Sentry отдаёт
+  // только почасовые (24h) и суточные (14d), 1 ч / 4 ч — почасовые, обрезанные на клиенте.
+  const SENTRY_PERIODS = {
+    "1h": { since: "-1h", stats: "24h", windowSeconds: 3600, label: "1 ч", labelMode: "hour" },
+    "4h": { since: "-4h", stats: "24h", windowSeconds: 4 * 3600, label: "4 ч", labelMode: "hour" },
+    "24h": { since: "-24h", stats: "24h", windowSeconds: 0, label: "24 ч", labelMode: "hour" },
+    "14d": { since: "-14d", stats: "14d", windowSeconds: 0, label: "14 д", labelMode: "day" },
+  };
+  const sentryPeriodBox = document.getElementById("sentry-period");
+  let sentryPeriod = "24h";
 
   async function loadSentryCard() {
     if (!canSeeSentry) return;
@@ -475,16 +495,28 @@
       return;
     }
     sentryCardBody.innerHTML = `<p class="muted">Загрузка…</p>`;
+    const period = SENTRY_PERIODS[sentryPeriod] || SENTRY_PERIODS["24h"];
     try {
-      // "-24h" — относительный формат, который понимает сам Sentry
-      // (app/core/sentry.py::list_issues), без пересчёта дат на клиенте.
       const data = await api(
-        `/api/projects/${encodeURIComponent(projectName)}/stands/${encodeURIComponent(stand)}/sentry/issues?since=-24h`
+        `/api/projects/${encodeURIComponent(projectName)}/stands/${encodeURIComponent(stand)}/sentry/issues` +
+        `?since=${encodeURIComponent(period.since)}&stats_period=${period.stats}`
       );
-      renderSentryCard(data);
+      renderSentryCard(data, period);
     } catch {
-      renderSentryCard({ connected: false });
+      renderSentryCard({ connected: false }, period);
     }
+  }
+
+  if (sentryPeriodBox) {
+    sentryPeriodBox.addEventListener("click", (ev) => {
+      const btn = ev.target.closest("button[data-period]");
+      if (!btn || !SENTRY_PERIODS[btn.dataset.period]) return;
+      sentryPeriod = btn.dataset.period;
+      sentryPeriodBox.querySelectorAll("button[data-period]").forEach((b) => {
+        b.setAttribute("aria-current", String(b === btn));
+      });
+      loadSentryCard();
+    });
   }
 
   // canSeeSentry назначается асинхронно в ui/project-setup.js (userReady.then(...)) —
@@ -508,16 +540,20 @@
       renderAreaChart(chronoMetrics);
       renderXfailPills(xfailAll.items || []);
 
+      // «последний прогон» для блоков с результатами тестов — первый с достаточным числом
+      // результатов (DashboardChartsLogic.pickRunWithResults): точечный запуск одного файла
+      // или упавший на старте прогон не должны превращать светофор и долгие тесты в «нет данных»
       let latestTests = [];
-      if (runs.length) {
-        const report = await api(`/api/runs/${runs[0].id}/report`);
+      const sourceRun = DashboardChartsLogic.pickRunWithResults(runs, 20);
+      if (sourceRun) {
+        const report = await api(`/api/runs/${sourceRun.id}/report`);
         latestTests = report.tests || [];
-        renderDonutChart(runMetrics(runs[0]));
+        renderDonutChart(runMetrics(sourceRun));
       } else {
         renderDonutChart(null);
       }
       renderAreaTrafficColumns(latestTests);
-      renderLongestTests(latestTests);
+      renderLongestTests(latestTests, sourceRun);
       renderRunsFeed(runs);
     } catch (err) {
       dashboardError.textContent = `Не удалось загрузить дашборд: ${err.message}`;

@@ -322,3 +322,28 @@ def test_latest_event_summary_caches_and_does_not_leak_token(monkeypatch):
     assert calls[0].url.path == "/api/0/issues/16398/events/latest/"
     assert calls[0].headers["Authorization"] == f"Bearer {TOKEN}"
     assert TOKEN not in str(first)
+
+
+# ------------------------------------------------------------------ stats (statsPeriod) для графика
+
+def test_list_issues_with_stats_period_sends_param_and_parses_buckets(monkeypatch):
+    raw = dict(RAW_ISSUE, stats={"24h": [[1760400000, 3], [1760403600, 0], [1760407200, 5]]})
+    calls = _install(monkeypatch, lambda req: httpx.Response(200, json=[raw]))
+
+    issues = sentry_client.list_issues("frontend", "develop", since="-24h", stats_period="24h")
+
+    assert calls[0].url.params["statsPeriod"] == "24h"
+    assert issues[0].stats == [(1760400000, 3), (1760403600, 0), (1760407200, 5)]
+
+
+def test_list_issues_without_stats_period_has_no_stats_and_separate_cache(monkeypatch):
+    raw = dict(RAW_ISSUE, stats={"24h": [[1760400000, 3]]})
+    calls = _install(monkeypatch, lambda req: httpx.Response(200, json=[raw]))
+
+    plain = sentry_client.list_issues("frontend", "develop")
+    with_stats = sentry_client.list_issues("frontend", "develop", stats_period="24h")
+
+    assert "statsPeriod" not in calls[0].url.params
+    assert plain[0].stats is None
+    assert with_stats[0].stats == [(1760400000, 3)]
+    assert len(calls) == 2, "запрос со statsPeriod — отдельная запись кэша"

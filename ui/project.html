@@ -103,12 +103,19 @@
       <div class="stand-row">
         <label for="sentry-stand-select">Стенд</label>
         <select id="sentry-stand-select"><option value="">— выберите стенд —</option></select>
+        <div class="sentry-period" id="sentry-period" role="group" aria-label="Период">
+          <button type="button" data-period="1h" aria-current="false">1 ч</button>
+          <button type="button" data-period="4h" aria-current="false">4 ч</button>
+          <button type="button" data-period="24h" aria-current="true">24 ч</button>
+          <button type="button" data-period="14d" aria-current="false">14 д</button>
+        </div>
       </div>
       <div id="sentry-card-body"><p class="muted">Загрузка…</p></div>
     </div>
 
     <details class="card longest-tests-spoiler" id="longest-tests-card">
-      <summary><h2>Самые долгие тесты</h2></summary>
+      <summary><h2>Самые долгие тесты <span id="longest-tests-run" class="muted small"></span></h2></summary>
+      <div id="longest-tests-chart"></div>
       <ol id="longest-tests-list" class="detail-list"><li class="muted">Загрузка…</li></ol>
     </details>
     </div>
@@ -536,6 +543,7 @@
   <script src="testcases-logic.js"></script>
   <script src="build-page-logic.js"></script>
   <script src="dashboard-areas-logic.js"></script>
+  <script src="dashboard-charts-logic.js"></script>
   <script src="run-live-logic.js"></script>
   <script src="sentry-logic.js"></script>
   <script src="run-window-split-logic.js"></script>

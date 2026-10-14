@@ -56,6 +56,9 @@ class SentryIssue:
     first_seen: str | None
     last_seen: str | None
     permalink: str | None
+    # почасовые/посуточные бакеты событий issue [(unix_ts, count), …] — Sentry отдаёт их в
+    # `stats[statsPeriod]`, когда список запрошен с statsPeriod (24h/14d); иначе None
+    stats: list[tuple[int, int]] | None = None
 
 
 # Кэш ответов list_issues на CACHE_TTL секунд в памяти процесса — ключ учитывает
@@ -89,9 +92,18 @@ def _raise_for_status(resp: httpx.Response, action: str) -> None:
         raise SentryUnavailable(f"Sentry: ошибка запроса (HTTP {resp.status_code})")
 
 
-def _issue_from_raw(raw: dict[str, Any]) -> SentryIssue:
+def _issue_from_raw(raw: dict[str, Any], stats_period: str | None = None) -> SentryIssue:
     metadata = raw.get("metadata") or {}
+    stats = None
+    if stats_period:
+        buckets = (raw.get("stats") or {}).get(stats_period)
+        if isinstance(buckets, list):
+            stats = [
+                (int(b[0]), int(b[1])) for b in buckets
+                if isinstance(b, (list, tuple)) and len(b) == 2
+            ]
     return SentryIssue(
+        stats=stats,
         id=str(raw.get("id", "")),
         title=raw.get("title") or metadata.get("value") or "",
         culprit=raw.get("culprit"),
@@ -109,6 +121,7 @@ def list_issues(
     environment: str,
     since: str | None = None,
     *,
+    stats_period: str | None = None,
     use_cache: bool = True,
 ) -> list[SentryIssue]:
     """issues Sentry-проекта `project` для окружения `environment`. `since`,
@@ -128,7 +141,7 @@ def list_issues(
     if since:
         query += f" firstSeen:{since}" if since[:1] in "+-" else f" firstSeen:>{since}"
 
-    cache_key = (settings.TH_SENTRY_ORG, project, environment, query)
+    cache_key = (settings.TH_SENTRY_ORG, project, environment, f"{query}|{stats_period or ''}")
     now = time.monotonic()
     if use_cache:
         cached = _cache.get(cache_key)
@@ -136,8 +149,13 @@ def list_issues(
             return cached[1]
 
     url = f"{settings.TH_SENTRY_URL.rstrip('/')}/api/0/projects/{settings.TH_SENTRY_ORG}/{project}/issues/"
+    params: dict[str, str] = {"query": query}
+    if stats_period:
+        # Sentry принимает только '', '24h', '14d'; с ним каждый issue приходит с
+        # stats[period] — бакеты событий для графика в карточке дашборда
+        params["statsPeriod"] = stats_period
     try:
-        resp = httpx.get(url, headers=_headers(), params={"query": query}, timeout=TIMEOUT)
+        resp = httpx.get(url, headers=_headers(), params=params, timeout=TIMEOUT)
     except httpx.TimeoutException:
         logger.warning("sentry: list_issues(%s/%s): таймаут запроса", project, environment)
         raise SentryUnavailable("Sentry не отвечает (таймаут)") from None
@@ -147,7 +165,7 @@ def list_issues(
 
     _raise_for_status(resp, f"list_issues({project}/{environment})")
 
-    issues = [_issue_from_raw(raw) for raw in resp.json()]
+    issues = [_issue_from_raw(raw, stats_period) for raw in resp.json()]
     _cache[cache_key] = (now + CACHE_TTL, issues)
     return issues
 

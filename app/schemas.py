@@ -325,6 +325,8 @@ class SentryIssueOut(BaseModel):
     last_seen: Optional[str] = None
     permalink: Optional[str] = None
     is_new: Optional[bool] = None
+    # бакеты событий [[unix_ts, count], …] за statsPeriod (карточка дашборда: 24h) — для графика
+    stats: Optional[list[list[int]]] = None
 
 
 class SentryIssuesResponse(BaseModel):

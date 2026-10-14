@@ -20,6 +20,7 @@ from ..schemas import SentryEventResponse, SentryIssueOut, SentryIssuesResponse
 router = APIRouter(prefix="/api", tags=["sentry"])
 
 WINDOW_TAIL = timedelta(minutes=5)
+STATS_PERIODS = ("24h", "14d")
 
 
 def _get_project_or_404(conn: sqlite3.Connection, name: str) -> sqlite3.Row:
@@ -67,6 +68,7 @@ def _issue_out(issue: sentry_client.SentryIssue, *, is_new: bool | None = None) 
         last_seen=issue.last_seen,
         permalink=issue.permalink,
         is_new=is_new,
+        stats=[[ts, n] for ts, n in issue.stats] if issue.stats is not None else None,
     )
 
 
@@ -91,6 +93,7 @@ def get_stand_sentry_issues(
     stand: str,
     since: str | None = None,
     until: str | None = None,
+    stats_period: str = "24h",
     conn: sqlite3.Connection = Depends(get_db),
     _user: sqlite3.Row = Depends(require_roles("qa")),
 ) -> SentryIssuesResponse:
@@ -101,9 +104,13 @@ def get_stand_sentry_issues(
     if reason:
         return SentryIssuesResponse(connected=False, reason=reason)
 
+    # Sentry принимает только 24h (почасовые бакеты) и 14d (суточные); периоды 1 ч / 4 ч в
+    # карточке — те же почасовые бакеты, обрезанные на клиенте
+    # (ui/dashboard-charts-logic.js::sentryHourlyBarsHtml, windowSeconds)
+    period = stats_period if stats_period in STATS_PERIODS else "24h"
     try:
         issues = sentry_client.list_issues(
-            stand_row["sentry_project"], stand_row["sentry_environment"], since=since
+            stand_row["sentry_project"], stand_row["sentry_environment"], since=since, stats_period=period
         )
     except sentry_client.SentryError as exc:
         return SentryIssuesResponse(connected=False, reason=str(exc))

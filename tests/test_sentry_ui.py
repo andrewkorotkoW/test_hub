@@ -75,7 +75,7 @@ def test_sentry_card_hidden_flag_is_driven_by_can_see_sentry():
 # ------------------------------------------------------------------ 3. карточка дашборда: 5 строк, светофор, «не подключён»
 
 def test_render_sentry_card_shows_disconnected_message_without_throwing():
-    match = re.search(r"function renderSentryCard\(data\) \{(.*?)\n  \}", PROJECT_DASHBOARD_JS, re.DOTALL)
+    match = re.search(r"function renderSentryCard\(data, period\) \{(.*?)\n  \}", PROJECT_DASHBOARD_JS, re.DOTALL)
     assert match, "не найдена функция renderSentryCard() в ui/project-dashboard.js"
     body = match.group(1)
     assert "!data.connected" in body
@@ -84,16 +84,16 @@ def test_render_sentry_card_shows_disconnected_message_without_throwing():
 
 def test_render_sentry_card_limits_to_five_rows_with_signal_dot():
     assert "const SENTRY_CARD_ROWS = 5;" in PROJECT_DASHBOARD_JS
-    match = re.search(r"function renderSentryCard\(data\) \{(.*?)\n  \}", PROJECT_DASHBOARD_JS, re.DOTALL)
+    match = re.search(r"function renderSentryCard\(data, period\) \{(.*?)\n  \}", PROJECT_DASHBOARD_JS, re.DOTALL)
     body = match.group(1)
     assert "slice(0, SENTRY_CARD_ROWS)" in body
     assert "SentryLogic.sentrySignalClass(issues.length)" in body
 
 
 def test_render_sentry_card_empty_issues_message():
-    match = re.search(r"function renderSentryCard\(data\) \{(.*?)\n  \}", PROJECT_DASHBOARD_JS, re.DOTALL)
+    match = re.search(r"function renderSentryCard\(data, period\) \{(.*?)\n  \}", PROJECT_DASHBOARD_JS, re.DOTALL)
     body = match.group(1)
-    assert "Issues за последние сутки нет." in body
+    assert "Issues за ${escapeHtml(p.label)} нет." in body
 
 
 def test_load_sentry_card_requires_stand_selection_before_calling_api():
@@ -102,7 +102,10 @@ def test_load_sentry_card_requires_stand_selection_before_calling_api():
     body = match.group(1)
     assert "if (!stand)" in body
     assert "Выберите стенд." in body
-    assert "since=-24h" in body
+    # период карточки (1 ч / 4 ч / 24 ч / 14 д) — since и stats_period берутся из SENTRY_PERIODS
+    assert "since=${encodeURIComponent(period.since)}" in body
+    assert "stats_period=${period.stats}" in body
+    assert '"24h": { since: "-24h"' in PROJECT_DASHBOARD_JS
 
 
 # ------------------------------------------------------------------ 4. вкладка Sentry в окне прогона

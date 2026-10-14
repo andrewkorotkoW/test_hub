@@ -309,3 +309,38 @@ async def test_event_summary_propagates_client_error_as_disconnected(qa_client, 
     assert resp.status_code == 200
     body = resp.json()
     assert body["connected"] is False and "таймаут" in body["reason"] and body["event"] is None
+
+
+# ------------------------------------------------------------------ stats в ответе по стенду (график)
+
+async def test_stand_issues_pass_stats_buckets_and_request_24h(qa_client, tmp_path, monkeypatch):
+    seen = {}
+
+    def fake_list(project, environment, since=None, **kw):
+        seen.update(kw)
+        return [sentry_client.SentryIssue(
+            id="7", title="x", culprit=None, level="error", count=3, user_count=1,
+            first_seen=None, last_seen=None, permalink=None, stats=[(1760400000, 3), (1760403600, 1)],
+        )]
+
+    monkeypatch.setattr(sentry_client, "list_issues", fake_list)
+    await _make_project_with_linked_stand(qa_client, tmp_path, "sentry_stats_proj")
+    resp = await qa_client.get("/api/projects/sentry_stats_proj/stands/develop/sentry/issues?since=-24h")
+    assert resp.status_code == 200
+    assert seen.get("stats_period") == "24h"
+    assert resp.json()["issues"][0]["stats"] == [[1760400000, 3], [1760403600, 1]]
+
+
+async def test_stand_issues_stats_period_14d_passes_and_invalid_falls_back(qa_client, tmp_path, monkeypatch):
+    seen = []
+
+    def fake_list(project, environment, since=None, **kw):
+        seen.append(kw.get("stats_period"))
+        return []
+
+    monkeypatch.setattr(sentry_client, "list_issues", fake_list)
+    await _make_project_with_linked_stand(qa_client, tmp_path, "sentry_period_proj")
+    base = "/api/projects/sentry_period_proj/stands/develop/sentry/issues"
+    assert (await qa_client.get(f"{base}?since=-14d&stats_period=14d")).status_code == 200
+    assert (await qa_client.get(f"{base}?since=-1h&stats_period=1h")).status_code == 200
+    assert seen == ["14d", "24h"], "14d проходит как есть, недопустимый период → 24h"
