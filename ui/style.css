@@ -48,7 +48,9 @@
   --gradient-neon: linear-gradient(135deg, var(--gradient-start), var(--gradient-mid), var(--gradient-end));
   /* elevation.glow из DESIGN.md — свечение состояний «требует внимания» (тур по разделам) */
   --glow-shadow: 0 0 0 1px var(--accent), 0 0 16px var(--accent);
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  /* typography.fontFamily из DESIGN.md — Golos Text подключается из Google Fonts в <head>
+     каждой страницы (display=swap); без сети остаётся системный стек */
+  font-family: "Golos Text", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
 /* тёмная тема — значение по умолчанию, когда data-theme ещё не проставлен (см.
@@ -1539,8 +1541,10 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
    «Статистика» (ui/stats.html), поэтому на дашборде проекта свёрнут по умолчанию */
 /* горизонтальные бары (ui/dashboard-charts-logic.js::longestTestsBarsHtml) */
 .hbar-chart { display: flex; flex-direction: column; gap: 5px; margin: 10px 0 6px; }
-.hbar-row { display: grid; grid-template-columns: minmax(120px, 34%) 1fr 64px; gap: 10px; align-items: center; font-size: 12.5px; }
-.hbar-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hbar-row { display: grid; grid-template-columns: minmax(160px, 36%) 1fr 64px; gap: 10px; align-items: center; font-size: 12.5px; }
+.hbar-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.2; }
+.hbar-name small { display: block; color: var(--text-muted); font-size: 10.5px; font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .01em; }
+.hbar-val { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 .hbar-track { height: 10px; border-radius: 999px; background: color-mix(in srgb, var(--text) 8%, transparent); overflow: hidden; }
 .hbar-fill { display: block; height: 100%; border-radius: 999px; background: var(--accent); }
 .hbar-passed { background: var(--passed); }

@@ -60,6 +60,31 @@ test("longestTestsBarsHtml: без длительностей — пустая �
   assert.ok(html.indexOf("<b>x</b>") === -1 && html.indexOf("&lt;b&gt;x&lt;/b&gt;") !== -1);
 });
 
+test("areaOf: область из fullName без tests и модуля; одноимённые тесты различимы", function () {
+  assert.strictEqual(L.areaOf("tests.ui.helpdesk.admin.test_navigation#test_dashboards_section"), "ui/helpdesk/admin");
+  assert.strictEqual(L.areaOf("tests.ui.dashboards.test_admin_checks_program_and_course_dashboards.TestX#test_dashboards_section"), "ui/dashboards");
+  assert.strictEqual(L.areaOf("tests.api.test_health#test_auth_me"), "api");
+  assert.strictEqual(L.areaOf("no_hash_name"), "");
+  var html = L.longestTestsBarsHtml([t("tests.ui.helpdesk.admin.test_navigation#test_dashboards_section", 60)]);
+  assert.ok(html.indexOf("<small>ui/helpdesk/admin</small>test_dashboards_section") !== -1);
+});
+
+test("lastAttempts: рераны схлопываются до последней попытки по stop_ts, параметры различаются", function () {
+  var rows = L.lastAttempts([
+    { name: "a#t", duration: 60, status: "broken", stop_ts: "2026-10-14T10:00:00" },
+    { name: "a#t", duration: 53, status: "passed", stop_ts: "2026-10-14T10:01:00" },
+    { name: "b#p", params: "x", duration: 5 },
+    { name: "b#p", params: "y", duration: 7 },
+  ]);
+  assert.deepStrictEqual(rows.map(function (r) { return r.name + ":" + r.duration; }), ["a#t:53", "b#p:5", "b#p:7"]);
+  var html = L.longestTestsBarsHtml([
+    { name: "a#t", duration: 60, status: "broken", stop_ts: "2026-10-14T10:00:00" },
+    { name: "a#t", duration: 53, status: "passed", stop_ts: "2026-10-14T10:01:00" },
+  ]);
+  assert.strictEqual((html.match(/hbar-row/g) || []).length, 1, "одна строка на тест");
+  assert.ok(html.indexOf("hbar-passed") !== -1 && html.indexOf("hbar-broken") === -1);
+});
+
 test("fmtDur: мс / с / м:сс / ч:мм:сс", function () {
   assert.strictEqual(L.fmtDur(0.4), "400 мс");
   assert.strictEqual(L.fmtDur(13.14), "13.1 с");

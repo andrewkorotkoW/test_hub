@@ -4,6 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Test Hub — проект</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
   <link rel="stylesheet" href="style.css">
   <!-- Без ?name= странице нечего показывать — редиректим до того, как грузятся
        остальные скрипты сценария (ui/project-setup.js и project-*.js рассчитывают,
@@ -115,8 +118,7 @@
 
     <details class="card longest-tests-spoiler" id="longest-tests-card">
       <summary><h2>Самые долгие тесты <span id="longest-tests-run" class="muted small"></span></h2></summary>
-      <div id="longest-tests-chart"></div>
-      <ol id="longest-tests-list" class="detail-list"><li class="muted">Загрузка…</li></ol>
+      <div id="longest-tests-chart"><p class="muted">Загрузка…</p></div>
     </details>
     </div>
 

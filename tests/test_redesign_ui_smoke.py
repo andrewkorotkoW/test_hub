@@ -180,7 +180,7 @@ async def test_project_html_chart_and_list_ids_present_exactly_once(client):
         "area-traffic-columns",
         "passfail-bar-chart",
         "duration-area-chart",
-        "longest-tests-list",
+        "longest-tests-chart",
         "runs-feed",
         "kpi-row",
     ]

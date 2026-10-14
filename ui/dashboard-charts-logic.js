@@ -60,10 +60,41 @@
     return i === -1 ? s : s.slice(i + 1);
   }
 
+  // область теста из allure fullName: «tests.ui.helpdesk.admin.test_navigation#x» →
+  // «ui/helpdesk/admin» (без ведущего tests и без имени модуля/класса) — чтобы одноимённые
+  // тесты из разных разделов (test_dashboards_section в helpdesk и в админке) различались
+  function areaOf(name) {
+    var s = String(name || "");
+    var i = s.indexOf("#");
+    var modulePath = i === -1 ? s : s.slice(0, i);
+    var parts = modulePath.split(".");
+    if (parts[0] === "tests") parts = parts.slice(1);
+    // последний сегмент — модуль test_*.py, перед ним может быть класс в fullName нет (он после #)
+    var area = parts.slice(0, -1).filter(function (p) { return p && p.indexOf("test_") !== 0; });
+    return area.join("/");
+  }
+
+  // Рераны: allure-results прогона содержат все попытки теста, в топе он показывался
+  // дважды (test_dashboards_section: broken 1:00 и passed 53 с в #67). Оставляем последнюю
+  // попытку по stop_ts (если его нет — последнюю по порядку) на каждый name[+params].
+  function lastAttempts(tests) {
+    var byKey = {};
+    var order = [];
+    (tests || []).forEach(function (t) {
+      if (!t) return;
+      var key = String(t.name || "") + (t.params ? "[" + t.params + "]" : "");
+      var prev = byKey[key];
+      if (!prev) { byKey[key] = t; order.push(key); return; }
+      var newer = !t.stop_ts || !prev.stop_ts ? true : String(t.stop_ts) >= String(prev.stop_ts);
+      if (newer) byKey[key] = t;
+    });
+    return order.map(function (k) { return byKey[k]; });
+  }
+
   function longestTestsBarsHtml(tests, opts) {
     var o = opts || {};
     var top = o.top || 10;
-    var timed = (tests || []).filter(function (t) { return t && typeof t.duration === "number"; });
+    var timed = lastAttempts(tests).filter(function (t) { return t && typeof t.duration === "number"; });
     if (!timed.length) return "";
     var total = 0;
     for (var i = 0; i < timed.length; i++) total += timed[i].duration;
@@ -74,8 +105,9 @@
     var rows = sorted.map(function (t) {
       var pct = Math.max(2, Math.round((t.duration / max) * 100));
       var status = String(t.status || "unknown").toLowerCase();
+      var area = areaOf(t.name);
       return "<div class=\"hbar-row\" title=\"" + escapeHtml(String(t.name || "")) + "\">" +
-        "<span class=\"hbar-name\">" + escapeHtml(shortName(t.name)) + "</span>" +
+        "<span class=\"hbar-name\">" + (area ? "<small>" + escapeHtml(area) + "</small>" : "") + escapeHtml(shortName(t.name)) + "</span>" +
         "<span class=\"hbar-track\"><span class=\"hbar-fill hbar-" + escapeHtml(status) + "\" style=\"width:" + pct + "%\"></span></span>" +
         "<span class=\"hbar-val num\">" + escapeHtml(fmtDur(t.duration)) + "</span>" +
         "</div>";
@@ -178,6 +210,8 @@
 
   var api = {
     fmtDur: fmtDur,
+    areaOf: areaOf,
+    lastAttempts: lastAttempts,
     runTotal: runTotal,
     pickRunWithResults: pickRunWithResults,
     longestTestsBarsHtml: longestTestsBarsHtml,

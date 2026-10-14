@@ -27,7 +27,6 @@
   const areaTrafficCountProblems = document.getElementById("area-traffic-count-problems");
   const areaTrafficCountEmpty = document.getElementById("area-traffic-count-empty");
   const areaTrafficColumns = document.getElementById("area-traffic-columns");
-  const longestTestsList = document.getElementById("longest-tests-list");
   const runsFeedBox = document.getElementById("runs-feed");
   const DASH_SPARK_N = 10;
 
@@ -333,18 +332,12 @@
       .sort((a, b) => b.duration - a.duration);
     longestTestsRun.textContent = run ? `— прогон #${run.id}${run.stand ? ` · ${run.stand}` : ""}` : "";
     if (!withDuration.length) {
-      longestTestsChart.innerHTML = "";
-      longestTestsList.innerHTML = `<li class="muted">Нет данных последнего прогона.</li>`;
+      longestTestsChart.innerHTML = `<p class="muted">Нет данных последнего прогона.</p>`;
       return;
     }
-    // бары топ-10 (ui/dashboard-charts-logic.js) + прежний список из пяти под ними
+    // бары топ-10 (ui/dashboard-charts-logic.js): область + имя, длительность в м:сс —
+    // прежний список из пяти под графиком дублировал его в другом формате и убран
     longestTestsChart.innerHTML = DashboardChartsLogic.longestTestsBarsHtml(withDuration, { top: 10 });
-    longestTestsList.innerHTML = withDuration.slice(0, 5).map((t) => `
-      <li title="${escapeHtml(t.name)}">
-        <span class="status-text ${escapeHtml(t.status)}">${escapeHtml(String(t.name).split("#").pop())}</span>
-        — ${fmtDuration(t.duration)}
-      </li>
-    `).join("");
   }
 
   // REFERENCES.md, п.4: «лента прогонов (спарклайн в строке…)» — сегментный бар
