@@ -347,3 +347,34 @@ async def test_manual_run_confirm_flow_reaches_page_and_proxies_confirm_manual_t
     run = resp.json()
     assert run["stand"] == "stage"
     assert run["target"] == "tests/test_sample.py"
+
+
+def test_project_card_hover_glow_is_theme_aware_not_hardcoded():
+    """Свечение логотипа проекта при наведении (projects.html) было одним жёстким
+    rgba(47,111,237,.55)/14-18px размытия для обеих тем — на тёмном фоне смотрелось
+    акцентом, на белом (светлая тема, дефолт — см. detectPreferredTheme выше)
+    превращалось в нечёткое синее пятно вокруг логотипа (сообщено пользователем по
+    скриншоту projects.html). Вынесено в CSS-переменные --project-hover-glow-logo/
+    -badge, у светлой темы — меньше размытие и ниже непрозрачность."""
+    import pathlib
+
+    css = (pathlib.Path(__file__).resolve().parent.parent / "ui" / "style.css").read_text()
+
+    dark_block = re.search(r':root, \[data-theme="dark"\] \{(.*?)\n\}', css, re.DOTALL)
+    light_block = re.search(r'\[data-theme="light"\] \{(.*?)\n\}', css, re.DOTALL)
+    assert dark_block and light_block, "не найдены блоки тем в ui/style.css"
+
+    for name in ("--project-hover-glow-logo", "--project-hover-glow-badge"):
+        assert name in dark_block.group(1), f"{name} не определена в тёмной теме"
+        assert name in light_block.group(1), f"{name} не определена в светлой теме"
+
+    # светлая тема — размытие и непрозрачность меньше, чем в тёмной (мягче на белом)
+    dark_logo_blur = re.search(r"--project-hover-glow-logo:\s*0 0 (\d+)px", dark_block.group(1))
+    light_logo_blur = re.search(r"--project-hover-glow-logo:\s*0 0 (\d+)px", light_block.group(1))
+    assert dark_logo_blur and light_logo_blur
+    assert int(light_logo_blur.group(1)) < int(dark_logo_blur.group(1))
+
+    # сами правила hover используют переменные, а не захардкоженный rgba
+    assert "drop-shadow(var(--project-hover-glow-logo))" in css
+    assert "box-shadow: var(--project-hover-glow-badge);" in css
+    assert "rgba(47,111,237,.55)" not in css
