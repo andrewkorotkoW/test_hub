@@ -215,12 +215,52 @@ function buildBarChart(canvas, { labels, datasets, legend = true }) {
   });
 }
 
-// Площадной график с одной серией (длительность прогонов на дашборде проекта,
-// доля passed по прогонам на странице статистики) — заливка градиентом проекта.
-function buildAreaChart(canvas, { labels, values, label }) {
+// Категориальная палитра для многосерийных графиков (несколько разделов на
+// одном графике, ui/stats.js) — обычные hex, не токены темы: --passed/--failed
+// и т.п. несут смысл «статус теста», здесь он не при чём, нужны просто N
+// визуально различимых цветов по кругу.
+const MULTI_SERIES_PALETTE = ["#6366f1", "#ec4899", "#f59e0b", "#10b981", "#06b6d4", "#8b5cf6", "#ef4444", "#84cc16"];
+function multiSeriesColor(index) {
+  return MULTI_SERIES_PALETTE[index % MULTI_SERIES_PALETTE.length];
+}
+
+// Площадной график: с одной серией (длительность прогонов на дашборде проекта,
+// доля passed по прогонам на странице статистики) — заливка градиентом
+// проекта, без легенды. С несколькими (`series`, несколько разделов разом на
+// статистике) — без заливки (иначе перекрывающиеся области превращаются в
+// кашу), по цвету на серию, легенда включена, чтобы было видно, где что.
+function buildAreaChart(canvas, { labels, values, label, series }) {
   if (!window.Chart) return null;
   applyChartFontDefaults();
   const ctx = canvas.getContext("2d");
+  if (series && series.length) {
+    return new Chart(canvas, {
+      type: "line",
+      data: {
+        labels,
+        datasets: series.map((s, i) => ({
+          label: s.label,
+          data: s.values,
+          borderColor: multiSeriesColor(i),
+          backgroundColor: multiSeriesColor(i),
+          fill: false,
+          tension: 0.35,
+          pointRadius: 2,
+          spanGaps: true,
+        })),
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 600, easing: "easeOutQuart" },
+        plugins: {
+          legend: { display: true, position: "bottom", labels: { color: cssVar("--text-muted"), boxWidth: 10, font: { size: 11 } } },
+          tooltip: tooltipStyle(),
+        },
+        scales: chartScales(),
+      },
+    });
+  }
   const gradient = ctx.createLinearGradient(0, 0, 0, canvas.clientHeight || 220);
   gradient.addColorStop(0, hexWithAlpha(cssVar("--gradient-start"), 0.55));
   gradient.addColorStop(0.5, hexWithAlpha(cssVar("--gradient-mid"), 0.35));

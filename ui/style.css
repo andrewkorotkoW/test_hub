@@ -163,6 +163,20 @@ label { display: inline-flex; align-items: center; gap: 6px; }
 }
 .section-combobox-list li { padding: 6px 12px; font-size: 13px; cursor: pointer; }
 .section-combobox-list li:hover, .section-combobox-list li.active { background: var(--accent); color: var(--accent-text); }
+/* Выбранные разделы — чипы над полем ввода (множественный выбор: можно
+   добавить ещё раздел к уже выбранным, не заменяя их — см. ui/stats.js). */
+.section-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.section-chips:not(:empty) { margin-bottom: 6px; }
+.section-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--accent); color: var(--accent-text);
+  border-radius: var(--radius); padding: 3px 6px 3px 10px; font-size: 12px; font-weight: 600;
+}
+.section-chip-remove {
+  background: none; border: none; color: inherit; cursor: pointer; font-size: 14px;
+  line-height: 1; padding: 0 2px; opacity: .8;
+}
+.section-chip-remove:hover { opacity: 1; }
 
 .schedule-form { display: flex; flex-direction: column; gap: 12px; max-width: 480px; }
 .schedule-days { display: flex; flex-wrap: wrap; gap: 10px; }

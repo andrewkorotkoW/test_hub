@@ -19,6 +19,7 @@
   const dynamicsSectionSelect = document.getElementById("dynamics-section-select");
   const dynamicsSectionSuggestions = document.getElementById("dynamics-section-suggestions");
   const dynamicsSectionCombobox = document.getElementById("dynamics-section-combobox");
+  const dynamicsSectionChips = document.getElementById("dynamics-section-chips");
   const topSlowestList = document.getElementById("top-slowest-list");
   const topFlakyList = document.getElementById("top-flaky-list");
 
@@ -71,6 +72,19 @@
   }
 
   let dynamicsSections = [];
+  // Выбранные разделы для «Динамики за 30 дней» — МНОЖЕСТВЕННЫЙ выбор (не
+  // одно значение, как было): "" — псевдо-раздел «Весь проект»
+  // (data.dynamics_project), любая другая строка — реальный раздел
+  // (data.dynamics_by_section[value]). Пустой selectedSections (ничего не
+  // добавлено) — поведение как раньше, один «Весь проект» по умолчанию.
+  // Максимум — длина палитры цветов (MULTI_SERIES_PALETTE, common.js),
+  // больше визуально не различить на одном графике.
+  let selectedSections = [];
+  const MAX_SELECTED_SECTIONS = 8;
+
+  function sectionLabel(value) {
+    return value === "" ? "Весь проект" : value;
+  }
 
   function renderDynamicsSelect(data) {
     // Поле-комбобокс (не <select>, не <input list=datalist>): у проекта ~70-80
@@ -84,21 +98,32 @@
     //   повторным кликом, пока текст не изменить вручную (сообщено как баг).
     // Свой список снимает оба ограничения: фильтр includes() по подстроке в
     // любом месте, открывается по фокусу/клику независимо от текущего
-    // значения. Пустое значение = «Весь проект».
+    // значения.
     dynamicsSections = Object.keys(data.dynamics_by_section).sort();
-    const current = dynamicsSectionSelect.value;
-    dynamicsSectionSelect.value = current === "" || dynamicsSections.includes(current) ? current : "";
+    // Разделы могли пропасть у текущего стенда (сменили «Стенд» сверху) —
+    // чистим из выбора то, чего больше нет (кроме "" — «Весь проект» валиден всегда).
+    selectedSections = selectedSections.filter((s) => s === "" || dynamicsSections.includes(s));
+  }
+
+  function renderChips() {
+    dynamicsSectionChips.innerHTML = selectedSections.map((value) => `
+      <span class="section-chip" data-value="${escapeHtml(value)}">
+        ${escapeHtml(sectionLabel(value))}
+        <button type="button" class="section-chip-remove" data-value="${escapeHtml(value)}" aria-label="Убрать ${escapeHtml(sectionLabel(value))}">×</button>
+      </span>
+    `).join("");
   }
 
   function renderSectionSuggestions(query) {
     const q = query.trim().toLowerCase();
-    const matches = (q ? dynamicsSections.filter((s) => s.toLowerCase().includes(q)) : dynamicsSections).slice(0, 30);
+    const candidates = ["", ...dynamicsSections].filter((s) => !selectedSections.includes(s));
+    const matches = (q ? candidates.filter((s) => sectionLabel(s).toLowerCase().includes(q)) : candidates).slice(0, 30);
     if (!matches.length) {
       dynamicsSectionSuggestions.hidden = true;
       dynamicsSectionSuggestions.innerHTML = "";
       return;
     }
-    dynamicsSectionSuggestions.innerHTML = matches.map((s) => `<li data-value="${escapeHtml(s)}">${escapeHtml(s)}</li>`).join("");
+    dynamicsSectionSuggestions.innerHTML = matches.map((s) => `<li data-value="${escapeHtml(s)}">${escapeHtml(sectionLabel(s))}</li>`).join("");
     dynamicsSectionSuggestions.hidden = false;
   }
 
@@ -108,34 +133,86 @@
   }
 
   function chooseSection(value) {
-    dynamicsSectionSelect.value = value;
-    closeSectionSuggestions();
+    // Добавляем к уже выбранным (не заменяем — п. «добавить к уже выбранному
+    // + ещё раздел»), без дублей и не больше MAX_SELECTED_SECTIONS. Список
+    // подсказок остаётся открытым (за вычетом только что выбранного) — чтобы
+    // добавить сразу несколько, не открывая список заново на каждый.
+    if (!selectedSections.includes(value) && selectedSections.length < MAX_SELECTED_SECTIONS) {
+      selectedSections.push(value);
+    }
+    dynamicsSectionSelect.value = "";
+    renderChips();
+    renderSectionSuggestions("");
     if (currentData) renderDynamicsCharts(currentData);
   }
 
+  function removeSection(value) {
+    selectedSections = selectedSections.filter((s) => s !== value);
+    renderChips();
+    if (!dynamicsSectionSuggestions.hidden) renderSectionSuggestions(dynamicsSectionSelect.value);
+    if (currentData) renderDynamicsCharts(currentData);
+  }
+
+  // Общая шкала прогонов для всех выбранных серий сразу: разные разделы
+  // затрагиваются разными прогонами (не каждый прогон трогает каждый раздел),
+  // поэтому ось — объединение run_id всех серий по времени, а не точки одной
+  // серии как раньше (один раздел — всегда ровно эта ось).
+  function unionRunAxis(seriesList) {
+    const byRunId = new Map();
+    seriesList.forEach(({ points }) => points.forEach((p) => {
+      if (!byRunId.has(p.run_id)) byRunId.set(p.run_id, p);
+    }));
+    return [...byRunId.values()].sort((a, b) =>
+      String(a.started || "").localeCompare(String(b.started || "")) || (a.run_id - b.run_id));
+  }
+
+  function alignToAxis(axis, points, field) {
+    const byRunId = new Map(points.map((p) => [p.run_id, p]));
+    return axis.map((a) => {
+      const p = byRunId.get(a.run_id);
+      return p ? p[field] : null;
+    });
+  }
+
   function renderDynamicsCharts(data) {
-    const section = dynamicsSectionSelect.value;
-    const points = section ? (data.dynamics_by_section[section] || []) : data.dynamics_project;
+    const pointsFor = (value) => (value === "" ? data.dynamics_project : (data.dynamics_by_section[value] || []));
+    // Ничего не выбрано — тот же дефолт, что был: один «Весь проект».
+    const activeValues = selectedSections.length ? selectedSections : [""];
+    const seriesList = activeValues.map((value) => ({ value, label: sectionLabel(value), points: pointsFor(value) }));
+    const multi = seriesList.length > 1;
+
+    const axis = unionRunAxis(seriesList);
+    const labels = axis.map(runAxisLabel);
+    const hasData = axis.length > 0;
 
     const areaCanvas = document.getElementById("dynamics-area-chart");
     if (areaChart) { areaChart.destroy(); areaChart = null; }
-    if (points.length) {
-      areaChart = buildAreaChart(areaCanvas, {
-        labels: points.map(runAxisLabel),
-        values: points.map((p) => p.passed_percent),
-        label: "% passed",
-      });
+    if (hasData) {
+      areaChart = multi
+        ? buildAreaChart(areaCanvas, {
+            labels,
+            series: seriesList.map((s) => ({ label: s.label, values: alignToAxis(axis, s.points, "passed_percent") })),
+          })
+        : buildAreaChart(areaCanvas, {
+            labels,
+            values: alignToAxis(axis, seriesList[0].points, "passed_percent"),
+            label: "% passed",
+          });
     }
 
     const barCanvas = document.getElementById("dynamics-bar-chart");
     if (barChart) { barChart.destroy(); barChart = null; }
-    if (points.length) {
+    if (hasData) {
       barChart = buildBarChart(barCanvas, {
-        legend: false,
-        labels: points.map(runAxisLabel),
-        datasets: [
-          { label: "длительность, с", data: points.map((p) => p.duration), backgroundColor: cssVar("--accent"), borderRadius: 4, maxBarThickness: 26 },
-        ],
+        legend: multi,
+        labels,
+        datasets: seriesList.map((s, i) => ({
+          label: multi ? s.label : "длительность, с",
+          data: alignToAxis(axis, s.points, "duration"),
+          backgroundColor: multi ? multiSeriesColor(i) : cssVar("--accent"),
+          borderRadius: 4,
+          maxBarThickness: 26,
+        })),
       });
     }
 
@@ -145,13 +222,17 @@
     // не только проценты и длительность.
     const countCanvas = document.getElementById("dynamics-count-chart");
     if (countChart) { countChart.destroy(); countChart = null; }
-    if (points.length) {
+    if (hasData) {
       countChart = buildBarChart(countCanvas, {
-        legend: false,
-        labels: points.map(runAxisLabel),
-        datasets: [
-          { label: "тестов", data: points.map((p) => p.tests_total), backgroundColor: cssVar("--skipped"), borderRadius: 4, maxBarThickness: 26 },
-        ],
+        legend: multi,
+        labels,
+        datasets: seriesList.map((s, i) => ({
+          label: multi ? s.label : "тестов",
+          data: alignToAxis(axis, s.points, "tests_total"),
+          backgroundColor: multi ? multiSeriesColor(i) : cssVar("--skipped"),
+          borderRadius: 4,
+          maxBarThickness: 26,
+        })),
       });
     }
   }
@@ -190,6 +271,7 @@
       currentData = data;
       renderSections(data);
       renderDynamicsSelect(data);
+      renderChips();
       renderDynamicsCharts(data);
       renderTopSlowest(data.top_slowest);
       renderTopFlaky(data.top_flaky);
@@ -215,8 +297,12 @@
   dynamicsSectionSelect.addEventListener("focus", () => renderSectionSuggestions(dynamicsSectionSelect.value));
   dynamicsSectionSelect.addEventListener("input", () => renderSectionSuggestions(dynamicsSectionSelect.value));
   dynamicsSectionSuggestions.addEventListener("mousedown", (ev) => {
-    // mousedown, не click — срабатывает раньше blur поля, иначе список успевал
-    // закрыться (и выбор потеряться) до обработки клика по пункту.
+    // mousedown, не click — срабатывает раньше blur поля. preventDefault —
+    // иначе клик по НЕфокусируемому <li> по умолчанию сам снимает фокус с
+    // поля (браузерное поведение), это сразу триггерит blur-обработчик,
+    // который закрывает список — он же закрывал список и список, который
+    // chooseSection только что перерисовал (список был виден, но пустой).
+    ev.preventDefault();
     const li = ev.target.closest("li[data-value]");
     if (li) chooseSection(li.dataset.value);
   });
@@ -239,16 +325,25 @@
   });
   dynamicsSectionSelect.addEventListener("blur", () => {
     // Поле текстовое — можно напечатать то, чего нет в списке (опечатка,
-    // случайный текст), это браузер не блокирует. Приводим к пустому значению
-    // («Весь проект»), а не молча рисуем пустые графики по несуществующему
-    // разделу. mousedown на подсказке обработается раньше этого blur.
-    const typed = dynamicsSectionSelect.value;
-    if (typed && !dynamicsSections.includes(typed)) dynamicsSectionSelect.value = "";
+    // случайный текст, или уже выбранный раздел), это браузер не блокирует.
+    // Просто очищаем ввод — выбранные разделы живут в selectedSections
+    // (chips), а не в значении этого поля, графики они уже не трогают.
+    // mousedown на подсказке/чипе обработается раньше этого blur.
+    dynamicsSectionSelect.value = "";
     closeSectionSuggestions();
-    if (currentData) renderDynamicsCharts(currentData);
+  });
+  dynamicsSectionChips.addEventListener("mousedown", (ev) => {
+    const btn = ev.target.closest(".section-chip-remove");
+    if (btn) { ev.preventDefault(); removeSection(btn.dataset.value); }
   });
   document.addEventListener("click", (ev) => {
-    if (!dynamicsSectionCombobox.contains(ev.target)) closeSectionSuggestions();
+    // composedPath(), не contains(ev.target): mousedown на подсказке успевает
+    // пересобрать список (innerHTML) раньше, чем всплывает этот click, и
+    // ev.target («старый» <li>) уже отсоединён от документа — contains() на
+    // отсоединённом узле всегда false, список закрывался сразу после выбора.
+    // composedPath фиксирует путь на момент диспетчеризации события, до
+    // этой пересборки.
+    if (!ev.composedPath().includes(dynamicsSectionCombobox)) closeSectionSuggestions();
   });
   exportBtn.addEventListener("click", () => {
     const query = standSelect.value ? `?stand=${encodeURIComponent(standSelect.value)}` : "";

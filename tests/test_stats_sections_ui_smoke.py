@@ -50,8 +50,9 @@ def test_dynamics_section_field_is_custom_combobox_not_select_or_datalist():
     ограничения — фильтр includes() по подстроке, открывается по фокусу
     независимо от текущего значения."""
     html = (REPO_ROOT / "ui" / "stats.html").read_text()
-    assert '<input type="text" id="dynamics-section-select" placeholder="Весь проект" autocomplete="off">' in html
+    assert '<input type="text" id="dynamics-section-select" placeholder="Добавить раздел…" autocomplete="off">' in html
     assert '<ul id="dynamics-section-suggestions" class="section-combobox-list" hidden></ul>' in html
+    assert '<div class="section-chips" id="dynamics-section-chips"></div>' in html
     assert '<select id="dynamics-section-select">' not in html
     assert "datalist" not in html
 
@@ -91,23 +92,82 @@ async def test_common_js_sidebar_has_stats_menu_item(client):
 def test_stats_js_renders_count_chart():
     js = (REPO_ROOT / "ui" / "stats.js").read_text()
     assert 'const countCanvas = document.getElementById("dynamics-count-chart");' in js
-    assert "p.tests_total" in js
+    assert 'alignToAxis(axis, s.points, "tests_total")' in js
 
 
-def test_stats_js_section_combobox_filters_opens_and_validates():
+def test_stats_js_section_combobox_filters_by_substring_and_opens_on_focus():
     js = (REPO_ROOT / "ui" / "stats.js").read_text()
     # фильтр — includes() по подстроке, не только по началу значения (это и
     # была часть бага с datalist)
-    assert "dynamicsSections.filter((s) => s.toLowerCase().includes(q))" in js
+    assert "sectionLabel(s).toLowerCase().includes(q)" in js
     # список открывается по фокусу независимо от текущего значения поля —
     # в отличие от нативной стрелки datalist, переставшей открываться повторным
     # кликом после уже выбранного значения (сообщённый баг)
     assert 'dynamicsSectionSelect.addEventListener("focus", () => renderSectionSuggestions(dynamicsSectionSelect.value));' in js
-    # выбор подсказки — mousedown (раньше blur поля), иначе клик терялся
+    # выбор подсказки/удаление чипа — mousedown (раньше blur поля), иначе клик терялся
     assert 'dynamicsSectionSuggestions.addEventListener("mousedown", (ev) => {' in js
-    # текстовое поле позволяет напечатать то, чего нет в списке — сбрасываем
-    # на «Весь проект», а не молча показываем пустые графики по несуществующему разделу
-    assert 'if (typed && !dynamicsSections.includes(typed)) dynamicsSectionSelect.value = "";' in js
+    assert 'dynamicsSectionChips.addEventListener("mousedown", (ev) => {' in js
+
+
+def test_stats_js_supports_multi_select_sections_as_chips():
+    """Раньше было одно значение (замена при новом выборе) — теперь массив
+    selectedSections, добавление не заменяет уже выбранные (см. обращение
+    пользователя: «выборка из 3-4 тестов», «добавить к уже выбранному + ещё
+    раздел»). "" — псевдо-раздел «Весь проект» (data.dynamics_project), тоже
+    выбираемый как чип наравне с обычными разделами."""
+    js = (REPO_ROOT / "ui" / "stats.js").read_text()
+    assert "let selectedSections = [];" in js
+    assert 'function sectionLabel(value) {\n    return value === "" ? "Весь проект" : value;\n  }' in js
+    assert "if (!selectedSections.includes(value) && selectedSections.length < MAX_SELECTED_SECTIONS) {" in js
+    assert "selectedSections.push(value);" in js
+    assert "function removeSection(value) {" in js
+    assert "selectedSections = selectedSections.filter((s) => s !== value);" in js
+    # кнопка выбора раздела больше НЕ заменяет значение поля на выбранный
+    # раздел (старое поведение single-select) — поле всегда очищается
+    assert 'dynamicsSectionSelect.value = "";' in js
+
+
+def test_stats_js_suggestion_mousedown_prevents_default_to_keep_list_open():
+    """Баг: после chooseSection() список сразу пустел — клик по НЕфокусируемому
+    <li> по умолчанию снимает фокус с поля (блюр), что триггерило
+    closeSectionSuggestions() сразу после того, как chooseSection только что
+    перерисовал список оставшихся вариантов. preventDefault() на mousedown
+    отменяет этот блюр, список остаётся открытым для продолжения выбора
+    (множественный выбор — без него после первого чипа пришлось бы заново
+    кликать в поле)."""
+    js = (REPO_ROOT / "ui" / "stats.js").read_text()
+    match = re.search(
+        r'dynamicsSectionSuggestions\.addEventListener\("mousedown", \(ev\) => \{([^}]*)\}\);',
+        js,
+    )
+    assert match, "не найден обработчик mousedown подсказок в ui/stats.js"
+    body = match.group(1)
+    assert "ev.preventDefault();" in body
+    assert body.index("ev.preventDefault();") < body.index("chooseSection(li.dataset.value);")
+
+
+def test_stats_js_outside_click_uses_composed_path_not_contains():
+    """document click-слушатель должен закрывать список только при клике ВНЕ
+    комбобокса. contains(ev.target) ломался: к моменту всплытия click
+    выбранный <li> уже отсоединён chooseSection()'ом (innerHTML
+    пересобран) — отсоединённый узел всегда not-contains, список закрывался
+    сразу после выбора. composedPath() фиксирует путь на момент диспетчеризации,
+    до пересборки."""
+    js = (REPO_ROOT / "ui" / "stats.js").read_text()
+    assert 'if (!ev.composedPath().includes(dynamicsSectionCombobox)) closeSectionSuggestions();' in js
+
+
+def test_stats_js_dynamics_charts_use_union_axis_across_selected_sections():
+    """Разные разделы затрагиваются разными прогонами — объединение run_id по
+    всем выбранным сериям, а не ось одной серии (так было до множественного
+    выбора, когда серия всегда была ровно одна)."""
+    js = (REPO_ROOT / "ui" / "stats.js").read_text()
+    assert "function unionRunAxis(seriesList) {" in js
+    assert "function alignToAxis(axis, points, field) {" in js
+    assert "const multi = seriesList.length > 1;" in js
+    # одна серия (по умолчанию или один выбранный раздел) — тот же вид
+    # графиков, что был раньше (без легенды, заливка градиентом на area)
+    assert "legend: multi," in js
 
 
 def test_common_js_stats_link_needs_project_like_coverage_link():

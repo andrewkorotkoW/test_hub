@@ -57,9 +57,10 @@
     <div class="card" id="dynamics-card">
       <h2>Динамика за 30 дней</h2>
       <div class="field section-combobox" id="dynamics-section-combobox">
-        <label for="dynamics-section-select">Раздел</label>
+        <label for="dynamics-section-select">Разделы (можно несколько сразу — на графиках своей линией/цветом)</label>
+        <div class="section-chips" id="dynamics-section-chips"></div>
         <div class="section-combobox-input-wrap">
-          <input type="text" id="dynamics-section-select" placeholder="Весь проект" autocomplete="off">
+          <input type="text" id="dynamics-section-select" placeholder="Добавить раздел…" autocomplete="off">
           <span class="section-combobox-arrow" aria-hidden="true">▾</span>
         </div>
         <ul id="dynamics-section-suggestions" class="section-combobox-list" hidden></ul>
