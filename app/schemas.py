@@ -471,6 +471,7 @@ class StatsDynamicsPoint(BaseModel):
     started: Optional[str] = None
     passed_percent: Optional[float] = None
     duration: Optional[float] = None
+    tests_total: Optional[int] = None
 
 
 class StatsTopSlowTest(BaseModel):

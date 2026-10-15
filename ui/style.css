@@ -141,6 +141,20 @@ label { display: inline-flex; align-items: center; gap: 6px; }
 .field label { font-weight: 600; font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .02em; }
 .field input, .field select, .field textarea { width: 100%; }
 
+/* ui/stats.js: «Раздел» в «Динамике за 30 дней» — свой комбобокс вместо
+   <select> (список из ~70-80 option ОС рендерит на весь экран) и вместо
+   input+datalist (фильтр только по началу значения, кнопка-стрелка после
+   выбора переставала открывать список повторным кликом — см. фикс). */
+.section-combobox { position: relative; max-width: 360px; }
+.section-combobox-list {
+  position: absolute; top: 100%; left: 0; right: 0; z-index: 5;
+  margin: 2px 0 0; padding: 4px 0; max-height: 240px; overflow-y: auto;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .12); list-style: none;
+}
+.section-combobox-list li { padding: 6px 12px; font-size: 13px; cursor: pointer; }
+.section-combobox-list li:hover, .section-combobox-list li.active { background: var(--accent); color: var(--accent-text); }
+
 .schedule-form { display: flex; flex-direction: column; gap: 12px; max-width: 480px; }
 .schedule-days { display: flex; flex-wrap: wrap; gap: 10px; }
 .schedule-days label { font-weight: normal; text-transform: none; }
@@ -1318,6 +1332,15 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 .chart-row { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; }
 @media (max-width: 900px) {
   .chart-row { grid-template-columns: 1fr; }
+}
+/* stats.html «Динамика за 30 дней»: .charts-grid здесь держит один-единственный
+   .chart-row — базовая repeat(2, 1fr) оставляла вторую колонку сетки пустой
+   (ровно тот блок, что пустовал на скриншоте). Сам .chart-row здесь — три
+   равных графика по одной шкале прогонов, а не пара «узкая+широкая» колонка. */
+#dynamics-card .charts-grid { grid-template-columns: 1fr; }
+#dynamics-card .chart-row { grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 900px) {
+  #dynamics-card .chart-row { grid-template-columns: 1fr; }
 }
 .chart-rings-row { display: flex; flex-wrap: wrap; gap: 24px; }
 .chart-ring { text-align: center; }

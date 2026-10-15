@@ -17,11 +17,14 @@
   const sectionsEmptyBox = document.getElementById("sections-empty-box");
   const sectionsEmptyList = document.getElementById("sections-empty-list");
   const dynamicsSectionSelect = document.getElementById("dynamics-section-select");
+  const dynamicsSectionSuggestions = document.getElementById("dynamics-section-suggestions");
+  const dynamicsSectionCombobox = document.getElementById("dynamics-section-combobox");
   const topSlowestList = document.getElementById("top-slowest-list");
   const topFlakyList = document.getElementById("top-flaky-list");
 
   let areaChart = null;
   let barChart = null;
+  let countChart = null;
   let currentData = null;
 
   function fmtPercent(value) {
@@ -67,12 +70,47 @@
     }
   }
 
+  let dynamicsSections = [];
+
   function renderDynamicsSelect(data) {
-    const sections = Object.keys(data.dynamics_by_section).sort();
+    // Поле-комбобокс (не <select>, не <input list=datalist>): у проекта ~70-80
+    // разделов (api/* + ui/*).
+    // - select с таким числом option ОС рендерит списком на весь экран (см.
+    //   скриншот в задаче) — непригодно.
+    // - input+datalist это чинит, НО: 1) нативный фильтр по подстроке в
+    //   Chromium ищет только по НАЧАЛУ значения option — набрав «buk» (а не
+    //   «ui/buk»), подсказок просто нет, хотя раздел есть; 2) после выбора
+    //   значения нативная кнопка-стрелка datalist перестаёт открывать список
+    //   повторным кликом, пока текст не изменить вручную (сообщено как баг).
+    // Свой список снимает оба ограничения: фильтр includes() по подстроке в
+    // любом месте, открывается по фокусу/клику независимо от текущего
+    // значения. Пустое значение = «Весь проект».
+    dynamicsSections = Object.keys(data.dynamics_by_section).sort();
     const current = dynamicsSectionSelect.value;
-    dynamicsSectionSelect.innerHTML = `<option value="">Весь проект</option>` +
-      sections.map((s) => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("");
-    dynamicsSectionSelect.value = sections.includes(current) ? current : "";
+    dynamicsSectionSelect.value = current === "" || dynamicsSections.includes(current) ? current : "";
+  }
+
+  function renderSectionSuggestions(query) {
+    const q = query.trim().toLowerCase();
+    const matches = (q ? dynamicsSections.filter((s) => s.toLowerCase().includes(q)) : dynamicsSections).slice(0, 30);
+    if (!matches.length) {
+      dynamicsSectionSuggestions.hidden = true;
+      dynamicsSectionSuggestions.innerHTML = "";
+      return;
+    }
+    dynamicsSectionSuggestions.innerHTML = matches.map((s) => `<li data-value="${escapeHtml(s)}">${escapeHtml(s)}</li>`).join("");
+    dynamicsSectionSuggestions.hidden = false;
+  }
+
+  function closeSectionSuggestions() {
+    dynamicsSectionSuggestions.hidden = true;
+    dynamicsSectionSuggestions.innerHTML = "";
+  }
+
+  function chooseSection(value) {
+    dynamicsSectionSelect.value = value;
+    closeSectionSuggestions();
+    if (currentData) renderDynamicsCharts(currentData);
   }
 
   function renderDynamicsCharts(data) {
@@ -97,6 +135,22 @@
         labels: points.map(runAxisLabel),
         datasets: [
           { label: "длительность, с", data: points.map((p) => p.duration), backgroundColor: cssVar("--accent"), borderRadius: 4, maxBarThickness: 26 },
+        ],
+      });
+    }
+
+    // Третий график того же ряда — сколько тестов было в каждом прогоне
+    // (tests_total уже считался бэкендом для passed_percent, просто раньше не
+    // отдавался на фронт): виден рост/сокращение набора по разделу/проекту,
+    // не только проценты и длительность.
+    const countCanvas = document.getElementById("dynamics-count-chart");
+    if (countChart) { countChart.destroy(); countChart = null; }
+    if (points.length) {
+      countChart = buildBarChart(countCanvas, {
+        legend: false,
+        labels: points.map(runAxisLabel),
+        datasets: [
+          { label: "тестов", data: points.map((p) => p.tests_total), backgroundColor: cssVar("--skipped"), borderRadius: 4, maxBarThickness: 26 },
         ],
       });
     }
@@ -155,8 +209,46 @@
   }
 
   standSelect.addEventListener("change", loadStats);
-  dynamicsSectionSelect.addEventListener("change", () => {
+  // Открывается по фокусу/клику независимо от текущего значения поля — в
+  // отличие от нативной стрелки input+datalist, которая переставала открывать
+  // список повторным кликом после уже выбранного значения.
+  dynamicsSectionSelect.addEventListener("focus", () => renderSectionSuggestions(dynamicsSectionSelect.value));
+  dynamicsSectionSelect.addEventListener("input", () => renderSectionSuggestions(dynamicsSectionSelect.value));
+  dynamicsSectionSuggestions.addEventListener("mousedown", (ev) => {
+    // mousedown, не click — срабатывает раньше blur поля, иначе список успевал
+    // закрыться (и выбор потеряться) до обработки клика по пункту.
+    const li = ev.target.closest("li[data-value]");
+    if (li) chooseSection(li.dataset.value);
+  });
+  dynamicsSectionSelect.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape") { closeSectionSuggestions(); return; }
+    if (ev.key !== "ArrowDown" && ev.key !== "ArrowUp" && ev.key !== "Enter") return;
+    const items = [...dynamicsSectionSuggestions.querySelectorAll("li")];
+    if (!items.length) return;
+    ev.preventDefault();
+    const activeIndex = items.findIndex((li) => li.classList.contains("active"));
+    if (ev.key === "Enter") {
+      chooseSection(items[activeIndex >= 0 ? activeIndex : 0].dataset.value);
+      return;
+    }
+    const nextIndex = ev.key === "ArrowDown"
+      ? Math.min(activeIndex + 1, items.length - 1)
+      : Math.max(activeIndex - 1, 0);
+    items.forEach((li, i) => li.classList.toggle("active", i === nextIndex));
+    items[nextIndex].scrollIntoView({ block: "nearest" });
+  });
+  dynamicsSectionSelect.addEventListener("blur", () => {
+    // Поле текстовое — можно напечатать то, чего нет в списке (опечатка,
+    // случайный текст), это браузер не блокирует. Приводим к пустому значению
+    // («Весь проект»), а не молча рисуем пустые графики по несуществующему
+    // разделу. mousedown на подсказке обработается раньше этого blur.
+    const typed = dynamicsSectionSelect.value;
+    if (typed && !dynamicsSections.includes(typed)) dynamicsSectionSelect.value = "";
+    closeSectionSuggestions();
     if (currentData) renderDynamicsCharts(currentData);
+  });
+  document.addEventListener("click", (ev) => {
+    if (!dynamicsSectionCombobox.contains(ev.target)) closeSectionSuggestions();
   });
   exportBtn.addEventListener("click", () => {
     const query = standSelect.value ? `?stand=${encodeURIComponent(standSelect.value)}` : "";

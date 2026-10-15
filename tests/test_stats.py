@@ -355,6 +355,33 @@ def test_recalc_dynamics_project_passed_percent_and_duration(stats_project):
     point = next(p for p in result["dynamics_project"] if p["run_id"] == run_id)
     assert point["passed_percent"] == 60.0
     assert point["duration"] == 12.5
+    assert point["tests_total"] == 5
+
+
+def test_recalc_dynamics_project_and_section_points_expose_tests_total(stats_project):
+    """tests_total — третий график «Динамики за 30 дней» (количество тестов по
+    прогонам), см. миссию fix stats.html пустого третьего столбца сетки."""
+    recent = (datetime.now() - timedelta(days=1)).isoformat(timespec="seconds")
+    conn = get_connection()
+    try:
+        run_id = _insert_run(conn, target="all", status="passed", started=recent)
+        # dynamics_project читает runs.counts (не allure-результаты) — тот же
+        # приём, что у test_recalc_dynamics_project_passed_percent_and_duration.
+        conn.execute(
+            "UPDATE runs SET counts = ? WHERE id = ?",
+            (json.dumps({"passed": 1, "failed": 1, "skipped": 0}), run_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    _write_result(run_id, "00", "tests.api.notifications#test_a", "passed")
+    _write_result(run_id, "01", "tests.api.notifications#test_b", "failed")
+
+    result = stats.recalc(PROJECT, STAND)
+    project_point = next(p for p in result["dynamics_project"] if p["run_id"] == run_id)
+    assert project_point["tests_total"] == 2
+    section_point = next(p for p in result["dynamics_by_section"]["api/notifications"] if p["run_id"] == run_id)
+    assert section_point["tests_total"] == 2
 
 
 # ------------------------------------------------------------------ кэш: cache_path/load_cached/latest_finished_run_id

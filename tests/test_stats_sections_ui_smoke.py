@@ -32,10 +32,39 @@ async def test_stats_html_has_sections_table_dynamics_and_top_lists(client):
     assert 'id="sections-rows"' in html
     assert 'id="sections-empty-box"' in html
     assert 'id="dynamics-section-select"' in html
+    assert 'id="dynamics-section-suggestions"' in html
     assert 'id="dynamics-area-chart"' in html
     assert 'id="dynamics-bar-chart"' in html
+    assert 'id="dynamics-count-chart"' in html
     assert 'id="top-slowest-list"' in html
     assert 'id="top-flaky-list"' in html
+
+
+def test_dynamics_section_field_is_custom_combobox_not_select_or_datalist():
+    """Было <select> с ~70-80 option (api/* + ui/*) — ОС рендерит такой список
+    развёрнутым на весь экран (см. скриншот в задаче). input+datalist это
+    чинил, но ловил два своих бага: 1) нативный фильтр подсказок — только по
+    НАЧАЛУ значения option (ввод «buk» не находил «ui/buk»); 2) после выбора
+    значения стрелка datalist переставала открывать список повторным кликом
+    (сообщено как баг). Свой список (<ul><li data-value>) снимает оба
+    ограничения — фильтр includes() по подстроке, открывается по фокусу
+    независимо от текущего значения."""
+    html = (REPO_ROOT / "ui" / "stats.html").read_text()
+    assert '<input type="text" id="dynamics-section-select" placeholder="Весь проект" autocomplete="off">' in html
+    assert '<ul id="dynamics-section-suggestions" class="section-combobox-list" hidden></ul>' in html
+    assert '<select id="dynamics-section-select">' not in html
+    assert "datalist" not in html
+
+
+def test_dynamics_chart_row_has_three_equal_columns_not_two_with_empty_slot():
+    """.charts-grid (repeat(2, 1fr)) с одним-единственным .chart-row внутри
+    оставлял вторую колонку внешней сетки пустой — тот самый пустой блок
+    рядом с двумя графиками на скриншоте. Плюс сам .chart-row теперь три
+    равных графика (было 300px+остаток — пара «узкая+широкая», не подходит
+    трём однотипным графикам по одной шкале прогонов)."""
+    css = (REPO_ROOT / "ui" / "style.css").read_text()
+    assert "#dynamics-card .charts-grid { grid-template-columns: 1fr; }" in css
+    assert "#dynamics-card .chart-row { grid-template-columns: repeat(3, 1fr); }" in css
 
 
 async def test_common_js_sidebar_has_stats_menu_item(client):
@@ -46,6 +75,28 @@ async def test_common_js_sidebar_has_stats_menu_item(client):
     js = resp.text
     assert 'href: "stats.html"' in js
     assert "Статистика" in js
+
+
+def test_stats_js_renders_count_chart():
+    js = (REPO_ROOT / "ui" / "stats.js").read_text()
+    assert 'const countCanvas = document.getElementById("dynamics-count-chart");' in js
+    assert "p.tests_total" in js
+
+
+def test_stats_js_section_combobox_filters_opens_and_validates():
+    js = (REPO_ROOT / "ui" / "stats.js").read_text()
+    # фильтр — includes() по подстроке, не только по началу значения (это и
+    # была часть бага с datalist)
+    assert "dynamicsSections.filter((s) => s.toLowerCase().includes(q))" in js
+    # список открывается по фокусу независимо от текущего значения поля —
+    # в отличие от нативной стрелки datalist, переставшей открываться повторным
+    # кликом после уже выбранного значения (сообщённый баг)
+    assert 'dynamicsSectionSelect.addEventListener("focus", () => renderSectionSuggestions(dynamicsSectionSelect.value));' in js
+    # выбор подсказки — mousedown (раньше blur поля), иначе клик терялся
+    assert 'dynamicsSectionSuggestions.addEventListener("mousedown", (ev) => {' in js
+    # текстовое поле позволяет напечатать то, чего нет в списке — сбрасываем
+    # на «Весь проект», а не молча показываем пустые графики по несуществующему разделу
+    assert 'if (typed && !dynamicsSections.includes(typed)) dynamicsSectionSelect.value = "";' in js
 
 
 def test_common_js_stats_link_needs_project_like_coverage_link():

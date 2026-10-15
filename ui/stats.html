@@ -56,9 +56,10 @@
 
     <div class="card" id="dynamics-card">
       <h2>Динамика за 30 дней</h2>
-      <div class="field">
+      <div class="field section-combobox" id="dynamics-section-combobox">
         <label for="dynamics-section-select">Раздел</label>
-        <select id="dynamics-section-select"><option value="">Весь проект</option></select>
+        <input type="text" id="dynamics-section-select" placeholder="Весь проект" autocomplete="off">
+        <ul id="dynamics-section-suggestions" class="section-combobox-list" hidden></ul>
       </div>
       <div class="charts-grid">
         <div class="chart-row">
@@ -69,6 +70,10 @@
           <div class="chart-box">
             <h3>Длительность по прогонам</h3>
             <div class="chart-canvas-wrap"><canvas id="dynamics-bar-chart"></canvas></div>
+          </div>
+          <div class="chart-box">
+            <h3>Количество тестов по прогонам</h3>
+            <div class="chart-canvas-wrap"><canvas id="dynamics-count-chart"></canvas></div>
           </div>
         </div>
       </div>

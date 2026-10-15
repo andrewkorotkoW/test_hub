@@ -148,7 +148,10 @@ def _project_dynamics_point(run: sqlite3.Row) -> dict:
     skipped = int(counts.get("skipped", 0) or 0)
     total = passed + failed + skipped
     percent = round(passed / total * 100, 1) if total else None
-    return {"run_id": run["id"], "started": run["started"], "passed_percent": percent, "duration": run["duration"]}
+    return {
+        "run_id": run["id"], "started": run["started"], "passed_percent": percent,
+        "duration": run["duration"], "tests_total": total,
+    }
 
 
 def _empty_bucket() -> dict:
@@ -285,6 +288,7 @@ def recalc(project_name: str, stand: str | None) -> dict:
                     "started": run["started"],
                     "passed_percent": summary["passed_percent"],
                     "duration": summary["avg_duration"],
+                    "tests_total": summary["tests_total"],
                 })
 
         top_slowest = []
