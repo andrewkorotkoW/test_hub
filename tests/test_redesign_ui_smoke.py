@@ -261,6 +261,20 @@ def test_action_buttons_use_fixed_color_not_project_accent():
     )
 
 
+def test_coverage_stats_xfail_pages_apply_project_color():
+    """applyProjectColor() раньше вызывался только на project-setup.js (странице проекта) —
+    на «Покрытии»/«Статистике»/Xfail оставался дефолтный синий акцент, цвет проекта «терялся»
+    при переходе между этими соседними в сайдбаре пунктами (сообщено пользователем на
+    скриншотах — после фикса единого цвета кнопок стало особенно заметно). Эти три страницы
+    теперь тоже подтягивают цвет проекта через GET /api/projects и applyProjectColor()."""
+    import pathlib
+
+    for filename in ("coverage.js", "stats.js", "xfail.js"):
+        js = (pathlib.Path(__file__).resolve().parent.parent / "ui" / filename).read_text()
+        assert 'api("/api/projects")' in js, f"{filename}: не найден запрос списка проектов"
+        assert "applyProjectColor(current.color)" in js, f"{filename}: цвет проекта не применяется"
+
+
 # ---------------------------------------------------- дефолт светлой темы без вспышки
 
 @pytest.mark.parametrize("page", ["index.html", "projects.html", "project.html"])

@@ -20,6 +20,14 @@
 (async function () {
   const user = await initPage();
 
+  // Цвет проекта (applyProjectColor в common.js) раньше применялся только на
+  // самой странице проекта — на «Покрытии»/«Статистике»/Xfail оставался дефолтный
+  // синий акцент, из-за чего цвет «терялся» при переходе со страницы проекта.
+  api("/api/projects").then((projects) => {
+    const current = projects.find((p) => p.name === projectName);
+    if (current) applyProjectColor(current.color);
+  }).catch(() => { /* без цвета проекта остаётся дефолтный акцент из style.css */ });
+
   if (user.role === "qa") {
     recalcBtn.hidden = false;
     uploadLabel.hidden = false;

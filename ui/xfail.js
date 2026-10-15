@@ -12,6 +12,14 @@
   document.getElementById("project-title").textContent = `Известные дефекты — ${projectName}`;
   document.getElementById("project-link").href = `project.html?name=${encodeURIComponent(projectName)}`;
 
+  // Цвет проекта (applyProjectColor в common.js) раньше применялся только на
+  // самой странице проекта — на «Покрытии»/«Статистике»/Xfail оставался дефолтный
+  // синий акцент, из-за чего цвет «терялся» при переходе со страницы проекта.
+  api("/api/projects").then((projects) => {
+    const current = projects.find((p) => p.name === projectName);
+    if (current) applyProjectColor(current.color);
+  }).catch(() => { /* без цвета проекта остаётся дефолтный акцент из style.css */ });
+
   const standSelect = document.getElementById("xfail-stand-select");
   const checkAllBtn = document.getElementById("xfail-check-all-btn");
   const toolbarMsg = document.getElementById("xfail-toolbar-msg");
