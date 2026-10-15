@@ -533,7 +533,7 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
 /* ---------- дерево разделов (project.js: sections-tree-logic.js) ---------- */
 .sections-search-field { max-width: 320px; margin-bottom: 12px; }
 .sections-summary-line { font-size: 13px; margin: 2px 0 10px; }
-.sections-preset-btn.active { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.sections-preset-btn.active { background: var(--action-accent); border-color: var(--action-accent); color: var(--action-accent-text); }
 .manual-target-spoiler { margin: 4px 0 12px; }
 .manual-target-spoiler summary { cursor: pointer; color: var(--accent); font-size: 13px; font-weight: 600; }
 .manual-target-spoiler textarea { margin-top: 8px; }
@@ -577,7 +577,7 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
 .run-view-toggle[hidden] { display: none; }
 .run-view-toggle button { border: none; border-radius: 0; margin: 0; padding: 6px 12px; font-size: 12px; }
 .run-view-toggle button + button { border-left: 1px solid var(--border); }
-.run-view-toggle button[aria-current="true"] { background: var(--accent); color: var(--accent-text); }
+.run-view-toggle button[aria-current="true"] { background: var(--action-accent); color: var(--action-accent-text); }
 
 /* ---------- окно прогона · вкладки «Сравнить с…» и «Причины» (docs/missions/
    2026-10-13_run_compare_and_causes.md, раскладка — docs/missions/redesign/
@@ -635,7 +635,7 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
 .rc-traffic button { flex: 1 1 140px; border: 0; background: transparent; color: var(--text); font: inherit; padding: 12px 14px; cursor: pointer; text-align: left; border-right: 1px solid var(--border); display: grid; gap: 3px; }
 .rc-traffic button:last-child { border-right: 0; }
 .rc-traffic button:hover { background: var(--surface-hover); }
-.rc-traffic button[aria-current="true"] { background: color-mix(in srgb, var(--accent) 12%, transparent); box-shadow: inset 0 -2px 0 var(--accent); }
+.rc-traffic button[aria-current="true"] { background: color-mix(in srgb, var(--action-accent) 12%, transparent); box-shadow: inset 0 -2px 0 var(--action-accent); }
 .rc-traffic .v { font-family: var(--font-mono); font-size: 22px; font-weight: 700; line-height: 1; }
 .rc-traffic .v i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; vertical-align: middle; }
 .rc-traffic .n { font-size: 12px; color: var(--text-muted); }
@@ -691,7 +691,7 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
 .run-window-tabs { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 10px; }
 .run-window-tabs button { border: none; border-radius: 0; margin: 0; padding: 6px 12px; font-size: 12px; }
 .run-window-tabs button + button { border-left: 1px solid var(--border); }
-.run-window-tabs button[aria-current="true"] { background: var(--accent); color: var(--accent-text); }
+.run-window-tabs button[aria-current="true"] { background: var(--action-accent); color: var(--action-accent-text); }
 
 .frame-shot {
   border: 1.5px dashed var(--border);
@@ -951,7 +951,7 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 /* ---------- superadmin tabs / inline confirm / json cell ---------- */
 .tabs { display: flex; gap: 6px; flex-wrap: wrap; }
 .tabs button { padding: 6px 12px; font-size: 13px; }
-.tabs button.active { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.tabs button.active { background: var(--action-accent); border-color: var(--action-accent); color: var(--action-accent-text); }
 .confirm-inline { display: inline-flex; align-items: center; gap: 6px; }
 .confirm-inline span { font-size: 12px; color: var(--text-muted); }
 .json-cell details summary { cursor: pointer; color: var(--accent); font-size: 12px; }
@@ -1480,7 +1480,7 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 .chart-tree-layout-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
 .chart-tree-layout-toggle button { border: none; border-radius: 0; margin: 0; }
 .chart-tree-layout-toggle button + button { border-left: 1px solid var(--border); }
-.chart-tree-layout-toggle button.active { background: var(--accent); color: var(--accent-text); }
+.chart-tree-layout-toggle button.active { background: var(--action-accent); color: var(--action-accent-text); }
 .chart-tree-controls button#tree-failed-only.active { background: var(--failed); border-color: var(--failed); color: #fff; }
 .chart-tree-hint { margin: 6px 0 0; font-size: 11px; }
 .chart-tree-body {
@@ -1663,7 +1663,7 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 /* события Sentry по часам (sentryHourlyBarsHtml) */
 .sentry-period { display: inline-flex; gap: 2px; background: var(--surface-hover); border-radius: var(--radius); padding: 3px; margin-left: auto; }
 .sentry-period button { border: 0; background: transparent; color: var(--text-muted); font: inherit; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 6px; cursor: pointer; }
-.sentry-period button[aria-current="true"] { background: var(--accent); color: #fff; }
+.sentry-period button[aria-current="true"] { background: var(--action-accent); color: var(--action-accent-text); }
 .sentry-hourly-wrap { margin: 2px 0 12px; }
 .sentry-hourly { width: 100%; height: 96px; display: block; }
 .sentry-hourly .chart-axis { font-size: 10px; fill: var(--text-muted); font-family: var(--font-mono); }
@@ -1878,7 +1878,7 @@ a.sentry-row:hover { background: var(--surface-hover); }
 .tc-view-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
 .tc-view-toggle button { border: none; border-radius: 0; margin: 0; padding: 6px 12px; font-size: 12px; }
 .tc-view-toggle button + button { border-left: 1px solid var(--border); }
-.tc-view-toggle button[aria-current="true"] { background: var(--accent); color: var(--accent-text); }
+.tc-view-toggle button[aria-current="true"] { background: var(--action-accent); color: var(--action-accent-text); }
 
 .tc-filters-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
 .tc-filters-bar .tc-search { flex: 1 1 240px; max-width: 360px; }

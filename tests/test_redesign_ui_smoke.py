@@ -223,6 +223,29 @@ def test_action_buttons_use_fixed_color_not_project_accent():
     assert "--action-accent-hover: #1d4ed8;" in css
     assert "--action-accent-text: #ffffff;" in css
 
+    # то же самое для остальных кнопок-переключателей (сегментированные контролы) — пресеты
+    # запуска, период Sentry, вкладки окна прогона и т.п. попросил владелец тоже унифицировать
+    import re
+
+    selectors = [
+        r'\.sections-preset-btn\.active',
+        r'\.run-view-toggle button\[aria-current="true"\]',
+        r'\.rc-traffic button\[aria-current="true"\]',
+        r'\.run-window-tabs button\[aria-current="true"\]',
+        r'\.tabs button\.active',
+        r'\.chart-tree-layout-toggle button\.active',
+        r'\.sentry-period button\[aria-current="true"\]',
+        r'\.tc-view-toggle button\[aria-current="true"\]',
+    ]
+    for selector in selectors:
+        match = re.search(selector + r" \{([^}]*)\}", css)
+        assert match, f"не найдено правило {selector} в ui/style.css"
+        body = match.group(1)
+        assert "--action-accent" in body, f"{selector} не использует --action-accent"
+        assert "var(--accent)" not in body and "var(--accent-text)" not in body, (
+            f"{selector} всё ещё красится в цвет проекта (var(--accent))"
+        )
+
     assert (
         "button.primary {\n  background: var(--action-accent);\n"
         "  border-color: var(--action-accent);\n  color: var(--action-accent-text);\n}"
