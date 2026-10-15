@@ -208,6 +208,36 @@ async def test_project_html_coverage_and_xfail_links_are_nav_buttons(client):
     assert re.search(r'<a[^>]+id="xfail-link"[^>]+class="nav-button"', html)
 
 
+def test_action_buttons_use_fixed_color_not_project_accent():
+    """У каждого проекта свой цвет (applyProjectColor() в common.js перекрашивает
+    --accent/--accent-hover/--accent-text под цвет проекта — логотип, активный пункт
+    сайдбара, графики дашборда). Кнопки действий (button.primary, .nav-button — «Покрытие»,
+    «Известные дефекты», «Сохранить» и т.п.) раньше тоже красились в цвет проекта, из-за
+    чего визуально «выбивались» между проектами (сообщено пользователем на скриншотах
+    VSHGU/Courseditor_Learn). Вынесены в отдельные токены --action-accent*, которые
+    applyProjectColor() не трогает — остаются одного цвета независимо от проекта."""
+    import pathlib
+
+    css = (pathlib.Path(__file__).resolve().parent.parent / "ui" / "style.css").read_text()
+    assert "--action-accent: #2563eb;" in css
+    assert "--action-accent-hover: #1d4ed8;" in css
+    assert "--action-accent-text: #ffffff;" in css
+
+    assert (
+        "button.primary {\n  background: var(--action-accent);\n"
+        "  border-color: var(--action-accent);\n  color: var(--action-accent-text);\n}"
+    ) in css
+    assert ".nav-button.primary { background: var(--action-accent); border-color: var(--action-accent); color: var(--action-accent-text); }" in css
+
+    common_js = (pathlib.Path(__file__).resolve().parent.parent / "ui" / "common.js").read_text()
+    match = re.search(r"function applyProjectColor\(color\)\s*\{(.*?)\n\}", common_js, re.DOTALL)
+    assert match, "не найдена applyProjectColor() в ui/common.js"
+    assert "--action-accent" not in match.group(1), (
+        "applyProjectColor() не должна трогать --action-accent* — иначе кнопки действий "
+        "снова начнут перекрашиваться под цвет проекта"
+    )
+
+
 # ---------------------------------------------------- дефолт светлой темы без вспышки
 
 @pytest.mark.parametrize("page", ["index.html", "projects.html", "project.html"])

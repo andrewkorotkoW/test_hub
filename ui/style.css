@@ -6,6 +6,13 @@
      applyProjectColor() в common.js пересчитывает его по яркости цвета проекта,
      чтобы текст кнопок оставался читаемым на светлых акцентах (голубой/оранжевый) */
   --accent-text: #ffffff;
+  /* Кнопки действий (Покрытие/Известные дефекты/Сохранить и т.п.) всегда одного
+     цвета независимо от проекта — applyProjectColor() эти токены не трогает,
+     в отличие от --accent/--accent-hover/--accent-text выше (логотип, активный
+     пункт сайдбара, графики дашборда по-прежнему перекрашиваются под проект). */
+  --action-accent: #2563eb;
+  --action-accent-hover: #1d4ed8;
+  --action-accent-text: #ffffff;
   --danger: #dc2626;
   --danger-hover: #b91c1c;
   --passed: #16a34a;
@@ -119,11 +126,11 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 button:disabled:hover { border-color: var(--border); color: var(--text); }
 
 button.primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-text);
+  background: var(--action-accent);
+  border-color: var(--action-accent);
+  color: var(--action-accent-text);
 }
-button.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); color: var(--accent-text); }
+button.primary:hover { background: var(--action-accent-hover); border-color: var(--action-accent-hover); color: var(--action-accent-text); }
 
 button.danger {
   background: #fff;
@@ -434,7 +441,7 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
   display: inline-flex;
   align-items: center;
   padding: 8px 14px;
-  border: 1px solid var(--accent);
+  border: 1px solid var(--action-accent);
   border-radius: var(--radius);
   background: var(--surface);
   color: var(--text);
@@ -444,8 +451,8 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
   text-decoration: none;
 }
 .nav-button:hover { background: var(--surface-hover); color: var(--text); text-decoration: none; }
-.nav-button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
-.nav-button.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); color: var(--accent-text); }
+.nav-button.primary { background: var(--action-accent); border-color: var(--action-accent); color: var(--action-accent-text); }
+.nav-button.primary:hover { background: var(--action-accent-hover); border-color: var(--action-accent-hover); color: var(--action-accent-text); }
 
 /* вариант A «Панель» (DESIGN.md Layout): 12 колонок, карточки одной высоты в ряду —
    на проектах это 3 в ряд (см. docs/missions/redesign/v2/mockups.html #sec-projects-a) */
