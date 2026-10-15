@@ -167,6 +167,9 @@ label { display: inline-flex; align-items: center; gap: 6px; }
 }
 .section-combobox-list li { padding: 6px 12px; font-size: 13px; cursor: pointer; }
 .section-combobox-list li:hover, .section-combobox-list li.active { background: var(--accent); color: var(--accent-text); }
+/* Уже выбранный раздел остаётся в списке (не исчезает) — жирным, чтобы было
+   видно отмеченное, не глядя на чипы выше; повторный клик снимает выбор. */
+.section-combobox-list li.selected { font-weight: 700; }
 /* Выбранные разделы — чипы над полем ввода (множественный выбор: можно
    добавить ещё раздел к уже выбранным, не заменяя их — см. ui/stats.js).
    Без max-width родителя — занимают всю ширину карточки, равномерно в ряд,

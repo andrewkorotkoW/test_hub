@@ -116,14 +116,22 @@
 
   function renderSectionSuggestions(query) {
     const q = query.trim().toLowerCase();
-    const candidates = ["", ...dynamicsSections].filter((s) => !selectedSections.includes(s));
-    const matches = (q ? candidates.filter((s) => sectionLabel(s).toLowerCase().includes(q)) : candidates).slice(0, 30);
-    if (!matches.length) {
+    const candidates = ["", ...dynamicsSections];
+    const filtered = q ? candidates.filter((s) => sectionLabel(s).toLowerCase().includes(q)) : candidates;
+    // Уже выбранные разделы остаются в списке (не вычитаются) — жирным, чтобы
+    // было видно, что уже отмечено, не прокручивая чипы выше. Клик по такому
+    // пункту снимает выбор (toggleSection). Обрезка до 30 — та же, что была,
+    // но не должна прятать уже выбранный раздел, если он попал за пределы среза.
+    const limited = filtered.filter((s, i) => i < 30 || selectedSections.includes(s));
+    if (!limited.length) {
       dynamicsSectionSuggestions.hidden = true;
       dynamicsSectionSuggestions.innerHTML = "";
       return;
     }
-    dynamicsSectionSuggestions.innerHTML = matches.map((s) => `<li data-value="${escapeHtml(s)}">${escapeHtml(sectionLabel(s))}</li>`).join("");
+    dynamicsSectionSuggestions.innerHTML = limited.map((s) => {
+      const selected = selectedSections.includes(s);
+      return `<li data-value="${escapeHtml(s)}"${selected ? ' class="selected"' : ""}>${escapeHtml(sectionLabel(s))}</li>`;
+    }).join("");
     dynamicsSectionSuggestions.hidden = false;
   }
 
@@ -151,6 +159,14 @@
     renderChips();
     if (!dynamicsSectionSuggestions.hidden) renderSectionSuggestions(dynamicsSectionSelect.value);
     if (currentData) renderDynamicsCharts(currentData);
+  }
+
+  function toggleSection(value) {
+    // Пункт списка подсказок теперь не исчезает после выбора (остаётся
+    // жирным) — повторный клик по уже выбранному разделу должен снимать
+    // выбор, а не быть мёртвым кликом.
+    if (selectedSections.includes(value)) removeSection(value);
+    else chooseSection(value);
   }
 
   // Общая шкала прогонов для всех выбранных серий сразу: разные разделы
@@ -304,7 +320,7 @@
     // chooseSection только что перерисовал (список был виден, но пустой).
     ev.preventDefault();
     const li = ev.target.closest("li[data-value]");
-    if (li) chooseSection(li.dataset.value);
+    if (li) toggleSection(li.dataset.value);
   });
   dynamicsSectionSelect.addEventListener("keydown", (ev) => {
     if (ev.key === "Escape") { closeSectionSuggestions(); return; }
@@ -314,7 +330,7 @@
     ev.preventDefault();
     const activeIndex = items.findIndex((li) => li.classList.contains("active"));
     if (ev.key === "Enter") {
-      chooseSection(items[activeIndex >= 0 ? activeIndex : 0].dataset.value);
+      toggleSection(items[activeIndex >= 0 ? activeIndex : 0].dataset.value);
       return;
     }
     const nextIndex = ev.key === "ArrowDown"

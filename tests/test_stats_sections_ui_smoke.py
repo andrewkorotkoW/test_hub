@@ -143,7 +143,27 @@ def test_stats_js_suggestion_mousedown_prevents_default_to_keep_list_open():
     assert match, "не найден обработчик mousedown подсказок в ui/stats.js"
     body = match.group(1)
     assert "ev.preventDefault();" in body
-    assert body.index("ev.preventDefault();") < body.index("chooseSection(li.dataset.value);")
+    assert body.index("ev.preventDefault();") < body.index("toggleSection(li.dataset.value);")
+
+
+def test_stats_js_selected_sections_stay_in_list_bold_and_toggle_off():
+    """Раньше выбранный раздел вычитался из подсказок (candidates.filter(s =>
+    !selectedSections.includes(s))) — после выбора он пропадал из списка, не
+    видно, что уже отмечено, не глядя на чипы выше. Теперь список не
+    фильтрует — помечает выбранные классом .selected (жирным в style.css),
+    а клик/Enter по уже выбранному через toggleSection() снимает выбор, а не
+    остаётся мёртвым кликом по кнопке, которая и так не должна дублировать."""
+    js = (REPO_ROOT / "ui" / "stats.js").read_text()
+    assert "const candidates = [\"\", ...dynamicsSections];" in js
+    assert "filter((s) => !selectedSections.includes(s))" not in js
+    assert 'selected ? \' class="selected"\' : ""' in js
+    assert "function toggleSection(value) {" in js
+    assert "if (selectedSections.includes(value)) removeSection(value);" in js
+    assert "else chooseSection(value);" in js
+    assert "if (li) toggleSection(li.dataset.value);" in js
+    assert "toggleSection(items[activeIndex >= 0 ? activeIndex : 0].dataset.value);" in js
+    css = (REPO_ROOT / "ui" / "style.css").read_text()
+    assert ".section-combobox-list li.selected { font-weight: 700; }" in css
 
 
 def test_stats_js_outside_click_uses_composed_path_not_contains():
