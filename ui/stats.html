@@ -58,7 +58,10 @@
       <h2>Динамика за 30 дней</h2>
       <div class="field section-combobox" id="dynamics-section-combobox">
         <label for="dynamics-section-select">Раздел</label>
-        <input type="text" id="dynamics-section-select" placeholder="Весь проект" autocomplete="off">
+        <div class="section-combobox-input-wrap">
+          <input type="text" id="dynamics-section-select" placeholder="Весь проект" autocomplete="off">
+          <span class="section-combobox-arrow" aria-hidden="true">▾</span>
+        </div>
         <ul id="dynamics-section-suggestions" class="section-combobox-list" hidden></ul>
       </div>
       <div class="charts-grid">

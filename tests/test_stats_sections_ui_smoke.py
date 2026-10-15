@@ -56,6 +56,17 @@ def test_dynamics_section_field_is_custom_combobox_not_select_or_datalist():
     assert "datalist" not in html
 
 
+def test_dynamics_section_combobox_has_dropdown_arrow_hint():
+    """У select/datalist была своя стрелка — визуальный намёк «это список».
+    Простой <input> такого намёка не даёт сам по себе — добавлена декоративная
+    стрелка (pointer-events: none, клик проходит в input под ней)."""
+    html = (REPO_ROOT / "ui" / "stats.html").read_text()
+    assert '<span class="section-combobox-arrow" aria-hidden="true">▾</span>' in html
+    css = (REPO_ROOT / "ui" / "style.css").read_text()
+    assert ".section-combobox-arrow {" in css
+    assert "pointer-events: none;" in css
+
+
 def test_dynamics_chart_row_has_three_equal_columns_not_two_with_empty_slot():
     """.charts-grid (repeat(2, 1fr)) с одним-единственным .chart-row внутри
     оставлял вторую колонку внешней сетки пустой — тот самый пустой блок

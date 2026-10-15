@@ -146,6 +146,15 @@ label { display: inline-flex; align-items: center; gap: 6px; }
    input+datalist (фильтр только по началу значения, кнопка-стрелка после
    выбора переставала открывать список повторным кликом — см. фикс). */
 .section-combobox { position: relative; max-width: 360px; }
+/* У select/datalist была своя стрелка — намёк «это список, не обычное текстовое
+   поле». У простого <input> такого намёка нет, добавляем свою — чисто
+   декоративную (pointer-events: none, клик проходит сквозь неё в input). */
+.section-combobox-input-wrap { position: relative; }
+.section-combobox input { padding-right: 28px; }
+.section-combobox-arrow {
+  position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+  pointer-events: none; color: var(--text-muted); font-size: 11px;
+}
 .section-combobox-list {
   position: absolute; top: 100%; left: 0; right: 0; z-index: 5;
   margin: 2px 0 0; padding: 4px 0; max-height: 240px; overflow-y: auto;
