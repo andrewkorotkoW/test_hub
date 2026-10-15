@@ -145,18 +145,22 @@ label { display: inline-flex; align-items: center; gap: 6px; }
    <select> (список из ~70-80 option ОС рендерит на весь экран) и вместо
    input+datalist (фильтр только по началу значения, кнопка-стрелка после
    выбора переставала открывать список повторным кликом — см. фикс). */
-.section-combobox { position: relative; max-width: 360px; }
+.section-combobox { position: relative; }
+/* Ширина 360px — только у самого поля ввода и подсказок под ним. Чипы
+   выбранных разделов — ниже, в .section-chips — специально БЕЗ max-width:
+   при большом числе выбранных разделов им нужна вся ширина карточки, иначе
+   они уходят узкой колонкой вниз и не видно одним взглядом, что уже выбрано. */
 /* У select/datalist была своя стрелка — намёк «это список, не обычное текстовое
    поле». У простого <input> такого намёка нет, добавляем свою — чисто
    декоративную (pointer-events: none, клик проходит сквозь неё в input). */
-.section-combobox-input-wrap { position: relative; }
+.section-combobox-input-wrap { position: relative; max-width: 360px; }
 .section-combobox input { padding-right: 28px; }
 .section-combobox-arrow {
   position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
   pointer-events: none; color: var(--text-muted); font-size: 11px;
 }
 .section-combobox-list {
-  position: absolute; top: 100%; left: 0; right: 0; z-index: 5;
+  position: absolute; top: 100%; left: 0; width: 100%; max-width: 360px; z-index: 5;
   margin: 2px 0 0; padding: 4px 0; max-height: 240px; overflow-y: auto;
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
   box-shadow: 0 8px 24px rgba(0, 0, 0, .12); list-style: none;
@@ -164,7 +168,9 @@ label { display: inline-flex; align-items: center; gap: 6px; }
 .section-combobox-list li { padding: 6px 12px; font-size: 13px; cursor: pointer; }
 .section-combobox-list li:hover, .section-combobox-list li.active { background: var(--accent); color: var(--accent-text); }
 /* Выбранные разделы — чипы над полем ввода (множественный выбор: можно
-   добавить ещё раздел к уже выбранным, не заменяя их — см. ui/stats.js). */
+   добавить ещё раздел к уже выбранным, не заменяя их — см. ui/stats.js).
+   Без max-width родителя — занимают всю ширину карточки, равномерно в ряд,
+   а не узкой колонкой с пустым местом справа. */
 .section-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .section-chips:not(:empty) { margin-bottom: 6px; }
 .section-chip {
