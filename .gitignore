@@ -15,4 +15,6 @@ workspace/stats/
 workspace/sections/
 workspace/product_map/
 workspace/avatars/
+workspace/frames/
+workspace/testcases/
 demo/.state/
