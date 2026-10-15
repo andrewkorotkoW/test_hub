@@ -42,7 +42,12 @@
 
   function stateBadgeHtml(item) {
     if (item.state === "xpass") {
-      return `<span class="badge xpass-state">xpass</span><span class="xfail-hint">можно снять xfail</span>`;
+      // .xfail-state-cell — обёртка нужна, чтобы подпись «можно снять xfail» не
+      // участвовала в вертикальном центрировании ячейки (td по умолчанию
+      // vertical-align: middle по высоте ВСЕГО содержимого) — иначе сам бейдж
+      // xpass оказывался выше центра строки относительно соседних однострочных
+      // ячеек («Последний прогон» и т.п.), см. скриншот с размеченным сдвигом.
+      return `<span class="xfail-state-cell"><span class="badge xpass-state">xpass</span><span class="xfail-hint">можно снять xfail</span></span>`;
     }
     return `<span class="badge xfail-state">xfail</span>`;
   }

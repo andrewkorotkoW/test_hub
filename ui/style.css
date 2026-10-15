@@ -850,7 +850,16 @@ tbody tr.flaky-high { background: rgba(220, 38, 38, 0.08); }
 .badge.xfail-state { background: var(--xfail); }
 .badge.xpass-state { background: var(--passed); }
 /* было margin-top: 2px — подпись почти прилипала к бейджу xpass, визуально сливались */
-.xfail-hint { font-size: 11px; color: var(--text-muted); display: block; margin-top: 6px; }
+/* .xfail-state-cell: position: relative + подпись position: absolute — подпись
+   не в нормальном потоке, поэтому не растягивает «высоту контента», по которой
+   td центрирует всё по вертикали (vertical-align: middle по умолчанию у
+   table/td). Без этого бейдж xpass съезжал выше центра строки относительно
+   однострочных соседних ячеек («Последний прогон» и т.п.). */
+.xfail-state-cell { display: inline-block; position: relative; }
+.xfail-hint {
+  position: absolute; left: 0; top: 100%;
+  font-size: 11px; color: var(--text-muted); white-space: nowrap; margin-top: 6px;
+}
 /* min-width: 160px убран — с table-layout: fixed (xfail.html) эта колонка сама
    по себе ýже 160px при обычных ширинах окна, и жёсткий min-width заставлял
    поле вылезать за свою ячейку и расталкивать всю таблицу шире контейнера. */
