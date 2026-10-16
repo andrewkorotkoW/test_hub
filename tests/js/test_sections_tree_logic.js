@@ -156,6 +156,15 @@ test("presetLeafTargets: неизвестный пресет — пустой с
   assert.deepStrictEqual(Logic.presetLeafTargets(sampleTree(), "e2e-does-not-match-kind-name"), []);
 });
 
+test("presetLeafTargets('regression') — все файлы, кроме области 'buk' (в api и ui)", function () {
+  var targets = Logic.presetLeafTargets(sampleTree(), "regression");
+  assert.deepStrictEqual(targets, [
+    "tests/api/notifications/test_list.py",
+    "tests/api/notifications/test_get.py",
+    "tests/e2e/test_checkout.py",
+  ]);
+});
+
 // ------------------------------------------------------------------ collectTargets
 
 test("collectTargets: один файл из области с несколькими файлами — путь именно этого файла", function () {

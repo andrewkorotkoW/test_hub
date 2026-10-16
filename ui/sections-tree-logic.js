@@ -52,13 +52,26 @@
     return targets;
   }
 
-  // Пресеты «API»/«UI»/«всё»: возвращают набор target'ов файлов, которые форма
-  // запуска должна отметить в дереве (см. project.js — после этого дерево
-  // перерисовывается с уже выставленными чекбоксами, пользователь может донастроить
-  // выбор вручную). «Smoke» здесь не участвует — это существующий маркер pytest
-  // (markerSelect в project.js), а не раздел файловой системы.
+  // Области (area = имя подпапки tests/api|ui/<area>), которые пресет «Regression»
+  // исключает из «всего функционала» — внешние интеграции и зависящее от них
+  // (ai_chat, CAS, БУК, MTS Link, P2P, хелпдеск/тикеты, LRS): на новом/неполном
+  // стенде они обычно не настроены и массово валятся, забивая прогон вместо
+  // проверки основного функционала (см. разведку 16.10.2026, стенд «stand»).
+  var REGRESSION_EXCLUDED_AREAS = ["ai_chat", "cas", "buk", "mts_link", "p2p", "helpdesk", "tickets", "lrs"];
+
+  function isRegressionExcluded(target) {
+    var parts = String(target || "").split("/");
+    return parts.some(function (part) { return REGRESSION_EXCLUDED_AREAS.indexOf(part) !== -1; });
+  }
+
+  // Пресеты «API»/«UI»/«всё»/«Regression»: возвращают набор target'ов файлов,
+  // которые форма запуска должна отметить в дереве (см. project.js — после этого
+  // дерево перерисовывается с уже выставленными чекбоксами, пользователь может
+  // донастроить выбор вручную). «Smoke» здесь не участвует — это существующий
+  // маркер pytest (markerSelect в project.js), а не раздел файловой системы.
   function presetLeafTargets(data, preset) {
     if (preset === "all") return allLeafTargets(data);
+    if (preset === "regression") return allLeafTargets(data).filter(function (t) { return !isRegressionExcluded(t); });
     var targets = [];
     (data.kinds || []).forEach(function (kindNode) {
       if (kindNode.kind !== preset) return;

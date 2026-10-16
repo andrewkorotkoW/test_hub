@@ -43,17 +43,21 @@ async def test_project_html_has_sections_tree_blocks_for_schedules_tab(client):
         assert needle in html
 
 
-def test_run_tab_has_five_presets_including_smoke_and_e2e():
+def test_run_tab_has_six_presets_including_smoke_e2e_and_regression():
     """E2E — тоже пресет-маркер (как Smoke), но не «отметить всё дерево»:
     псевдо-раздел tests/e2e уже содержит ровно размеченные @pytest.mark.e2e
     тесты (включая лежащие в tests/ui/*, см. app.core.sections
     ._e2e_virtual_files), поэтому кнопка ведёт себя как API/UI — раскрывает
-    и отмечает только этот раздел, плюс подстраховочно ставит маркер e2e."""
+    и отмечает только этот раздел, плюс подстраховочно ставит маркер e2e.
+    Regression — весь функционал кроме внешних интеграций (см.
+    SectionsTreeLogic.presetLeafTargets/REGRESSION_EXCLUDED_AREAS), без
+    отдельного маркера — сам маркер regression зарегистрирован в pytest.ini
+    auto_tests_vshgu, но ни на один тест не навешан."""
     m = re.search(r'<div class="run-buttons" id="sections-presets-row">(.*?)</div>', PROJECT_HTML, re.DOTALL)
     assert m, "не найден блок пресетов вкладки «Запуск»"
     body = m.group(1)
     presets = re.findall(r'data-preset="(\w+)"', body)
-    assert presets == ["api", "ui", "smoke", "e2e", "all"]
+    assert presets == ["api", "ui", "smoke", "e2e", "all", "regression"]
 
 
 def test_marker_select_lists_e2e_on_run_and_schedule_forms():
