@@ -266,3 +266,21 @@ def test_mobile_preset_button_checks_mobile_checkbox():
     assert 'presetBtn.dataset.preset === "mobile"' in body
     assert "mobileCheckbox.checked = true;" in body
     assert 'mobileCheckbox.dispatchEvent(new Event("change"));' in body
+
+
+# ------------------------------------------------------------------ подсказка «Эфир» для схлопнутых целей
+
+def test_tests_count_by_target_covers_area_and_kind_targets_not_only_files():
+    """SectionsTreeLogic.collectTargets схлопывает полностью отмеченный раздел/область
+    в путь папки ("tests/api"/"tests/api/notifications") — любой пресет, выбирающий
+    раздел/область целиком (API/UI/E2E/Всё/Regression/Mobile), может прислать такую
+    цель в RunLiveLogic.countTargetTests. Без записи для неё в testsCountByTarget()
+    схлопнутая цель считалась бы как «1 тест» (фоллбек countTargetTests), занижая
+    подсказку «Эфир доступен для прогонов до N тестов, выбрано …» — баг, замеченный
+    владельцем на пресете Regression 16.10.2026 (показывало 56 вместо реального числа)."""
+    m = re.search(r"function testsCountByTarget\(\) \{(.*?)\n  \}", PROJECT_SECTIONS_PICKER_JS, re.DOTALL)
+    assert m, "не найдена testsCountByTarget()"
+    body = m.group(1)
+    assert "map[f.target] = f.tests_count;" in body, "файловый уровень карты пропал"
+    assert "if (a.target) map[a.target] = areaTotal;" in body, "уровень области (area.target) не считается"
+    assert "if (k.target) map[k.target] = kindTotal;" in body, "уровень раздела (kind.target) не считается"

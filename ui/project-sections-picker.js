@@ -353,12 +353,27 @@
   // target -> tests_count по уже загруженному дереву разделов (GET .../sections) —
   // тот же источник, что у BuildPageLogic.totalTestsCount, только по отдельным файлам,
   // а не по разделу целиком (см. RunLiveLogic.countTargetTests).
+  // Карта tests_count по target'у на ВСЕХ уровнях дерева, не только по файлам:
+  // SectionsTreeLogic.collectTargets схлопывает полностью отмеченный раздел/область
+  // в их путь папки ("tests/api"/"tests/api/notifications") — без kindNode.target
+  // и area.target в этой карте такие схлопнутые цели не находились бы и считались
+  // бы как «1 тест» в RunLiveLogic.countTargetTests (использует this же map),
+  // занижая подсказку «Эфир» для любого пресета, выбирающего раздел/область
+  // целиком (API/UI/E2E/Всё/Regression/Mobile — не только файлами поодиночке).
   function testsCountByTarget() {
     const map = {};
     (sectionsDataCache.kinds || []).forEach((k) => {
+      let kindTotal = 0;
       (k.areas || []).forEach((a) => {
-        (a.files || []).forEach((f) => { map[f.target] = f.tests_count; });
+        let areaTotal = 0;
+        (a.files || []).forEach((f) => {
+          map[f.target] = f.tests_count;
+          areaTotal += f.tests_count;
+        });
+        if (a.target) map[a.target] = areaTotal;
+        kindTotal += areaTotal;
       });
+      if (k.target) map[k.target] = kindTotal;
     });
     return map;
   }
