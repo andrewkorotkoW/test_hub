@@ -64,14 +64,30 @@
     return parts.some(function (part) { return REGRESSION_EXCLUDED_AREAS.indexOf(part) !== -1; });
   }
 
-  // Пресеты «API»/«UI»/«всё»/«Regression»: возвращают набор target'ов файлов,
-  // которые форма запуска должна отметить в дереве (см. project.js — после этого
-  // дерево перерисовывается с уже выставленными чекбоксами, пользователь может
-  // донастроить выбор вручную). «Smoke» здесь не участвует — это существующий
-  // маркер pytest (markerSelect в project.js), а не раздел файловой системы.
+  // Файлы области area (area = имя подпапки tests/<kind>/<area>) по всем видам —
+  // для «Mobile» используется area "mobile" (сейчас только tests/ui/mobile, но
+  // ищем по всем kind на случай появления tests/api/mobile).
+  function areaLeafTargets(data, areaName) {
+    var targets = [];
+    (data.kinds || []).forEach(function (kindNode) {
+      (kindNode.areas || []).forEach(function (area) {
+        if (area.area !== areaName) return;
+        (area.files || []).forEach(function (file) { targets.push(file.target); });
+      });
+    });
+    return targets;
+  }
+
+  // Пресеты «API»/«UI»/«всё»/«Regression»/«Mobile»: возвращают набор target'ов
+  // файлов, которые форма запуска должна отметить в дереве (см. project.js —
+  // после этого дерево перерисовывается с уже выставленными чекбоксами,
+  // пользователь может донастроить выбор вручную). «Smoke» здесь не участвует —
+  // это существующий маркер pytest (markerSelect в project.js), а не раздел
+  // файловой системы.
   function presetLeafTargets(data, preset) {
     if (preset === "all") return allLeafTargets(data);
     if (preset === "regression") return allLeafTargets(data).filter(function (t) { return !isRegressionExcluded(t); });
+    if (preset === "mobile") return areaLeafTargets(data, "mobile");
     var targets = [];
     (data.kinds || []).forEach(function (kindNode) {
       if (kindNode.kind !== preset) return;

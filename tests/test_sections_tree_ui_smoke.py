@@ -43,7 +43,7 @@ async def test_project_html_has_sections_tree_blocks_for_schedules_tab(client):
         assert needle in html
 
 
-def test_run_tab_has_six_presets_including_smoke_e2e_and_regression():
+def test_run_tab_has_seven_presets_including_smoke_e2e_regression_and_mobile():
     """E2E — тоже пресет-маркер (как Smoke), но не «отметить всё дерево»:
     псевдо-раздел tests/e2e уже содержит ровно размеченные @pytest.mark.e2e
     тесты (включая лежащие в tests/ui/*, см. app.core.sections
@@ -52,12 +52,14 @@ def test_run_tab_has_six_presets_including_smoke_e2e_and_regression():
     Regression — весь функционал кроме внешних интеграций (см.
     SectionsTreeLogic.presetLeafTargets/REGRESSION_EXCLUDED_AREAS), без
     отдельного маркера — сам маркер regression зарегистрирован в pytest.ini
-    auto_tests_vshgu, но ни на один тест не навешан."""
+    auto_tests_vshgu, но ни на один тест не навешан. Mobile — только область
+    tests/ui/mobile, заодно включает #mobile-checkbox (см.
+    test_mobile_preset_button_checks_mobile_checkbox)."""
     m = re.search(r'<div class="run-buttons" id="sections-presets-row">(.*?)</div>', PROJECT_HTML, re.DOTALL)
     assert m, "не найден блок пресетов вкладки «Запуск»"
     body = m.group(1)
     presets = re.findall(r'data-preset="(\w+)"', body)
-    assert presets == ["api", "ui", "smoke", "e2e", "all", "regression"]
+    assert presets == ["api", "ui", "smoke", "e2e", "all", "regression", "mobile"]
 
 
 def test_marker_select_lists_e2e_on_run_and_schedule_forms():
@@ -247,3 +249,20 @@ async def test_both_tabs_load_sections_data_into_both_pickers(client):
     body = m.group(1)
     assert "sectionsPicker.setData(data);" in body
     assert "schedSectionsPicker.setData(data);" in body
+
+
+# ------------------------------------------------------------------ пресет «Mobile»
+
+def test_mobile_preset_button_checks_mobile_checkbox():
+    """Клик по «Mobile» включает #mobile-checkbox (если ещё не включён) — иначе
+    выбранные им tests/ui/mobile/* гоняются в обычном десктопном viewport вместо
+    вёрстки Pixel 7, что бессмысленно (см. data-preset="mobile" в project.html)."""
+    m = re.search(
+        r'sectionsPresetsRow\.addEventListener\("click", \(ev\) => \{(.*?)\n  \}\);',
+        PROJECT_SECTIONS_PICKER_JS, re.DOTALL,
+    )
+    assert m, "не найден обработчик клика по пресетам вкладки «Запуск»"
+    body = m.group(1)
+    assert 'presetBtn.dataset.preset === "mobile"' in body
+    assert "mobileCheckbox.checked = true;" in body
+    assert 'mobileCheckbox.dispatchEvent(new Event("change"));' in body

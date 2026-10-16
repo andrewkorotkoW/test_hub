@@ -381,7 +381,15 @@
     if (ev.target.matches("input.tree-check")) updateLiveCheckboxState();
   });
   sectionsPresetsRow.addEventListener("click", (ev) => {
-    if (ev.target.closest(".sections-preset-btn")) updateLiveCheckboxState();
+    const presetBtn = ev.target.closest(".sections-preset-btn");
+    if (!presetBtn) return;
+    // Пресет «Mobile» сам включает вёрстку Pixel 7 — без неё выбранные им
+    // tests/ui/mobile/* гоняются в обычном десктопном viewport, что бессмысленно.
+    if (presetBtn.dataset.preset === "mobile" && !mobileCheckbox.checked) {
+      mobileCheckbox.checked = true;
+      mobileCheckbox.dispatchEvent(new Event("change"));
+    }
+    updateLiveCheckboxState();
   });
 
   // Галочка «Мобильный» (docs/missions/2026-10-06_mobile_frame.md, п.2) включает

@@ -165,6 +165,44 @@ test("presetLeafTargets('regression') — все файлы, кроме обла
   ]);
 });
 
+test("presetLeafTargets('mobile') — только файлы области 'mobile' (в любом kind)", function () {
+  var data = {
+    kinds: [
+      {
+        kind: "ui",
+        target: "tests/ui",
+        areas: [
+          {
+            area: "buk",
+            section: "ui/buk",
+            target: "tests/ui/buk",
+            tests_count: 1,
+            files: [{ name: "test_form.py", target: "tests/ui/buk/test_form.py", tests_count: 1 }],
+          },
+          {
+            area: "mobile",
+            section: "ui/mobile",
+            target: "tests/ui/mobile",
+            tests_count: 2,
+            files: [
+              { name: "test_a.py", target: "tests/ui/mobile/test_a.py", tests_count: 1 },
+              { name: "test_b.py", target: "tests/ui/mobile/test_b.py", tests_count: 1 },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  assert.deepStrictEqual(Logic.presetLeafTargets(data, "mobile"), [
+    "tests/ui/mobile/test_a.py",
+    "tests/ui/mobile/test_b.py",
+  ]);
+});
+
+test("presetLeafTargets('mobile') — нет области 'mobile' в дереве — пустой список", function () {
+  assert.deepStrictEqual(Logic.presetLeafTargets(sampleTree(), "mobile"), []);
+});
+
 // ------------------------------------------------------------------ collectTargets
 
 test("collectTargets: один файл из области с несколькими файлами — путь именно этого файла", function () {
