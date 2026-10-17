@@ -61,7 +61,14 @@ async def decide_new_defect(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="YouTrack не настроен — подтверждать некуда (TH_YOUTRACK_URL/TOKEN/ISSUE)",
             )
-        comment = _build_comment(body)
+        # Тело запроса несёт только то, что правил инженер (приоритет/ОР/пред_условие) —
+        # авто-данные (ФР/трейс/серьёзность/шаги/Back-Front) заново берём из прогона тем
+        # же списком кандидатов, что отдавал GET, а не доверяем клиенту их прислать:
+        # меньше трафика в запросе и один источник правды с тем, что инженер видел на
+        # экране (баг 17.10.2026 — комментарий уходил без ФР/трейса/шагов вообще).
+        candidates = new_defects.list_candidates(conn, name, stand, body.run_id)
+        candidate = next((c for c in candidates if c["full_name"] == body.full_name), None)
+        comment = _build_comment(body, candidate)
         try:
             result = await asyncio.to_thread(youtrack.post_comment, comment)
         except youtrack.YouTrackError as exc:
@@ -81,13 +88,42 @@ async def decide_new_defect(
     return NewDefectDecided(**dict(row))
 
 
-def _build_comment(body: NewDefectDecision) -> str:
+TRACE_MAX_LEN = 800
+
+
+def _build_comment(body: NewDefectDecision, candidate: dict | None) -> str:
+    """Шаблон карточки бага (ровно тот, что обсуждали и проверяли вручную до
+    кнопки, см. память vshgu_e2e_poll_cert_recon — Back/Front, Серьёзность,
+    Пред_условие/Шаги/ОР/ФР): авто-часть — из candidate (allure этого прогона),
+    остальное — то, что инженер видел на экране и мог поправить (body)."""
     lines = [f"**{body.full_name}**", ""]
-    if body.priority:
-        lines.append(f"Приоритет: {body.priority}")
+    if candidate:
+        lines.append("Front" if candidate["area"] == "front" else "Back")
+    if candidate and candidate.get("severity"):
+        lines.append(f"Серьёзность: {candidate['severity']}")
+    lines.append(f"Приоритет: {body.priority or '—'}")
+
     if body.precondition:
         lines.append(f"\nПред_условие:\n{body.precondition}")
+
+    steps = (candidate or {}).get("steps") or []
+    if steps:
+        lines.append("\nШаги:")
+        lines.extend(f"{i + 1} - {s.get('name')}" for i, s in enumerate(steps) if s.get("name"))
+
     if body.expected_result:
         lines.append(f"\nОР: {body.expected_result}")
+    message = (candidate or {}).get("message")
+    if message:
+        lines.append(f"ФР: {message.strip()}")
+
     lines.append(f"\n---\nИсточник: test_hub, прогон #{body.run_id}")
+    if candidate:
+        lines.append(f"Тест: {candidate['nodeid']}")
+        trace = candidate.get("trace")
+        if trace:
+            trace = trace.strip()
+            if len(trace) > TRACE_MAX_LEN:
+                trace = trace[:TRACE_MAX_LEN] + "…"
+            lines.append(f"Трейс: {trace}")
     return "\n".join(lines)
