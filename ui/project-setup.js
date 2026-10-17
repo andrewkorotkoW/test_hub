@@ -70,6 +70,7 @@
   titleEl.prepend(logo);
   document.getElementById("coverage-link").href = `coverage.html?name=${encodeURIComponent(projectName)}`;
   document.getElementById("xfail-link").href = `xfail.html?name=${encodeURIComponent(projectName)}`;
+  document.getElementById("new-defects-link").href = `new-defects.html?name=${encodeURIComponent(projectName)}`;
   document.getElementById("set-coverage-link").href = `coverage.html?name=${encodeURIComponent(projectName)}`;
 
   // ---------------- вкладки: Дашборд/Запуск/Расписания/История/Флаки ----------------

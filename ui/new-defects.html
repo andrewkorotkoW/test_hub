@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Test Hub — новые дефекты</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="style.css">
+  <script src="common.js"></script>
+  <script src="tour.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside id="app-sidebar" class="app-sidebar"></aside>
+    <div class="app-content">
+  <header id="app-header" class="site-header"></header>
+  <main class="page page-wide">
+    <div class="page-head">
+      <h1 id="project-title">Новые дефекты</h1>
+      <a id="project-link" href="#">← к проекту</a>
+    </div>
+    <div id="page-error" class="error-box" hidden></div>
+
+    <div class="card" id="nd-toolbar-card">
+      <div class="coverage-toolbar">
+        <div class="field">
+          <label for="nd-stand-select">Стенд</label>
+          <select id="nd-stand-select"><option value="">— выберите стенд —</option></select>
+        </div>
+        <div class="field">
+          <label for="nd-run-select">Прогон</label>
+          <select id="nd-run-select"><option value="">—</option></select>
+        </div>
+      </div>
+      <div id="nd-toolbar-msg" class="hint-box" hidden></div>
+    </div>
+
+    <p class="muted" id="nd-subtitle">
+      Падения с причиной «код» (не инфраструктура), которых ещё нет в «Известные дефекты».
+      Проверьте вручную и подтвердите — комментарий уйдёт в YouTrack и тест попадёт в реестр
+      известных дефектов, чтобы не всплывать здесь повторно.
+    </p>
+
+    <div id="nd-list"></div>
+  </main>
+    </div>
+  </div>
+
+  <script src="new-defects.js"></script>
+</body>
+</html>

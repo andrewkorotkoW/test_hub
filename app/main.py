@@ -12,8 +12,8 @@ from .config import BASE_DIR, settings
 from .core import demo_video, live, runner, schedule
 from .db import init_db
 from .routers import (
-    admin, auth, coverage, flaky, product_map, projects, runs, schedules, sections, sentry, share, stats, test_cases,
-    users, xfail,
+    admin, auth, coverage, flaky, new_defects, product_map, projects, runs, schedules, sections, sentry, share,
+    stats, test_cases, users, xfail,
 )
 
 logger = logging.getLogger(__name__)
@@ -117,6 +117,7 @@ app.include_router(projects.router)
 app.include_router(coverage.router)
 app.include_router(flaky.router)
 app.include_router(xfail.router)
+app.include_router(new_defects.router)
 app.include_router(stats.router)
 app.include_router(sections.router)
 app.include_router(runs.router)

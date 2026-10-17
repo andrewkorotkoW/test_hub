@@ -148,6 +148,22 @@ CREATE TABLE IF NOT EXISTS xfail_registry (
     UNIQUE (project, stand, test)
 );
 
+CREATE TABLE IF NOT EXISTS confirmed_defects (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project TEXT NOT NULL,
+    stand TEXT NOT NULL,
+    test TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('confirmed', 'dismissed')),
+    issue_url TEXT,
+    priority TEXT,
+    expected_result TEXT,
+    precondition TEXT,
+    run_id INTEGER,
+    decided_by TEXT,
+    decided_at TEXT NOT NULL,
+    UNIQUE (project, stand, test)
+);
+
 CREATE TABLE IF NOT EXISTS test_cases (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project TEXT NOT NULL REFERENCES projects(name) ON DELETE CASCADE,

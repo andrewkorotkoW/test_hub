@@ -101,6 +101,14 @@ class Settings:
     TH_SENTRY_TOKEN: str = os.getenv("TH_SENTRY_TOKEN", "")
     TH_SENTRY_ORG: str = os.getenv("TH_SENTRY_ORG", "")
 
+    # YouTrack (см. app/core/youtrack.py) — отправка подтверждённых QA вручную багов
+    # комментарием в один тикет-накопитель (TH_YOUTRACK_ISSUE, например VSHGU2-944)
+    # из вкладки «Новые дефекты». Без заполненных значений вкладка показывает
+    # «YouTrack не подключён» и ничего не ломает — тот же приём, что у TH_SENTRY_*.
+    TH_YOUTRACK_URL: str = os.getenv("TH_YOUTRACK_URL", "").rstrip("/")
+    TH_YOUTRACK_TOKEN: str = os.getenv("TH_YOUTRACK_TOKEN", "")
+    TH_YOUTRACK_ISSUE: str = os.getenv("TH_YOUTRACK_ISSUE", "")
+
     # Явный путь к бинарнику allure CLI (см. app/core/allure_report.py), нужен генерация
     # Allure-отчёта для публичных ссылок (app/routers/share.py). Пусто = искать через
     # shutil.which("allure") и типичные каталоги установки — этого достаточно в обычном

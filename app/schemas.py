@@ -314,6 +314,56 @@ class XfailCheckResult(BaseModel):
     count: int
 
 
+class NewDefectStep(BaseModel):
+    name: Optional[str] = None
+    status: Optional[str] = None
+
+
+class NewDefectCandidate(BaseModel):
+    nodeid: str
+    full_name: str
+    status: str
+    area: Literal["back", "front"]
+    severity: Optional[str] = None
+    message: Optional[str] = None
+    trace: Optional[str] = None
+    steps: list[NewDefectStep] = Field(default_factory=list)
+    finished_ts: Optional[str] = None
+    run_id: int
+
+
+class NewDefectsResponse(BaseModel):
+    connected: bool
+    reason: Optional[str] = None
+    items: list[NewDefectCandidate] = Field(default_factory=list)
+
+
+class NewDefectDecision(BaseModel):
+    """POST .../new-defects/decide — full_name теста (allure fullName, как и
+    xfail_registry.test), run_id прогона, где он был замечен, и решение QA."""
+    full_name: str
+    run_id: int
+    status: Literal["confirmed", "dismissed"]
+    priority: Optional[str] = None
+    expected_result: Optional[str] = None
+    precondition: Optional[str] = None
+
+
+class NewDefectDecided(BaseModel):
+    id: int
+    project: str
+    stand: str
+    test: str
+    status: Literal["confirmed", "dismissed"]
+    issue_url: Optional[str] = None
+    priority: Optional[str] = None
+    expected_result: Optional[str] = None
+    precondition: Optional[str] = None
+    run_id: Optional[int] = None
+    decided_by: str
+    decided_at: str
+
+
 class SentryIssueOut(BaseModel):
     id: str
     title: str
