@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Test Hub — задачи</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="style.css">
+  <script src="common.js"></script>
+  <script src="tour.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside id="app-sidebar" class="app-sidebar"></aside>
+    <div class="app-content">
+  <header id="app-header" class="site-header"></header>
+  <main class="page">
+    <h1>Задачи</h1>
+    <p class="muted">Мои задачи в YouTrack (ВШГУ-24) — где я назначен исполнителем.</p>
+    <div id="access-denied" class="error-box" hidden>Этот раздел доступен только ролям qa и superadmin.</div>
+    <div id="tasks-disconnected" class="hint-box" hidden></div>
+    <div id="tasks-error" class="error-box" hidden></div>
+
+    <div id="tasks-content">
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>ID</th><th>Задача</th><th>Проект</th><th>Статус</th><th>Обновлено</th></tr></thead>
+            <tbody id="tasks-rows"></tbody>
+          </table>
+        </div>
+        <p id="tasks-empty" class="muted" hidden>Нет незакрытых задач, назначенных на вас.</p>
+      </div>
+    </div>
+  </main>
+    </div>
+  </div>
+
+  <script src="tasks.js"></script>
+</body>
+</html>

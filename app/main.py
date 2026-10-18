@@ -13,7 +13,7 @@ from .core import demo_video, live, runner, schedule
 from .db import init_db
 from .routers import (
     admin, auth, coverage, flaky, new_defects, product_map, projects, runs, schedules, sections, sentry, share,
-    stats, test_cases, users, xfail,
+    stats, test_cases, users, xfail, youtrack_tasks,
 )
 
 logger = logging.getLogger(__name__)
@@ -130,6 +130,7 @@ app.include_router(schedules.router)
 app.include_router(test_cases.router)
 app.include_router(sentry.router)
 app.include_router(product_map.router)
+app.include_router(youtrack_tasks.router)
 
 class NoCacheStaticFiles(StaticFiles):
     """Без Cache-Control браузер мог отдавать ui/*.js и ui/*.css из памяти вообще

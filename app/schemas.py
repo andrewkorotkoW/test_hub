@@ -393,6 +393,22 @@ class SentryEventResponse(BaseModel):
     event: Optional[dict] = None
 
 
+class YouTrackTaskOut(BaseModel):
+    id: str
+    summary: str
+    project: str
+    status: Optional[str] = None
+    updated: Optional[str] = None
+    url: str
+
+
+class YouTrackTasksResponse(BaseModel):
+    """GET /api/youtrack/my-tasks — вкладка «Задачи» (app/core/youtrack.py::list_my_issues)."""
+    connected: bool
+    reason: Optional[str] = None
+    tasks: list[YouTrackTaskOut] = Field(default_factory=list)
+
+
 class TestCaseAttachment(BaseModel):
     id: int
     step_n: int

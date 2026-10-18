@@ -426,6 +426,25 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
   color: var(--xfail);
 }
 
+/* ---------- бейдж статуса задачи YouTrack (вкладка «Задачи», ui/tasks.js) —
+   поле "Design" в YouTrack: Sprint Backlog/In Progress/In Test/Blocked/Wait for
+   Deploy; цвета переиспользуют существующую палитру статусов прогонов ---------- */
+.yt-status {
+  display: inline-block;
+  border-radius: var(--radius);
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+}
+.yt-status-backlog { background: var(--queued); }
+.yt-status-progress { background: var(--running); }
+.yt-status-test { background: var(--xfail); }
+.yt-status-blocked { background: var(--failed); }
+.yt-status-wait { background: var(--flaky); }
+.yt-status-unknown { background: var(--unknown); }
+
 /* ---------- login ---------- */
 .login-wrap {
   min-height: 100vh;
