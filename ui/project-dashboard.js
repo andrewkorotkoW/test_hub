@@ -578,10 +578,52 @@
       + `</span>`;
   }
 
+  // Баннер над вкладкой «Запуск» (docs про очередь прогонов, см. app.core.runner
+  // .submit_run — очередь по project, не по стенду): видно ДО клика «Запустить»,
+  // кто уже занял очередь, чтобы не пришлось гадать, почему ничего не стартовало
+  // сразу. lastRunsList уже свежий к моменту вызова (loadHistory/refreshQueueNotice
+  // оба пишут его перед рендером).
+  function renderQueueNotice() {
+    if (!runQueueNotice) return;
+    const active = (lastRunsList || []).filter((r) => r.status === "running" || r.status === "queued");
+    if (!active.length) {
+      runQueueNotice.hidden = true;
+      return;
+    }
+    const running = active.find((r) => r.status === "running");
+    const queuedCount = active.filter((r) => r.status === "queued").length;
+    let text;
+    if (running) {
+      text = `⏳ Сейчас выполняется прогон #${running.id}`
+        + ` (стенд ${running.stand || "—"}, запустил ${running.requested_by || "—"})`;
+      if (queuedCount) text += ` + ещё ${queuedCount} в очереди`;
+      text += " — ваш запуск встанет за ним.";
+    } else {
+      text = `⏳ В очереди уже ${queuedCount} ${pluralRu(queuedCount, "прогон", "прогона", "прогонов")}`
+        + " — ваш запуск встанет за ними.";
+    }
+    runQueueNotice.textContent = text;
+    runQueueNotice.hidden = false;
+  }
+
+  // Лёгкий опрос, пока вкладка «Запуск» открыта — независимо от loadHistory()
+  // (которая перерисовывает всю таблицу истории, дороже и не нужна так часто):
+  // человек может держать вкладку открытой какое-то время, прежде чем нажать
+  // «Запустить», и к этому моменту очередь уже могла освободиться/занятся.
+  async function refreshQueueNotice() {
+    if (window.location.hash !== "#run") return;
+    try {
+      lastRunsList = await api(`/api/projects/${encodeURIComponent(projectName)}/runs`);
+      renderQueueNotice();
+    } catch { /* баннер очереди необязателен — тихо пропускаем сбой опроса */ }
+  }
+  setInterval(refreshQueueNotice, 15000);
+
   async function loadHistory() {
     try {
       const runs = await api(`/api/projects/${encodeURIComponent(projectName)}/runs`);
       lastRunsList = runs;
+      renderQueueNotice();
       if (!runs.length) {
         historyRows.innerHTML = `<tr><td colspan="8" class="muted">Прогонов ещё не было.</td></tr>`;
       } else {

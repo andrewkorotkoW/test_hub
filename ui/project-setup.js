@@ -125,6 +125,7 @@
   const setTargetText = document.getElementById("set-target-text");
   const setEditTargetsBtn = document.getElementById("set-edit-targets-btn");
   const testsTreeBlock = document.getElementById("tests-tree-block");
+  const runQueueNotice = document.getElementById("run-queue-notice");
   const sectionsTreeBox = document.getElementById("sections-tree");
   const sectionsSearchInput = document.getElementById("sections-search-input");
   const sectionsPresetsRow = document.getElementById("sections-presets-row");

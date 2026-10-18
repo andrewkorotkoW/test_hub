@@ -417,6 +417,14 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
   padding: 10px 14px;
   margin-bottom: 14px;
 }
+/* ---------- баннер очереди прогонов (вкладка «Запуск», ui/project-dashboard.js
+   renderQueueNotice) — тот же hint-box, но янтарный акцент («подожди», не
+   «ошибка» и не нейтральная подсказка) ---------- */
+.hint-box.queue-notice {
+  background: rgba(224, 160, 32, .14);
+  border-color: rgba(224, 160, 32, .35);
+  color: var(--xfail);
+}
 
 /* ---------- login ---------- */
 .login-wrap {
