@@ -356,7 +356,15 @@ async def test_create_with_duplicate_nodeid_should_not_crash(qa_client, db_path,
 
     Тест фиксирует этот пробел через pytest.xfail, не переписывая app/ сам: если
     появится проверка на дубликат nodeid, тест начнёт молча проходить (без
-    xfail-ветки)."""
+    xfail-ветки).
+
+    pytest.xfail() вызывается ВНЕ except-блока (см. ниже) — изнутри except Python
+    неявно цепляет исходное исключение в __context__ нового, а sqlite3.IntegrityError
+    тут пробрасывается через весь ASGI-стек (FastAPI/Starlette/httpx) с огромным
+    трейсбеком; при попытке pytest отрендерить этот сцепленный трейсбек для xfail-
+    отчёта CPython 3.11.2 падал с SystemError: AST constructor recursion depth
+    mismatch, роняя INTERNALERROR весь прогон (обнаружено 19.10.2026 — детерминированно
+    на этом тесте, не связано с asyncio/playwright, несмотря на похожий симптом)."""
     conn = get_connection()
     try:
         conn.execute(
@@ -371,15 +379,19 @@ async def test_create_with_duplicate_nodeid_should_not_crash(qa_client, db_path,
     assert first.status_code == 201, first.text
 
     duplicate_body = {"section": "api/auth", "title": "Второй", "steps": [], "nodeid": "tests/api/auth/test_login.py::test_dup"}
+    xfail_reason = None
     try:
         resp = await qa_client.post(f"/api/projects/{PROJECT}/testcases", json=duplicate_body)
     except Exception as exc:  # sqlite3.IntegrityError пробрасывается через ASGI как необработанное исключение
-        pytest.xfail(
+        xfail_reason = (
             "defect: create_manual()/update_case() не проверяют дубликат nodeid перед "
             f"INSERT/UPDATE и падают необработанным исключением вместо 409/422: {exc!r}"
         )
     else:
         assert resp.status_code in (409, 422), resp.text
+
+    if xfail_reason is not None:
+        pytest.xfail(xfail_reason)
 
 
 async def test_update_case_not_found(qa_client, db_path, tc_project_dir):
