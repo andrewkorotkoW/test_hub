@@ -69,11 +69,20 @@
       </div>`;
   }
 
+  // Завершённый прогон — группы failed/broken/passed/skipped с заголовками, идущий —
+  // порядок старта без заголовков (RunReportLogic.railGroups, чтобы строки не
+  // прыгали под «Следить за прогоном»).
   function renderTestsRail() {
     runTestsCount.textContent = splitTests.length ? String(splitTests.length) : "";
-    runTestsRail.innerHTML = splitTests.length
-      ? splitTests.map(testRowHtml).join("")
-      : `<p class="muted" style="padding:10px">Тестов пока нет.</p>`;
+    if (!splitTests.length) {
+      runTestsRail.innerHTML = `<p class="muted" style="padding:10px">Тестов пока нет.</p>`;
+      return;
+    }
+    const groups = RunReportLogic.railGroups(splitTests, isFinished, RunWindowSplitLogic.normalizeTestStatus);
+    runTestsRail.innerHTML = groups.map((g) =>
+      (g.key ? `<div class="test-group">${escapeHtml(g.key)} · ${g.tests.length}</div>` : "")
+      + g.tests.map(testRowHtml).join("")
+    ).join("");
   }
 
   function updateWindowPill() {
@@ -146,16 +155,17 @@
       );
     }
     const stale = RunLiveLogic.isLiveStale(liveFrame.receivedAt, Date.now());
-    return maybePhoneFrame(
-      `<div class="live-frame">
+    // Шапка («В эфире» + шаг) — снаружи рамки телефона: внутри экрана она
+    // отъедала высоту и сдвигала кадр вниз, а сам кадр не растягивался на экран
+    // (скрин владельца 19.10.2026) — в рамку уходит только <img>, которому
+    // .phone-frame-screen img задаёт width/height 100%.
+    const headHtml = `
         <div class="live-frame-head">
           <span class="status-pill ${stale ? "unknown" : "running"}">${stale ? "нет сигнала" : "В эфире"}</span>
           ${liveFrame.step ? `<span class="muted">${escapeHtml(liveFrame.step)}</span>` : ""}
-        </div>
-        <img class="live-frame-img" src="data:image/jpeg;base64,${liveFrame.jpegB64}" alt="Живой кадр теста">
-      </div>`,
-      frameTimeText(liveFrame)
-    );
+        </div>`;
+    const imgHtml = `<img class="live-frame-img" src="data:image/jpeg;base64,${liveFrame.jpegB64}" alt="Живой кадр теста">`;
+    return `<div class="live-frame">${headHtml}${maybePhoneFrame(imgHtml, frameTimeText(liveFrame))}</div>`;
   }
 
   function renderVideoTab() {
@@ -289,21 +299,28 @@
   // «Весь лог» — единственный вид, переключатель и список тестов скрыты.
   // «Сравнить с…»/«Причины» (docs/missions/2026-10-13_run_compare_and_causes.md)
   // доступны только у завершённых прогонов (isFinished) — независимо от hasMarkup.
+  // «Сравнить с…» доступно всегда, в том числе у идущего прогона (просьба
+  // владельца 19.10.2026): сравнение идёт по уже завершённым тестам и
+  // перезагружается при каждом открытии, пока прогон не закончился (см.
+  // loadCompareTab). «Причины» — только у завершённых: причины считаются
+  // record_run_results после финиша.
   function applyViewMode() {
-    if ((viewMode === "compare" || viewMode === "causes") && !isFinished) viewMode = "split";
+    if (viewMode === "causes" && !isFinished) viewMode = "split";
     const showSplit = hasMarkup && viewMode === "split";
-    const showCompare = isFinished && viewMode === "compare";
+    const showCompare = viewMode === "compare";
     const showCauses = isFinished && viewMode === "causes";
     runSplit.hidden = !showSplit;
     runCompareView.hidden = !showCompare;
     runCausesView.hidden = !showCauses;
     logBox.hidden = showSplit || showCompare || showCauses;
-    runViewToggle.hidden = !(hasMarkup || isFinished);
+    runViewToggle.hidden = false;
     runViewToggle.querySelectorAll("button[data-view]").forEach((b) => {
       if (b.dataset.view === "split") b.hidden = !hasMarkup;
-      else if (b.dataset.view === "compare" || b.dataset.view === "causes") b.hidden = !isFinished;
+      else if (b.dataset.view === "causes") b.hidden = !isFinished;
+      else b.hidden = false;
       b.setAttribute("aria-current", String(b.dataset.view === viewMode));
     });
+    cmpRunningNote.hidden = isFinished;
     if (showCompare) loadCompareTab();
     if (showCauses) loadCausesTab();
   }
@@ -335,7 +352,28 @@
       if (selectedNodeid) { updateWindowPill(); renderWindowTabs(); }
       if (!hasMarkup) hasMarkup = await detectMarkup(runId);
       applyViewMode();
+      // «Итог прогона» рендерится раньше (refreshReport) — ссылки «открыть в
+      // сплите» в именах тестов появляются только теперь, когда известны
+      // hasMarkup и splitTestsByNodeid.
+      if (currentTests.length) renderReportRows();
+      // Завершённый прогон открываем сразу на первом упавшем тесте — окно справа
+      // не должно встречать пустым (идущий прогон ведёт «Следить за прогоном»).
+      if (!selectedNodeid && isFinished && hasMarkup && viewMode === "split") {
+        const first = RunReportLogic.firstTestToSelect(splitTests, RunWindowSplitLogic.normalizeTestStatus);
+        if (first) await selectTest(first);
+      }
     } catch { /* тесты по разметке недоступны — остаётся только «Весь лог» */ }
+  }
+
+  // Клик по имени теста в «Итоге прогона» — тот же тест в «Сплите» (кадры/консоль/
+  // запросы), не раскрывая трейс в таблице.
+  async function openTestInSplit(nodeid) {
+    if (!hasMarkup || !splitTestsByNodeid[nodeid]) return false;
+    viewMode = "split";
+    applyViewMode();
+    await selectTest(nodeid);
+    runSplit.scrollIntoView({ behavior: "smooth", block: "start" });
+    return true;
   }
 
   const END_STATUS_RE = /\[TH\] end .+ (\S+)$/;
@@ -441,41 +479,124 @@
     return `${proto}//${window.location.host}/ws/runs/${runId}`;
   }
 
-  function renderReport(payload, runId) {
-    currentTests = payload.tests || [];
+  // Фильтр «Причина» в «Итоге прогона» (all/throttling/session/stand/code) —
+  // сбрасывается на all при открытии другого прогона (openRun).
+  let activeReportCause = "all";
+  // PNG-график грузится лениво — только когда спойлер открыли: его рисует
+  // matplotlib на сервере (/api/runs/{id}/report.png), а в карточке он больше не
+  // виден по умолчанию (сводка над сплитом говорит то же самое текстом).
+  let reportChartRunId = null;
+
+  function renderRunStats(payload) {
     const counts = payload.counts || {};
+    runStatStand.textContent = payload.stand || "—";
+    runStatStarted.textContent = fmtDate(payload.started);
+    runStatDuration.textContent = RunReportLogic.fmtRunDuration(payload.duration);
+    const rate = RunReportLogic.passRate(counts);
+    runStatPassRate.textContent = rate == null ? "—" : `${rate} %`;
+    runStatPassRate.classList.toggle("bad", rate != null && rate < 50);
     badgesBox.innerHTML = ["passed", "failed", "broken", "skipped"]
       .map((s) => `<span class="badge ${s}">${s}: ${counts[s] || 0}</span>`)
       .join("");
-    reportChart.src = `/api/runs/${runId}/report.png`;
-    reportChart.hidden = false;
+    const chips = RunReportLogic.causeChips(payload.causes).filter((c) => c.cause !== "all");
+    runStatCauses.hidden = !chips.length;
+    runStatCauses.innerHTML = chips.length
+      ? `<span>Причины:</span>${chips.map((c) =>
+          `<span class="cmp-tag ${c.cause === "code" ? "code" : "stand"}">${escapeHtml(c.label)} · ${c.count}</span>`
+        ).join("")}`
+      : "";
+    runStats.hidden = false;
+  }
+
+  function renderCauseFilter(payload) {
+    const chips = RunReportLogic.causeChips(payload.causes);
+    if (!(payload.causes && payload.causes.total)) {
+      reportCauseFilter.innerHTML = "";
+      activeReportCause = "all";
+      return;
+    }
+    reportCauseFilter.innerHTML = chips.map((c) => `
+      <button type="button" class="cause-chip" data-cause="${escapeHtml(c.cause)}" aria-current="${String(c.cause === activeReportCause)}">
+        ${escapeHtml(c.label)} <span class="n">${c.count}</span>
+      </button>`).join("");
+  }
+
+  reportCauseFilter.addEventListener("click", (ev) => {
+    const btn = ev.target.closest(".cause-chip");
+    if (!btn) return;
+    activeReportCause = btn.dataset.cause;
+    reportCauseFilter.querySelectorAll(".cause-chip").forEach((b) => {
+      b.setAttribute("aria-current", String(b.dataset.cause === activeReportCause));
+    });
+    renderReportRows();
+  });
+
+  function renderReport(payload, runId) {
+    currentTests = payload.tests || [];
+    renderRunStats(payload);
+    renderCauseFilter(payload);
+    reportChartRunId = runId;
+    if (reportChartSpoiler.open) reportChart.src = `/api/runs/${runId}/report.png`;
+    reportChartSpoiler.hidden = false;
     reportSection.hidden = false;
     renderReportRows();
+  }
+
+  reportChartSpoiler.addEventListener("toggle", () => {
+    if (!reportChartSpoiler.open || !reportChartRunId) return;
+    const src = `/api/runs/${reportChartRunId}/report.png`;
+    if (reportChart.getAttribute("src") !== src) reportChart.src = src;
+  });
+
+  function reportRowHtml(t, i) {
+    const status = RunWindowSplitLogic.normalizeTestStatus(t.status);
+    const nodeid = t.nodeid || t.name;
+    const canOpen = hasMarkup && Boolean(splitTestsByNodeid[nodeid]);
+    const parts = nodeid.includes("::")
+      ? { path: nodeid.slice(0, nodeid.indexOf("::")), short: nodeid.slice(nodeid.indexOf("::") + 2) }
+      : { path: "", short: nodeid };
+    const nameHtml = canOpen
+      ? `<a href="#" class="report-open-test" data-nodeid="${encodeURIComponent(nodeid)}">${escapeHtml(parts.short)}</a>`
+      : escapeHtml(parts.short);
+    const isFailure = status === "failed" || status === "broken";
+    const tag = isFailure ? RunCompareLogic.causeTag(t) : null;
+    const reasonHtml = isFailure
+      ? `<span class="msg" title="${escapeHtml(t.short_reason || "")}">${escapeHtml(t.short_reason || "—")}</span>`
+        + (t.cause ? `<span class="cmp-tag ${tag.cls}">${escapeHtml(tag.cls === "code" ? RunReportLogic.CAUSE_LABELS.code : tag.text)}</span>` : "")
+      : `<span class="muted">—</span>`;
+    return `
+      <tr class="clickable" data-idx="${i}">
+        <td class="report-name">${parts.path ? `<small>${escapeHtml(parts.path)}::</small>` : ""}${nameHtml}</td>
+        <td class="status-text ${escapeHtml(status)}">${escapeHtml(status)}</td>
+        <td class="report-reason">${reasonHtml}</td>
+        <td>${fmtDuration(t.duration)}</td>
+      </tr>`;
   }
 
   function renderReportRows() {
     const status = statusFilter.value;
     const name = nameFilter.value.trim().toLowerCase();
-    const rows = currentTests.filter((t) => {
+    const sorted = RunReportLogic.sortForReport(currentTests, RunWindowSplitLogic.normalizeTestStatus);
+    const rows = RunReportLogic.filterByCause(sorted, activeReportCause).filter((t) => {
       if (status && t.status !== status) return false;
-      if (name && !t.name.toLowerCase().includes(name)) return false;
+      if (name && !(t.nodeid || t.name).toLowerCase().includes(name)) return false;
       return true;
     });
     if (!rows.length) {
-      reportRows.innerHTML = `<tr><td colspan="3" class="muted">Нет тестов, соответствующих фильтру.</td></tr>`;
+      reportRows.innerHTML = `<tr><td colspan="4" class="muted">Нет тестов, соответствующих фильтру.</td></tr>`;
       return;
     }
-    reportRows.innerHTML = rows.map((t, i) => `
-      <tr class="clickable" data-idx="${i}">
-        <td>${escapeHtml(t.name)}</td>
-        <td class="status-text ${escapeHtml(t.status)}">${escapeHtml(t.status)}</td>
-        <td>${fmtDuration(t.duration)}</td>
-      </tr>
-    `).join("");
+    reportRows.innerHTML = rows.map(reportRowHtml).join("");
     reportRows.dataset.rows = JSON.stringify(rows);
   }
 
   reportRows.addEventListener("click", (ev) => {
+    const link = ev.target.closest("a.report-open-test");
+    if (link) {
+      ev.preventDefault();
+      openTestInSplit(decodeURIComponent(link.dataset.nodeid));
+      return;
+    }
     const tr = ev.target.closest("tr.clickable");
     if (!tr) return;
     const rows = JSON.parse(reportRows.dataset.rows || "[]");
@@ -491,7 +612,7 @@
     const message = test.message || test.trace
       ? `${escapeHtml(test.message || "")}${test.trace ? "\n\n" + escapeHtml(test.trace) : ""}`
       : "Подробностей нет.";
-    detail.innerHTML = `<td colspan="3"><pre class="trace-pre">${message}</pre></td>`;
+    detail.innerHTML = `<td colspan="4"><pre class="trace-pre">${message}</pre></td>`;
     tr.after(detail);
   });
 
@@ -520,6 +641,71 @@
     }
   }
 
+  // ---------------- форма запуска: сворачивание в строку-сводку ----------------
+  // Пока прогон открыт, форма «Тесты» не нужна — она схлопывается в одну строку
+  // («Стенд · Маркер · Цели · Эфир/Pixel 7 · Изменить · Запустить ещё раз»), а
+  // карточка прогона получает всю ширину (см. #tests-card.collapsed в style.css).
+  // Тот же приём, что «Цели: Изменить состав» в режиме сборки (project-build.js),
+  // только для формы целиком. Состояние формы (дерево, ручной ввод, галочки) не
+  // трогаем — «Изменить» просто показывает её обратно.
+  let lastSubmitKind = null; // "all" | "selected" — для «Запустить ещё раз»
+
+  function runFormTargetsText() {
+    const manual = manualTargetInput.value.trim();
+    if (manual) {
+      const n = manual.split("\n").filter((l) => l.trim()).length;
+      return `ручной ввод · ${n} ${pluralRu(n, "строка", "строки", "строк")}`;
+    }
+    if (lastSubmitKind === "all") return "всё";
+    const checkedFiles = sectionsPicker.checkedFiles();
+    if (!checkedFiles.length) return "всё";
+    const counts = SectionsTreeLogic.countCheckedByKind(sectionsDataCache, new Set(checkedFiles));
+    const parts = [`${counts.total} ${pluralRu(counts.total, "файл", "файла", "файлов")}`];
+    if (counts.api) parts.push(`API ${counts.api}`);
+    if (counts.ui) parts.push(`UI ${counts.ui}`);
+    if (counts.e2e) parts.push(`E2E ${counts.e2e}`);
+    return parts.join(" · ");
+  }
+
+  function renderRunFormSummary() {
+    const flags = [];
+    if (liveCheckbox.checked) flags.push("Эфир");
+    if (mobileCheckbox.checked) flags.push("Pixel 7");
+    const item = (k, v) => `<span class="rfs-item"><span class="rfs-k">${k}</span><b>${escapeHtml(v)}</b></span>`;
+    runFormSummary.innerHTML = [
+      item("Стенд", standSelect.value || "—"),
+      `<span class="rfs-sep"></span>`,
+      item("Маркер", markerSelect.value || "—"),
+      `<span class="rfs-sep"></span>`,
+      item("Цели", runFormTargetsText()),
+      flags.length ? `<span class="rfs-sep"></span><span class="rfs-item">${escapeHtml(flags.join(" · "))}</span>` : "",
+      `<span class="rfs-actions">
+        <button type="button" id="run-form-edit-btn">Изменить</button>
+        <button type="button" id="run-form-rerun-btn" class="primary"${lastSubmitKind ? "" : " hidden"}>Запустить ещё раз</button>
+      </span>`,
+    ].join("");
+  }
+
+  function collapseRunForm() {
+    renderRunFormSummary();
+    runFormSummary.hidden = false;
+    testsCard.classList.add("collapsed");
+  }
+
+  function expandRunForm() {
+    runFormSummary.hidden = true;
+    testsCard.classList.remove("collapsed");
+  }
+
+  runFormSummary.addEventListener("click", (ev) => {
+    if (ev.target.closest("#run-form-edit-btn")) {
+      expandRunForm();
+      testsCard.scrollIntoView({ behavior: "smooth", block: "start" });
+    } else if (ev.target.closest("#run-form-rerun-btn")) {
+      (lastSubmitKind === "all" ? runAllBtn : runSelectedBtn).click();
+    }
+  });
+
   async function openRun(runId) {
     // run-card живёт во вкладке «Запуск» — открытие прогона (лента/история/расписания/
     // deep link ?run=) должно переключать на неё, иначе карточка заполнится, но останется
@@ -527,6 +713,7 @@
     if (window.location.hash !== "#run") window.location.hash = "run";
     closeWs();
     sawLine = false;
+    collapseRunForm();
     runCard.hidden = false;
     runIdLabel.textContent = runId;
     runLabelBadge.hidden = true;
@@ -534,8 +721,12 @@
     shareBtn.hidden = !canShare;
     logBox.textContent = "";
     reportSection.hidden = true;
-    reportChart.hidden = true;
+    runStats.hidden = true;
+    reportChartSpoiler.hidden = true;
+    reportChartSpoiler.open = false;
     reportChart.removeAttribute("src");
+    reportChartRunId = null;
+    activeReportCause = "all";
     currentRunLive = false;
     currentRunMobile = false;
     setPill("queued");
@@ -607,13 +798,25 @@
     }
   }
 
-  runAllBtn.addEventListener("click", () => submitRun("all"));
+  // «Запустить всё» — те же галочки «Эфир»/«Мобильный», что и у «Запустить
+  // выбранное»: раньше флаги не передавались вовсе, и прогон #92 (19.10.2026)
+  // с отмеченным «Мобильный (Pixel 7)» ушёл обычным десктопным «всё».
+  runAllBtn.addEventListener("click", () => {
+    lastSubmitKind = "all";
+    submitRun("all", isBuildMode ? buildLabel : null, liveCheckbox.checked && !liveCheckbox.disabled, mobileCheckbox.checked);
+  });
   runSelectedBtn.addEventListener("click", () => {
     const target = selectedTarget();
     if (!target) {
-      alert("Отметьте хотя бы один раздел/файл или заполните ручное поле.");
+      // Галочка «Мобильный (Pixel 7)» только переключает вёрстку — сами тесты
+      // tests/ui/mobile отмечает пресет «Mobile»; владелец 19.10.2026 ставил
+      // галочку и жал «Запустить выбранное» с пустым выбором.
+      alert(mobileCheckbox.checked
+        ? "Ничего не выбрано. Для мобильных тестов нажмите пресет «Mobile» над деревом — он отметит tests/ui/mobile (галочка «Мобильный» только включает вёрстку Pixel 7)."
+        : "Отметьте хотя бы один раздел/файл или заполните ручное поле.");
       return;
     }
+    lastSubmitKind = "selected";
     submitRun(target, isBuildMode ? buildLabel : null, liveCheckbox.checked && !liveCheckbox.disabled, mobileCheckbox.checked);
   });
 

@@ -310,6 +310,11 @@
       targets() {
         return SectionsTreeLogic.collectTargets(data, new Set(checkedFileTargets(box)));
       },
+      // Отмеченные файлы как есть, без схлопывания в папки (targets() выше) —
+      // для счётчиков «N файлов · API x · UI y» в сводке свёрнутой формы.
+      checkedFiles() {
+        return checkedFileTargets(box);
+      },
     };
   }
 
@@ -389,7 +394,35 @@
     liveCheckboxHint.hidden = !state.hint;
     liveCheckboxHint.textContent = state.hint;
     liveCheckboxHint.classList.toggle("limit-exceeded", state.disabled);
+    updateMarkerConflictHint();
   }
+
+  // Предупреждение «маркер × цели» (SectionsTreeLogic.markerConflict): маркер
+  // отфильтрует все выбранные файлы и прогон соберёт 0 тестов. Пересчитывается
+  // вместе с подсказкой «Эфир» — на любое изменение выбора (см. updateLiveCheckboxState)
+  // и отдельно на смену маркера. Только предупреждение, запуск не блокируем:
+  // для api/ui проверка по папке — эвристика, для smoke не вычисляется вовсе.
+  function updateMarkerConflictHint() {
+    const marker = markerSelect.value;
+    const conflict = SectionsTreeLogic.markerConflict(sectionsDataCache, marker, currentTargetLines());
+    if (!conflict) {
+      markerConflictHint.hidden = true;
+      return;
+    }
+    markerConflictHint.innerHTML = `
+      <span>⚠ Маркер <b>${escapeHtml(marker)}</b> не стоит ни на одном из выбранных тестов — прогон соберёт <b>0 тестов</b> (как #89).</span>
+      <button type="button" id="marker-conflict-clear-btn">Снять маркер</button>
+    `;
+    markerConflictHint.hidden = false;
+  }
+
+  markerSelect.addEventListener("change", updateMarkerConflictHint);
+  markerConflictHint.addEventListener("click", (ev) => {
+    if (!ev.target.closest("#marker-conflict-clear-btn")) return;
+    markerSelect.value = "";
+    // штатный change — чтобы пикер снял подсветку кнопки пресета и обновил строку итога
+    markerSelect.dispatchEvent(new Event("change"));
+  });
 
   manualTargetInput.addEventListener("input", updateLiveCheckboxState);
   sectionsTreeBox.addEventListener("change", (ev) => {

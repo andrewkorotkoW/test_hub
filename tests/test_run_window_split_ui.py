@@ -179,10 +179,11 @@ def test_project_js_apply_view_mode_hides_split_and_toggle_without_markup():
     body = match.group(1)
     assert "const showSplit = hasMarkup && viewMode ===" in body
     assert "runSplit.hidden = !showSplit;" in body
-    # «Сравнить с…»/«Причины» (docs/missions/2026-10-13_run_compare_and_causes.md)
-    # держат переключатель видимым и без разметки — у завершённых прогонов
-    # (isFinished), независимо от hasMarkup.
-    assert "runViewToggle.hidden = !(hasMarkup || isFinished);" in body
+    # Переключатель видим всегда: «Сравнить с…» доступно и у идущего прогона
+    # (просьба владельца 19.10.2026), «Причины» — только у завершённых (isFinished),
+    # «Сплит» — только с разметкой (hasMarkup); см. tests/test_run_report_ui.py.
+    assert "runViewToggle.hidden = false;" in body
+    assert 'else if (b.dataset.view === "causes") b.hidden = !isFinished;' in body
     # «Весь лог» доступен независимо от режима — противоположность showSplit/
     # showCompare/showCauses (единственный видимый вид, когда ни один из них не активен)
     assert "logBox.hidden = showSplit || showCompare || showCauses;" in body

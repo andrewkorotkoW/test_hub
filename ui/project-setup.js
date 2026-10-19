@@ -126,6 +126,9 @@
   const setEditTargetsBtn = document.getElementById("set-edit-targets-btn");
   const testsTreeBlock = document.getElementById("tests-tree-block");
   const runQueueNotice = document.getElementById("run-queue-notice");
+  const testsCard = document.getElementById("tests-card");
+  const runFormSummary = document.getElementById("run-form-summary");
+  const markerConflictHint = document.getElementById("marker-conflict-hint");
   const sectionsTreeBox = document.getElementById("sections-tree");
   const sectionsSearchInput = document.getElementById("sections-search-input");
   const sectionsPresetsRow = document.getElementById("sections-presets-row");
@@ -168,6 +171,7 @@
   const runCompareView = document.getElementById("run-compare");
   const cmpBaseSelect = document.getElementById("cmp-base-select");
   const cmpError = document.getElementById("cmp-error");
+  const cmpRunningNote = document.getElementById("cmp-running-note");
   const cmpKpis = document.getElementById("cmp-kpis");
   const cmpGroups = document.getElementById("cmp-groups");
   const runCausesView = document.getElementById("run-causes");
@@ -180,6 +184,14 @@
   const rcList = document.getElementById("rc-list");
   const rcListNote = document.getElementById("rc-list-note");
   const reportChart = document.getElementById("report-chart");
+  const reportChartSpoiler = document.getElementById("report-chart-spoiler");
+  const reportCauseFilter = document.getElementById("report-cause-filter");
+  const runStats = document.getElementById("run-stats");
+  const runStatStand = document.getElementById("run-stat-stand");
+  const runStatStarted = document.getElementById("run-stat-started");
+  const runStatDuration = document.getElementById("run-stat-duration");
+  const runStatPassRate = document.getElementById("run-stat-pass-rate");
+  const runStatCauses = document.getElementById("run-stat-causes");
   const reportSection = document.getElementById("report-section");
   const badgesBox = document.getElementById("summary-badges");
   const reportRows = document.getElementById("report-rows");

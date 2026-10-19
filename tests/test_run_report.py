@@ -54,6 +54,17 @@ async def test_report_counts_and_failed_test_details(qa_client, isolated_allure_
     for test in failed:
         assert test["message"], f"у упавшего теста {test['name']} пустое сообщение"
         assert "assert" in test["message"].lower()
+        # причина/короткое сообщение/nodeid — для колонки «Причина» и открытия теста
+        # в «Сплите» прямо из «Итога прогона» (без отдельного GET /causes)
+        assert test["cause"] == "code"  # AssertionError фикстуры — не инфраструктура
+        assert test["short_reason"] == test["message"].strip().splitlines()[0][:120]
+        assert "::" in test["nodeid"] and test["nodeid"].startswith("tests/test_sample.py")
+
+    for test in passed:
+        assert test["cause"] is None
+        assert test["short_reason"] == ""
+
+    assert report["causes"] == {"throttling": 0, "session": 0, "stand": 0, "code": 2, "total": 2}
 
 
 async def test_run_events_recorded_for_completed_run(qa_client, isolated_allure_dir, runnable_project_dir):

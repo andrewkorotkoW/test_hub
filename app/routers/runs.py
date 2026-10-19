@@ -231,16 +231,41 @@ def list_runs(
 
 
 @router.get("/runs/{run_id}/report")
-def get_report(
+async def get_report(
     run_id: int,
     conn: sqlite3.Connection = Depends(get_db),
     _user: sqlite3.Row = Depends(get_current_user),
 ) -> dict:
+    """Отчёт прогона для окна прогона: статусы/длительности/сообщения из allure +
+    по каждому тесту причина падения (stand/session/throttling/code), nodeid и
+    короткое сообщение из run_test_results — чтобы таблица «Итог прогона»
+    показывала причину прямо в строке и открывала тест в «Сплите», не ходя за
+    GET /runs/{id}/causes отдельно. causes — сводка по причинам для строки-сводки
+    над сплитом. Для незавершённого прогона run_test_results ещё пуст — cause
+    None, nodeid = fullName (как в list_run_tests)."""
     row = _get_run_or_404(conn, run_id)
+    await failure_causes.ensure_run_results(run_id)
+    cached_by_full_name = {
+        r["full_name"]: r
+        for r in conn.execute(
+            "SELECT nodeid, full_name, cause FROM run_test_results WHERE run_id = ?", (run_id,)
+        ).fetchall()
+    }
     tests = allure_report.parse_results(runner.allure_dir(run_id))
+    causes = {cause: 0 for cause in failure_causes.ALL_CAUSES}
+    for entry in tests:
+        cached_row = cached_by_full_name.get(entry["name"])
+        cause = cached_row["cause"] if cached_row else None
+        if cause in causes:
+            causes[cause] += 1
+        entry["nodeid"] = cached_row["nodeid"] if cached_row else entry["name"]
+        entry["cause"] = cause
+        entry["short_reason"] = failure_causes.short_reason(entry.get("message"))
+    causes["total"] = sum(causes[c] for c in failure_causes.ALL_CAUSES)
     counts = json.loads(row["counts"]) if row["counts"] and row["counts"] != "{}" else allure_report.counts_from_tests(tests)
     payload = _run_payload(row)
     payload["counts"] = counts
+    payload["causes"] = causes
     payload["tests"] = tests
     return payload
 

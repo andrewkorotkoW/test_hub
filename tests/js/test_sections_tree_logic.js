@@ -427,6 +427,65 @@ test("expandedKeysForPreset: 'all'/'smoke'/null — ничего не раскр
   assert.deepStrictEqual(Logic.expandedKeysForPreset(kinds, null), []);
 });
 
+// ------------------------------------------------------------------ targetCoversFile/markerConflict
+
+test("targetCoversFile: файл, папка-родитель, nodeid; чужая папка и пустой target — нет", function () {
+  assert.strictEqual(Logic.targetCoversFile("tests/ui/buk/test_form.py", "tests/ui/buk/test_form.py"), true);
+  assert.strictEqual(Logic.targetCoversFile("tests/ui/buk", "tests/ui/buk/test_form.py"), true);
+  assert.strictEqual(Logic.targetCoversFile("tests/ui", "tests/ui/buk/test_form.py"), true);
+  assert.strictEqual(Logic.targetCoversFile("tests/ui/buk/test_form.py::test_x", "tests/ui/buk/test_form.py"), true);
+  assert.strictEqual(Logic.targetCoversFile("tests/ui/bu", "tests/ui/buk/test_form.py"), false);
+  assert.strictEqual(Logic.targetCoversFile("tests/api", "tests/ui/buk/test_form.py"), false);
+  assert.strictEqual(Logic.targetCoversFile("", "tests/ui/buk/test_form.py"), false);
+});
+
+// Дерево, где e2e-файл размечен маркером прямо в tests/ui/* (псевдо-раздел tests/e2e
+// его дублирует, как делает app.core.sections._e2e_virtual_files).
+function treeWithMarkedUiFile() {
+  var data = sampleTree();
+  data.kinds[1].areas.push({
+    area: "mobile", section: "ui/mobile", target: "tests/ui/mobile", tests_count: 1,
+    files: [{ name: "test_login.py", target: "tests/ui/mobile/test_login.py", tests_count: 1 }],
+  });
+  data.kinds[2].areas[0].files.push(
+    { name: "ui/buk/test_form.py", target: "tests/ui/buk/test_form.py", tests_count: 1 }
+  );
+  return data;
+}
+
+test("markerConflict: e2e + только Mobile-файлы — конфликт (сценарий прогона #89)", function () {
+  assert.strictEqual(Logic.markerConflict(treeWithMarkedUiFile(), "e2e", ["tests/ui/mobile/test_login.py"]), true);
+  assert.strictEqual(Logic.markerConflict(treeWithMarkedUiFile(), "e2e", ["tests/ui/mobile"]), true);
+});
+
+test("markerConflict: e2e + файл/папка с e2e-маркером — нет конфликта", function () {
+  assert.strictEqual(Logic.markerConflict(treeWithMarkedUiFile(), "e2e", ["tests/ui/buk/test_form.py"]), false);
+  assert.strictEqual(Logic.markerConflict(treeWithMarkedUiFile(), "e2e", ["tests/ui"]), false);
+  assert.strictEqual(Logic.markerConflict(treeWithMarkedUiFile(), "e2e", ["tests/e2e"]), false);
+  assert.strictEqual(Logic.markerConflict(treeWithMarkedUiFile(), "e2e", ["tests/ui/mobile", "tests/e2e/test_checkout.py"]), false);
+});
+
+test("markerConflict: api/ui — по папке раздела", function () {
+  assert.strictEqual(Logic.markerConflict(sampleTree(), "api", ["tests/ui/buk/test_form.py"]), true);
+  assert.strictEqual(Logic.markerConflict(sampleTree(), "api", ["tests/api/notifications"]), false);
+  assert.strictEqual(Logic.markerConflict(sampleTree(), "ui", ["tests/api"]), true);
+  assert.strictEqual(Logic.markerConflict(sampleTree(), "ui", ["tests/ui/buk/test_form.py::test_x"]), false);
+});
+
+test("markerConflict: smoke/без маркера/пустой выбор/неизвестный маркер — никогда не конфликт", function () {
+  assert.strictEqual(Logic.markerConflict(sampleTree(), "smoke", ["tests/ui/buk/test_form.py"]), false);
+  assert.strictEqual(Logic.markerConflict(sampleTree(), "", ["tests/ui/buk/test_form.py"]), false);
+  assert.strictEqual(Logic.markerConflict(sampleTree(), "e2e", []), false);
+  assert.strictEqual(Logic.markerConflict(sampleTree(), "e2e", null), false);
+  assert.strictEqual(Logic.markerConflict(sampleTree(), "regression", ["tests/ui/buk/test_form.py"]), false);
+});
+
+test("markerConflict: в дереве нет файлов с таким маркером — не предупреждаем", function () {
+  var data = sampleTree();
+  data.kinds = data.kinds.filter(function (k) { return k.kind !== "e2e"; });
+  assert.strictEqual(Logic.markerConflict(data, "e2e", ["tests/ui/buk/test_form.py"]), false);
+});
+
 var failed = 0;
 tests.forEach(function (t) {
   try {

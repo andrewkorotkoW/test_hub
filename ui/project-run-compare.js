@@ -11,6 +11,9 @@
  */
 
   let compareLoadedRunId = null;
+  // Сравнение, загруженное у ещё идущего прогона (вкладка доступна и до финиша),
+  // не кэшируется: при каждом открытии перезапрашивается, пока прогон не завершён.
+  let compareLoadedFinal = false;
   let compareData = null;
   let causesLoadedRunId = null;
   let causesData = null;
@@ -23,6 +26,7 @@
 
   function resetCompareState() {
     compareLoadedRunId = null;
+    compareLoadedFinal = false;
     compareData = null;
     causesLoadedRunId = null;
     causesData = null;
@@ -152,13 +156,14 @@
   async function loadCompareTab(forceBaseId) {
     const runId = Number(runIdLabel.textContent);
     if (!runId) return;
-    if (compareLoadedRunId === runId && forceBaseId === undefined) return;
+    if (compareLoadedRunId === runId && compareLoadedFinal && forceBaseId === undefined) return;
     cmpError.hidden = true;
     try {
       const query = forceBaseId ? `?base=${forceBaseId}` : "";
       const data = await api(`/api/runs/${runId}/compare${query}`);
       compareData = data;
       compareLoadedRunId = runId;
+      compareLoadedFinal = isFinished;
       renderCompareBaseSelect(runId, data.base.id);
       renderCompareKpis(data.kpis);
       renderCompareGroups(data.groups);

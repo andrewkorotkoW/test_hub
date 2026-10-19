@@ -142,6 +142,7 @@
     <div class="project-layout">
       <div class="card" id="tests-card">
         <h2>Тесты</h2>
+        <div id="run-form-summary" class="run-form-summary" hidden></div>
         <div id="run-queue-notice" class="hint-box queue-notice" hidden></div>
         <div class="stand-row">
           <label for="stand-select">Стенд</label>
@@ -193,6 +194,7 @@
           Мобильный (Pixel 7)
         </label>
         <p class="muted live-checkbox-hint">Прогон в мобильной вёрстке: viewport 412×915, touch, мобильный user-agent.</p>
+        <div id="marker-conflict-hint" class="hint-box warn marker-conflict-hint" hidden></div>
         <div class="run-buttons" id="run-buttons-row">
           <button id="run-all-btn" class="primary">Запустить всё</button>
           <button id="run-selected-btn">Запустить выбранное</button>
@@ -224,6 +226,15 @@
           <button id="cancel-run-btn" class="danger" hidden>Отменить</button>
         </div>
 
+        <div id="run-stats" class="run-stats" hidden>
+          <div class="run-stat"><span class="k">Стенд</span><b id="run-stat-stand">—</b></div>
+          <div class="run-stat"><span class="k">Начало</span><b id="run-stat-started">—</b></div>
+          <div class="run-stat"><span class="k">Длительность</span><b id="run-stat-duration">—</b></div>
+          <div class="run-stat"><span class="k">Pass rate</span><b id="run-stat-pass-rate">—</b></div>
+          <div id="summary-badges" class="summary-badges"></div>
+          <div id="run-stat-causes" class="run-stat-causes" hidden></div>
+        </div>
+
         <div id="run-split" class="run-split" hidden>
           <div class="run-split-rail">
             <h3>Тесты <span id="run-tests-count" class="muted"></span></h3>
@@ -249,6 +260,7 @@
             <label for="cmp-base-select">База сравнения</label>
             <select id="cmp-base-select"></select>
             <span class="muted small">Сравниваются финальные статусы (после реранов)</span>
+            <span id="cmp-running-note" class="muted small" hidden>— прогон ещё идёт: по уже завершённым тестам, обновится после финиша</span>
           </div>
           <div id="cmp-error" class="error-box" hidden></div>
           <div id="cmp-kpis" class="cmp-kpis"></div>
@@ -275,11 +287,14 @@
           </div>
         </div>
 
-        <img id="report-chart" class="report-chart" alt="График отчёта прогона" hidden>
+        <details id="report-chart-spoiler" class="report-chart-spoiler" hidden>
+          <summary>График отчёта <span class="muted">(PNG — тот же, что в Telegram-сводке и на share-странице)</span></summary>
+          <img id="report-chart" class="report-chart" alt="График отчёта прогона">
+        </details>
         <div id="report-section" hidden>
-          <h3>Итог прогона</h3>
-          <div id="summary-badges" class="summary-badges"></div>
+          <h3>Итог прогона <span class="h3-hint">упавшие и broken — первыми</span></h3>
           <div class="report-filters">
+            <div id="report-cause-filter" class="report-cause-filter"></div>
             <select id="report-status-filter">
               <option value="">Все статусы</option>
               <option value="passed">passed</option>
@@ -292,7 +307,7 @@
           </div>
           <div class="table-wrap table-scroll">
             <table>
-              <thead><tr><th>Тест</th><th>Статус</th><th>Длительность</th></tr></thead>
+              <thead><tr><th>Тест</th><th>Статус</th><th>Причина</th><th>Длительность</th></tr></thead>
               <tbody id="report-rows"></tbody>
             </table>
           </div>
@@ -556,6 +571,7 @@
   <script src="run-live-logic.js"></script>
   <script src="sentry-logic.js"></script>
   <script src="run-window-split-logic.js"></script>
+  <script src="run-report-logic.js"></script>
   <script src="run-compare-logic.js"></script>
   <!-- project-setup.js и project-*.js делят один lexical scope с project.js
        (классические <script>, без type="module") — см. шапку project-setup.js. -->

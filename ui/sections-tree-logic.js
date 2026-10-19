@@ -235,12 +235,44 @@
     return (kinds || []).filter(function (k) { return k.kind === preset; }).map(kindNodeKey);
   }
 
+  // target (файл, папка раздела/области или nodeid "file.py::test") покрывает файл,
+  // если совпадает с ним или является его родительской папкой.
+  function targetCoversFile(target, fileTarget) {
+    var t = String(target || "").split("::")[0].replace(/\/+$/, "");
+    if (!t) return false;
+    return fileTarget === t || fileTarget.indexOf(t + "/") === 0;
+  }
+
+  // Конфликт «маркер × выбранные цели»: pytest -m <marker> отфильтрует всё, и
+  // прогон соберёт 0 тестов (прогон #89 19.10.2026: пресет Mobile + маркер e2e —
+  // FAILED без единого теста). Знание, где стоит маркер, есть только для e2e:
+  // псевдо-раздел tests/e2e в дереве — ровно файлы с @pytest.mark.e2e, включая
+  // размеченные прямо в tests/ui/* (app.core.sections._e2e_virtual_files). Для
+  // api/ui маркер в auto_tests_vshgu почти всегда совпадает с папкой tests/api|ui
+  // — проверяем по ней (эвристика, поэтому это предупреждение, а не блокировка).
+  // smoke — сквозной, по файлам не вычисляется, не предупреждаем.
+  // targets — то, что реально уйдёт в pytest: схлопнутые папки из collectTargets
+  // или строки ручного ввода; пустой выбор — не конфликт (его ловит сам запуск).
+  function markerConflict(data, marker, targets) {
+    if (!marker || marker === "smoke") return false;
+    var list = (targets || []).filter(Boolean);
+    if (!list.length) return false;
+    if (marker !== "e2e" && marker !== "api" && marker !== "ui") return false;
+    var markedFiles = presetLeafTargets(data, marker);
+    if (!markedFiles.length) return false;
+    return !list.some(function (target) {
+      return markedFiles.some(function (file) { return targetCoversFile(target, file); });
+    });
+  }
+
   var api = {
     matchesQuery: matchesQuery,
     filterSectionsTree: filterSectionsTree,
     allLeafTargets: allLeafTargets,
     presetLeafTargets: presetLeafTargets,
     collectTargets: collectTargets,
+    targetCoversFile: targetCoversFile,
+    markerConflict: markerConflict,
     AREA_LABELS_RU: AREA_LABELS_RU,
     humanizeSnakeCase: humanizeSnakeCase,
     areaLabel: areaLabel,

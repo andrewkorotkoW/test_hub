@@ -55,15 +55,18 @@
   let liveActive = false;
 
   function renderLiveFrameArea() {
+    // Шапка — снаружи рамки телефона, в рамку только <img> (как в
+    // ui/project-run-window.js::renderLiveTab): внутри экрана шапка отъедала
+    // высоту, а кадр не растягивался на экран.
     const inner = `
       <div id="live-frame-box" class="live-frame"${liveActive ? "" : " hidden"}>
         <div class="live-frame-head">
           <span id="live-frame-badge" class="status-pill running">В эфире</span>
           <span class="muted">обновляется автоматически, пока прогон идёт</span>
         </div>
-        <img id="live-frame-img" class="live-frame-img" alt="Живой кадр прогона">
+        ${maybePhoneFrame(`<img id="live-frame-img" class="live-frame-img" alt="Живой кадр прогона">`, "")}
       </div>`;
-    liveFrameArea.innerHTML = maybePhoneFrame(inner, "");
+    liveFrameArea.innerHTML = inner;
     liveFrameImg = document.getElementById("live-frame-img");
   }
 
