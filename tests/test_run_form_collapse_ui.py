@@ -54,6 +54,8 @@ def test_style_css_single_column_layout_and_collapsed_rule():
     assert "minmax(0, 1.1fr) minmax(0, 1.4fr)" not in STYLE_CSS
     assert "#tests-card:not(.collapsed) { max-width:" in STYLE_CSS
     assert "#tests-card.collapsed > :not(#run-form-summary):not(#run-queue-notice) { display: none; }" in STYLE_CSS
+    # баннер очереди в свёрнутом виде не упирается в кнопки сводки
+    assert "#tests-card.collapsed #run-queue-notice { margin-top: 12px; margin-bottom: 0; }" in STYLE_CSS
     assert ".hint-box.warn" in STYLE_CSS
 
 
