@@ -619,36 +619,123 @@
   }
   setInterval(refreshQueueNotice, 15000);
 
+  // ---------------- вкладка «Прогоны» (таблица истории с фильтрами) ----------------
+  // Чистая логика фильтров/форматов — ui/runs-history-logic.js (RunsHistoryLogic);
+  // здесь только DOM. Фильтры запоминаются в localStorage на проект. Теги строки
+  // (сборка / эфир / Pixel 7) — те же пилюли .runs-feed-tag, что в ленте дашборда:
+  // r.mobile ? `<span class="runs-feed-tag">Pixel 7</span>` — RunsHistoryLogic.runTags
+  // лишь не дублирует «Pixel 7», когда метка сборки уже «Мобильный (Pixel 7)».
+  const HistLogic = window.RunsHistoryLogic;
+  const HIST_FILTERS_KEY = `run-history-filters:${projectName}`;
+  const histFilterEls = {
+    stand: document.getElementById("hist-stand"),
+    status: document.getElementById("hist-status"),
+    requestedBy: document.getElementById("hist-by"),
+    label: document.getElementById("hist-label"),
+    period: document.getElementById("hist-period"),
+    search: document.getElementById("hist-search"),
+  };
+  const histResetBtn = document.getElementById("hist-reset");
+  const histCountEl = document.getElementById("hist-count");
+  let histFilters = HistLogic.normalizeFilters((() => {
+    try { return JSON.parse(localStorage.getItem(HIST_FILTERS_KEY) || "{}"); } catch { return {}; }
+  })());
+
+  function histSelectOptions(select, values, labelOf) {
+    const first = select.options[0].outerHTML;
+    select.innerHTML = first + values.map((v) => `<option value="${escapeHtml(v)}">${escapeHtml(labelOf ? labelOf(v) : v)}</option>`).join("");
+  }
+
+  function histApplyFiltersToControls(runs) {
+    const opts = HistLogic.filterOptions(runs);
+    histSelectOptions(histFilterEls.stand, opts.stands, (v) => v === HistLogic.NO_STAND ? "без стенда" : v);
+    histSelectOptions(histFilterEls.requestedBy, opts.requesters);
+    histSelectOptions(histFilterEls.label, opts.labels);
+    Object.keys(histFilterEls).forEach((k) => {
+      const el = histFilterEls[k];
+      if (el.tagName === "SELECT" && ![...el.options].some((o) => o.value === histFilters[k])) histFilters[k] = k === "period" ? "all" : "";
+      if (el.value !== histFilters[k]) el.value = histFilters[k];
+    });
+  }
+
+  function histResultHtml(r) {
+    const res = HistLogic.runResult(r);
+    if (r.status === "queued" || r.status === "running") return `<span class="muted">${r.status === "queued" ? "в очереди" : "выполняется…"}</span>`;
+    if (!res.total) return `<span class="muted">—</span>`;
+    const seg = (n, cls) => n ? `<span class="${cls}" style="width:${((n / res.total) * 100).toFixed(1)}%" title="${cls.replace("hist-seg-", "")}: ${n}"></span>` : "";
+    const rateCls = res.rate === null ? "" : res.rate >= 90 ? "good" : res.rate >= 60 ? "warn" : "bad";
+    return `
+      <div class="hist-result">
+        <span class="hist-bar">${seg(res.passed, "hist-seg-passed")}${seg(res.failed, "hist-seg-failed")}${seg(res.skipped, "hist-seg-skipped")}</span>
+        <span class="hist-rate ${rateCls}">${res.rate === null ? "—" : res.rate + " %"}</span>
+        <span class="hist-counts"><span class="ab-c-passed">✓ ${res.passed}</span>${res.failed ? ` <span class="ab-c-failed">✗ ${res.failed}</span>` : ""}${res.skipped ? ` <span class="ab-c-skipped">skip ${res.skipped}</span>` : ""}</span>
+      </div>
+      <div class="hist-delta" title="Изменение к предыдущему прогону на этом стенде: passed / failed · падения из-за стенда">${historyDeltaHtml(r)}</div>
+    `;
+  }
+
+  function historyRowHtml(r, now) {
+    const target = HistLogic.targetSummary(r.target);
+    const tags = HistLogic.runTags(r);
+    return `
+      <tr class="clickable${r.status === "running" || r.status === "queued" ? " hist-row-active" : ""}" data-run-id="${r.id}">
+        <td class="hist-id">#${r.id}</td>
+        <td><span class="status-pill status-pill-sm ${escapeHtml(r.status)}">${escapeHtml(r.status)}</span></td>
+        <td>${escapeHtml(r.stand || "—")}${isManualStandRun(r.stand) ? `<span class="badge-manual">ручной</span>` : ""}</td>
+        <td class="hist-target">
+          <div class="hist-target-text" title="${escapeHtml(target.full)}"><span class="mono">${escapeHtml(target.text)}</span>${target.more ? ` <span class="hist-target-more">+${target.more}</span>` : ""}</div>
+          ${tags.length ? `<div class="runs-feed-tags">${tags.map((t) => `<span class="runs-feed-tag">${escapeHtml(t.text)}</span>`).join("")}</div>` : ""}
+        </td>
+        <td class="hist-when" title="${escapeHtml(fmtDate(r.started))}">${escapeHtml(HistLogic.fmtStarted(r.started, now))}</td>
+        <td>${histResultHtml(r)}</td>
+        <td class="hist-duration">${RunReportLogic.fmtRunDuration(r.duration)}</td>
+        <td>${escapeHtml(r.requested_by || "—")}</td>
+      </tr>
+    `;
+  }
+
+  function renderHistoryTable() {
+    const runs = lastRunsList || [];
+    histApplyFiltersToControls(runs);
+    const active = HistLogic.filtersActive(histFilters);
+    histResetBtn.hidden = !active;
+    const shown = HistLogic.filterRuns(runs, histFilters, new Date());
+    histCountEl.textContent = runs.length
+      ? (active ? `${shown.length} из ${runs.length}` : `${runs.length} ${pluralRu(runs.length, "прогон", "прогона", "прогонов")}`)
+      : "";
+    if (!runs.length) {
+      historyRows.innerHTML = `<tr><td colspan="8" class="muted">Прогонов ещё не было.</td></tr>`;
+      return;
+    }
+    if (!shown.length) {
+      historyRows.innerHTML = `<tr><td colspan="8" class="muted">Под фильтры ничего не попало.</td></tr>`;
+      return;
+    }
+    const now = new Date();
+    historyRows.innerHTML = shown.map((r) => historyRowHtml(r, now)).join("");
+  }
+
+  function histSetFilter(key, value) {
+    histFilters = HistLogic.normalizeFilters({ ...histFilters, [key]: value });
+    localStorage.setItem(HIST_FILTERS_KEY, JSON.stringify(histFilters));
+    renderHistoryTable();
+  }
+
+  Object.keys(histFilterEls).forEach((k) => {
+    histFilterEls[k].addEventListener(k === "search" ? "input" : "change", () => histSetFilter(k, histFilterEls[k].value));
+  });
+  histResetBtn.addEventListener("click", () => {
+    histFilters = HistLogic.normalizeFilters({});
+    localStorage.removeItem(HIST_FILTERS_KEY);
+    renderHistoryTable();
+  });
+
   async function loadHistory() {
     try {
       const runs = await api(`/api/projects/${encodeURIComponent(projectName)}/runs`);
       lastRunsList = runs;
       renderQueueNotice();
-      if (!runs.length) {
-        historyRows.innerHTML = `<tr><td colspan="8" class="muted">Прогонов ещё не было.</td></tr>`;
-      } else {
-        historyRows.innerHTML = runs.map((r) => `
-          <tr class="clickable" data-run-id="${r.id}">
-            <td>${r.id}</td>
-            <td class="status-text ${escapeHtml(r.status)}">${escapeHtml(r.status)}</td>
-            <td>${escapeHtml(r.stand || "—")}${isManualStandRun(r.stand) ? `<span class="badge-manual">ручной</span>` : ""}</td>
-            <td>
-              <div>${r.target === "all" ? "всё" : "выборочно"}</div>
-              ${(r.label || r.live || r.mobile) ? `
-                <div class="runs-feed-tags">
-                  ${r.label ? `<span class="runs-feed-tag">сборка: ${escapeHtml(r.label)}</span>` : ""}
-                  ${r.live ? `<span class="runs-feed-tag">эфир</span>` : ""}
-                  ${r.mobile ? `<span class="runs-feed-tag">Pixel 7</span>` : ""}
-                </div>
-              ` : ""}
-            </td>
-            <td>${fmtDate(r.started)}</td>
-            <td>${historyDeltaHtml(r)}</td>
-            <td>${fmtDuration(r.duration)}</td>
-            <td>${escapeHtml(r.requested_by || "—")}</td>
-          </tr>
-        `).join("");
-      }
+      renderHistoryTable();
       await renderDashboard(runs);
     } catch (err) {
       historyRows.innerHTML = `<tr><td colspan="8" class="error-box">Не удалось загрузить историю: ${escapeHtml(err.message)}</td></tr>`;

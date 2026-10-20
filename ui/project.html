@@ -40,7 +40,7 @@
       <a href="#dashboard" data-tab="dashboard">Дашборд</a>
       <a href="#run" data-tab="run">Запуск</a>
       <a href="#schedules" data-tab="schedules">Расписания</a>
-      <a href="#history" data-tab="history">История</a>
+      <a href="#history" data-tab="history">Прогоны</a>
       <a href="#flaky" data-tab="flaky">Флаки</a>
       <a href="#testcases" data-tab="testcases">Тест-кейсы</a>
     </nav>
@@ -404,11 +404,37 @@
 
     <div class="tab-panel" data-tab-panel="history" hidden>
     <div class="card">
-      <h2>История прогонов</h2>
-      <div class="table-wrap table-scroll">
-        <table>
+      <!-- Вкладка «Прогоны» (бывшая «История», 20.10.2026): таблица на всю высоту вкладки
+           (без внутреннего скролла в 420px), фильтры над ней (стенд · статус · кто ·
+           сборка · период · поиск, запоминаются в localStorage), колонка «Результат · Δ»
+           вместо голой дельты. Чистая логика фильтров/форматов — ui/runs-history-logic.js. -->
+      <div class="hist-head">
+        <h2>Прогоны</h2>
+        <span class="muted hist-count" id="hist-count"></span>
+      </div>
+      <div class="hist-filters" id="hist-filters">
+        <select id="hist-stand" aria-label="Стенд"><option value="">все стенды</option></select>
+        <select id="hist-status" aria-label="Статус">
+          <option value="">любой статус</option>
+          <option value="passed">passed</option>
+          <option value="failed">failed</option>
+          <option value="cancelled">cancelled</option>
+          <option value="active">в работе / очередь</option>
+        </select>
+        <select id="hist-by" aria-label="Кем запущен"><option value="">кто угодно</option></select>
+        <select id="hist-label" aria-label="Сборка"><option value="">любая сборка</option></select>
+        <select id="hist-period" aria-label="Период">
+          <option value="7d">за 7 дней</option>
+          <option value="30d">за 30 дней</option>
+          <option value="all">за всё время</option>
+        </select>
+        <input type="search" id="hist-search" placeholder="поиск: ID, раздел, сборка, стенд">
+        <button type="button" id="hist-reset" class="toolbar-mini-btn" hidden>сбросить</button>
+      </div>
+      <div class="table-wrap table-sticky-head">
+        <table class="hist-table">
           <thead>
-            <tr><th>ID</th><th>Статус</th><th>Стенд</th><th>Цель</th><th>Начат</th><th>Δ к предыдущему</th><th>Длительность</th><th>Кем запущен</th></tr>
+            <tr><th>ID</th><th>Статус</th><th>Стенд</th><th>Цель</th><th>Начат</th><th>Результат · Δ</th><th>Длительность</th><th>Кем запущен</th></tr>
           </thead>
           <tbody id="history-rows"></tbody>
         </table>
@@ -586,6 +612,7 @@
   <script src="sentry-logic.js"></script>
   <script src="run-window-split-logic.js"></script>
   <script src="run-report-logic.js"></script>
+  <script src="runs-history-logic.js"></script>
   <script src="run-compare-logic.js"></script>
   <!-- project-setup.js и project-*.js делят один lexical scope с project.js
        (классические <script>, без type="module") — см. шапку project-setup.js. -->

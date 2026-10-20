@@ -200,9 +200,10 @@ def test_history_table_header_has_delta_prev_column():
         PROJECT_HTML,
         re.DOTALL,
     )
-    assert m, "не найдено содержимое вкладки «История»"
+    assert m, "не найдено содержимое вкладки «Прогоны» (data-tab-panel=history)"
     body = m.group(1)
-    assert "<th>Δ к предыдущему</th>" in body
+    # с 20.10.2026 дельта — часть колонки «Результат · Δ» (полоса + pass-rate + счётчики)
+    assert "<th>Результат · Δ</th>" in body
     assert 'id="history-rows"' in body
 
 
