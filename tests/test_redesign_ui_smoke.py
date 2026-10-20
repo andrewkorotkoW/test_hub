@@ -87,14 +87,16 @@ async def test_project_js_renders_runs_feed_progress_bar(client):
 async def test_coverage_html_has_areas_and_tree_blocks(client):
     resp = await client.get("/coverage.html")
     html = resp.text
-    assert 'id="summary-card"' in html
+    # карточка «Сводка» (summary-card) убрана 20.10.2026 — дубль KPI/колонок светофора
+    assert 'id="summary-card"' not in html
     assert 'id="areas-block-box"' in html
     assert 'id="areas-block-body"' in html
     assert 'id="areas-sort-chips"' in html
-    assert 'id="chart-tree-box"' in html
-    # сворачиваемые секции: треугольники-переключатели (▾/▸), не гамбургер-меню сайдбара
-    assert 'id="charts-toggle-btn"' in html and "▾" in html
-    assert 'id="tree-toggle-btn"' in html and "▸" in html
+    # карточка «Диаграммы» со своим сворачиванием ушла во вкладку «Области», d3-«Дерево
+    # проекта» убрано — его роль выполняет режим «только проблемы» блока областей (20.10.2026)
+    assert 'id="charts-toggle-btn"' not in html
+    assert 'id="chart-tree-box"' not in html and 'id="tree-toggle-btn"' not in html
+    assert 'id="areas-problems-toggle"' in html
 
 
 async def test_xfail_html_has_toolbar_and_table(client):

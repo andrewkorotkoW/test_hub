@@ -8,7 +8,7 @@
  * моменту ui/coverage-setup.js и все coverage-*-dom.js уже выполнились и
  * определили свои функции/DOM-ссылки в общем lexical scope документа
  * (подробности — в шапке ui/coverage-setup.js). Поэтому renderCharts может
- * свободно звать renderRings/renderAreasBlock/renderTraffic/syncTreeView и т.д.,
+ * свободно звать renderRings/renderAreasBlock/renderTraffic и т.д.,
  * хотя они объявлены в других файлах.
  *
  * await initPage() и сам запуск (loadSummary + applyViewMode) — единственное
@@ -39,14 +39,12 @@
     loadGraph();
     renderAreasBlock();
     renderTraffic();
-    if (!treeInnerBody.hidden) syncTreeView();
   }
 
   // ---------------- toolbar actions ----------------
   async function loadSummary() {
     try {
       summary = await api(`/api/projects/${encodeURIComponent(projectName)}/coverage`);
-      renderSummary();
       renderStandOptions();
       highlightedRoutes = null;
       renderMap();
@@ -63,7 +61,6 @@
     renderStatusChart();
     renderAreasBlock();
     renderTraffic();
-    if (!treeInnerBody.hidden) syncTreeView();
   });
   filterUncovered.addEventListener("change", renderMap);
   filterFailed.addEventListener("change", renderMap);
@@ -74,7 +71,6 @@
     hideToolbarMsg();
     try {
       summary = await api(`/api/projects/${encodeURIComponent(projectName)}/coverage/recalc`, { method: "POST" });
-      renderSummary();
       renderStandOptions();
       highlightedRoutes = null;
       renderMap();
@@ -99,7 +95,6 @@
         body: form,
       });
       summary = result.coverage;
-      renderSummary();
       renderStandOptions();
       highlightedRoutes = null;
       renderMap();

@@ -1,5 +1,5 @@
 """Карта продукта (страница «Покрытие» как схема продукта): зоны -> узлы (экраны/
-функции) -> связи, со светофором покрытия по последнему прогону стенда.
+функции) -> связи, со светофором покрытия по последним результатам тестов на стенде.
 
 Источник разметки — файл `<project_path>/tests/product_map.yml` (или `.yaml`/`.json`),
 формат см. parse_layout(). Если файла нет (или он повреждён) — раскладка строится по
@@ -7,11 +7,10 @@
 падений: зона на каждый tests/api|ui|e2e, узел на раздел (подпапку).
 
 Сопоставление узла с тестами — по префиксам путей/nodeid из поля `tests` узла, статус
-светофора — тем же способом, что и app.core.xfail_registry/app.core.coverage: nodeid
-(AST-скан tests/**/test_*.py) -> allure fullName -> статус из allure-results последнего
-завершённого прогона стенда. Каждый модуль хранит свою копию `_nodeid_to_full_name` по
-уже сложившемуся в проекте соглашению (см. комментарий в xfail_registry) — тянуть ради
-одной функции межмодульную зависимость не стоит.
+светофора — последний известный результат каждого теста на стенде по последним
+завершённым прогонам (app.core.coverage.nodeid_last_result_map — тот же источник, что
+у блока «Тесты по областям» и светофора на странице), а не только из самого
+последнего прогона: отменённый или выборочный прогон не красит всю схему в серый.
 
 Кэш — JSON на диск (app.core.coverage/app.core.sections), но ключ инвалидации свой:
 раскладка пересчитывается при изменении файла карты (или дерева тестов для fallback),
@@ -28,7 +27,7 @@ from pathlib import Path
 import yaml
 
 from ..config import settings
-from . import allure_report, sections
+from . import coverage, sections
 
 PRODUCT_MAP_DIR = settings.WORKSPACE_DIR / "product_map"
 
@@ -40,6 +39,10 @@ _STATE_BY_STATUS = {
     "unknown": "grey",
 }
 _KIND_LABELS = {"api": "API", "ui": "UI", "e2e": "E2E"}
+# Версия способа расчёта статусов узлов — пишется в кэш; роутер пересчитывает кэш,
+# посчитанный другим способом (иначе смена алгоритма не доехала бы до страницы, пока
+# на стенде не появится новый прогон).
+STATUS_SOURCE = "last_results_v1"
 
 
 class ProductMapError(ValueError):
@@ -248,30 +251,7 @@ def load_layout(project_path: str) -> dict:
         }
 
 
-# ------------------------------------------------------------------ nodeid <-> fullName, статус
-
-def _allure_dir(run_id: int) -> Path:
-    return settings.ALLURE_RESULTS_DIR / str(run_id)
-
-
-def _nodeid_to_full_name(nodeid: str) -> str:
-    """pytest nodeid -> allure fullName — своя копия, см. описание модуля."""
-    file_part, _, rest = nodeid.partition("::")
-    module = file_part[:-3] if file_part.endswith(".py") else file_part
-    module = module.replace("/", ".")
-    if not rest:
-        return module
-    segments = rest.split("::")
-    test = segments[-1].split("[")[0]
-    class_name = f".{segments[-2]}" if len(segments) > 1 else ""
-    return f"{module}{class_name}#{test}"
-
-
-def _classify_allure_status(entry: dict) -> str:
-    if entry["status"] == "skipped" and entry.get("message") and "xfail" in entry["message"].lower():
-        return "xfail"
-    return entry["status"]
-
+# ------------------------------------------------------------------ последний прогон, статус
 
 def _latest_finished_run(conn: sqlite3.Connection, project: str, stand: str) -> sqlite3.Row | None:
     return conn.execute(
@@ -340,7 +320,10 @@ def _test_display_name(nodeid: str) -> str:
     return "::".join(segments[-2:]) if len(segments) > 2 else segments[-1]
 
 
-def _node_status(node: dict, all_nodeids: list[str], by_full_name: dict[str, str], run_id: int | None) -> dict:
+def _node_status(node: dict, all_nodeids: list[str], status_by_nodeid: dict[str, str], run_id: int | None) -> dict:
+    """Светофор узла по покрывающим тестам: status_by_nodeid — последний известный
+    статус каждого теста на стенде (coverage.nodeid_last_result_map), тесты без
+    результата — unknown. Худший статус среди известных определяет цвет."""
     matched = sorted({nid for nid in all_nodeids if any(_test_matches_prefix(nid, p) for p in node["tests"])})
     empty_counts = {"api": 0, "ui": 0, "other": 0, "total": 0}
     if not matched:
@@ -356,7 +339,7 @@ def _node_status(node: dict, all_nodeids: list[str], by_full_name: dict[str, str
         else:
             counts["other"] += 1
 
-    statuses = [by_full_name.get(_nodeid_to_full_name(nid), "unknown") for nid in matched]
+    statuses = [status_by_nodeid.get(nid, "unknown") for nid in matched]
     worst = max(statuses, key=lambda s: _STATUS_PRIORITY.get(s, 0))
     return {
         "state": _STATE_BY_STATUS.get(worst, "grey"),
@@ -389,17 +372,22 @@ def recalc(project_name: str, conn: sqlite3.Connection) -> dict:
 
     stands_out: dict[str, dict] = {}
     for stand in stands:
+        # run_id последнего завершённого прогона — ключ кэша (роутер пересчитывает карту,
+        # когда он меняется); статусы же берутся по последним прогонам стенда, а не только
+        # из него: отменённый/выборочный последний прогон не красит всю схему в серый
+        # (на VSHGU после отменённого #91 было 1 из 61 узлов, у светофора — 36 из 86).
         run_id = latest_run_id(conn, project_name, stand)
-        entries = allure_report.parse_results(_allure_dir(run_id)) if run_id is not None else []
-        by_full_name = {entry["name"]: _classify_allure_status(entry) for entry in entries}
+        last_results = coverage.nodeid_last_result_map(conn, project_name, stand, all_nodeids)
+        status_by_nodeid = {nid: res["status"] for nid, res in last_results.items()}
         nodes_status = {
-            node["id"]: _node_status(node, all_nodeids, by_full_name, run_id) for node in layout["nodes"]
+            node["id"]: _node_status(node, all_nodeids, status_by_nodeid, run_id) for node in layout["nodes"]
         }
         stands_out[stand] = {"run_id": run_id, "nodes": nodes_status}
 
     result = {
         "project": project_name,
         "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "status_source": STATUS_SOURCE,
         "source": layout["source"],
         "message": layout["message"],
         "map_signature": map_signature(project["path"]),

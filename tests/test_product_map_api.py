@@ -250,6 +250,28 @@ async def test_product_map_cache_not_recalculated_without_new_run(
     assert calls == [], "без нового прогона и без изменения карты кэш не должен пересчитываться"
 
 
+async def test_product_map_cache_without_status_source_is_recalculated(
+    qa_client, isolated_product_map_dir, isolated_allure_dir, pm_project_dir
+):
+    """Кэш, посчитанный до перехода статусов на последние результаты (без
+    status_source), пересчитывается даже без нового прогона и без изменения карты."""
+    import json as _json
+
+    await _register_with_stands(qa_client, "pm_api_proj", pm_project_dir, stands=("stage",))
+    resp1 = await qa_client.get("/api/projects/pm_api_proj/product-map", params={"stand": "stage"})
+    assert resp1.status_code == 200
+    path = product_map.cache_path("pm_api_proj")
+    cached = _json.loads(path.read_text(encoding="utf-8"))
+    assert cached["status_source"] == product_map.STATUS_SOURCE
+    cached.pop("status_source")
+    cached["generated_at"] = "2000-01-01T00:00:00"
+    path.write_text(_json.dumps(cached), encoding="utf-8")
+
+    resp2 = await qa_client.get("/api/projects/pm_api_proj/product-map", params={"stand": "stage"})
+    assert resp2.status_code == 200
+    assert resp2.json()["generated_at"] != "2000-01-01T00:00:00", "старый кэш без status_source должен пересчитаться"
+
+
 async def test_product_map_cache_invalidated_by_new_run(
     qa_client, isolated_product_map_dir, isolated_allure_dir, pm_project_dir, monkeypatch
 ):

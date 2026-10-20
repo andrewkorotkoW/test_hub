@@ -4,7 +4,13 @@
  * openPageDetail/openTestDetail). Использует DOM-ссылки и состояние
  * (summary/highlightedRoutes/lastRoute) из ui/coverage-setup.js.
  */
-  // ---------------- map ----------------
+  // ---------------- map (аккордеон по областям) ----------------
+  // Правила фильтра/раскрытия и сводка области — чистая CoverageMapLogic
+  // (ui/coverage-map-logic.js, тесты tests/js/test_coverage_map_logic.js).
+  const MapLogic = window.CoverageMapLogic;
+  const routesExpanded = new Set();  // области, раскрытые пользователем
+  const routesCollapsed = new Set(); // области, свёрнутые пользователем вопреки авто-правилам
+
   function coverageClass(testsCount) {
     if (testsCount <= 0) return "cov-0";
     if (testsCount === 1) return "cov-1";
@@ -12,58 +18,92 @@
     return "cov-3";
   }
 
-  function routeMatchesFilters(route, stand, search) {
-    if (filterUncovered.checked && route.tests_count > 0) return false;
-    if (filterFailed.checked) {
-      const state = (route.status[stand] || {}).state;
-      if (state !== "failed") return false;
-    }
-    if (search && !route.path.toLowerCase().includes(search)) return false;
-    return true;
+  function mapFilterOpts() {
+    return { uncovered: filterUncovered.checked, failed: filterFailed.checked, search: searchInput.value.trim().toLowerCase() };
+  }
+
+  function routeCellHtml(route, stand, opts) {
+    const visible = MapLogic.routeMatchesFilters(route, stand, opts);
+    const failed = (route.status[stand] || {}).state === "failed";
+    const highlighted = highlightedRoutes && highlightedRoutes.has(route.name);
+    const classes = [
+      "route-cell",
+      coverageClass(route.tests_count),
+      failed ? "route-cell-failed" : "",
+      highlighted ? "route-cell-highlighted" : "",
+      visible ? "" : "route-cell-filtered",
+    ].filter(Boolean).join(" ");
+    const label = route.kind === "page" ? route.path : `${route.methods.join("/")} ${route.path}`;
+    return `
+      <button type="button" class="${classes}" data-name="${escapeHtml(route.name)}" data-kind="${escapeHtml(route.kind)}"
+              data-method="${escapeHtml(route.methods[0])}" data-path="${escapeHtml(route.path)}"
+              title="${escapeHtml(route.name)}">
+        <span class="route-cell-label">${escapeHtml(label)}</span>
+        ${route.shared ? `<span class="route-cell-count">${route.tests_count}</span>` : ""}
+      </button>
+    `;
+  }
+
+  function routeAreaHtml(area, stand, opts, filtersActive, highlightedAreas) {
+    const stats = MapLogic.areaRouteStats(area, stand, opts);
+    const expanded = MapLogic.shouldExpandArea(area.area, {
+      expanded: routesExpanded, collapsed: routesCollapsed, areaFilter, filtersActive,
+      visible: stats.visible, highlighted: !!highlightedAreas[area.area],
+    });
+    const pct = stats.total ? (stats.covered / stats.total) * 100 : 0;
+    const selected = areaFilter && areaFilter === area.area;
+    return `
+      <div class="route-area${selected ? " route-area-selected" : ""}${filtersActive && !stats.visible ? " route-area-empty" : ""}" data-area="${escapeHtml(area.area)}">
+        <button type="button" class="route-area-head" data-area-toggle="${escapeHtml(area.area)}" aria-expanded="${expanded}">
+          <span class="ab-caret">${expanded ? "▾" : "▸"}</span>
+          <span class="route-area-name">${escapeHtml(area.area)}</span>
+          <span class="route-area-bar" title="покрыто тестами ${stats.covered} из ${stats.total}"><span style="width:${pct.toFixed(1)}%"></span></span>
+          <span class="route-area-n">${stats.covered}/${stats.total}</span>
+          ${stats.failed ? `<span class="route-area-failed" title="маршрутов с падением на стенде">✗ ${stats.failed}</span>` : ""}
+          ${filtersActive ? `<span class="route-area-found muted">найдено ${stats.visible}</span>` : ""}
+        </button>
+        <div class="route-area-grid" ${expanded ? "" : "hidden"}>${area.routes.map((r) => routeCellHtml(r, stand, opts)).join("")}</div>
+      </div>
+    `;
   }
 
   function renderMap() {
     const stand = currentStand();
-    const search = searchInput.value.trim().toLowerCase();
-
+    const opts = mapFilterOpts();
+    const filtersActive = MapLogic.filtersActive(opts);
+    const highlightedAreas = MapLogic.areasForRoutes(summary.map, highlightedRoutes);
     const areasHtml = summary.map
       .filter((area) => !areaFilter || area.area === areaFilter)
-      .map((area) => {
-      const routesHtml = area.routes.map((route) => {
-        const visible = routeMatchesFilters(route, stand, search);
-        const state = (route.status[stand] || {}).state;
-        const failed = state === "failed";
-        const highlighted = highlightedRoutes && highlightedRoutes.has(route.name);
-        const classes = [
-          "route-cell",
-          coverageClass(route.tests_count),
-          failed ? "route-cell-failed" : "",
-          highlighted ? "route-cell-highlighted" : "",
-          visible ? "" : "route-cell-filtered",
-        ].filter(Boolean).join(" ");
-        const label = route.kind === "page" ? route.path : `${route.methods.join("/")} ${route.path}`;
-        return `
-          <button type="button" class="${classes}" data-name="${escapeHtml(route.name)}" data-kind="${escapeHtml(route.kind)}"
-                  data-method="${escapeHtml(route.methods[0])}" data-path="${escapeHtml(route.path)}"
-                  title="${escapeHtml(route.name)}">
-            <span class="route-cell-label">${escapeHtml(label)}</span>
-            ${route.shared ? `<span class="route-cell-count">${route.tests_count}</span>` : ""}
-          </button>
-        `;
-      }).join("");
-      const areaVisible = area.routes.some((route) => routeMatchesFilters(route, stand, search));
-      return `
-        <div class="route-area ${areaVisible ? "" : "route-area-empty"}">
-          <h3>${escapeHtml(area.area)}</h3>
-          <div class="route-area-grid">${routesHtml}</div>
-        </div>
-      `;
-    }).join("");
-
+      .map((area) => routeAreaHtml(area, stand, opts, filtersActive, highlightedAreas))
+      .join("");
     mapBox.innerHTML = areasHtml || `<p class="muted">Маршруты не найдены.</p>`;
   }
 
+  function toggleRouteArea(name) {
+    const head = mapBox.querySelector(`[data-area-toggle="${CSS.escape(name)}"]`);
+    const isOpen = head && head.getAttribute("aria-expanded") === "true";
+    if (isOpen) { routesExpanded.delete(name); routesCollapsed.add(name); }
+    else { routesCollapsed.delete(name); routesExpanded.add(name); }
+    renderMap();
+  }
+
+  routesExpandAllBtn.addEventListener("click", () => {
+    routesCollapsed.clear();
+    (summary ? summary.map : []).forEach((a) => routesExpanded.add(a.area));
+    renderMap();
+  });
+  routesCollapseAllBtn.addEventListener("click", () => {
+    routesExpanded.clear();
+    (summary ? summary.map : []).forEach((a) => routesCollapsed.add(a.area));
+    renderMap();
+  });
+
   mapBox.addEventListener("click", (ev) => {
+    const head = ev.target.closest("[data-area-toggle]");
+    if (head) {
+      toggleRouteArea(head.dataset.areaToggle);
+      return;
+    }
     const cell = ev.target.closest(".route-cell");
     if (!cell) return;
     highlightedRoutes = null;
@@ -155,6 +195,7 @@
   }
 
   async function openTestDetail(nodeid) {
+    setViewMode("routes"); // панель «Связи» и подсветка маршрутов живут на вкладке «Маршруты»
     detailBox.innerHTML = `<p class="muted">Загрузка…</p>`;
     try {
       const detail = await api(`/api/projects/${encodeURIComponent(projectName)}/coverage/test?id=${encodeURIComponent(nodeid)}`);

@@ -23,7 +23,7 @@ async def test_coverage_html_served(client):
     resp = await client.get("/coverage.html")
     assert resp.status_code == 200
     assert "text/html" in resp.headers["content-type"]
-    assert 'id="summary-card"' in resp.text
+    assert 'id="traffic-body"' in resp.text
     assert 'id="cov-stand-select"' in resp.text
 
 
@@ -50,7 +50,6 @@ async def test_coverage_js_calls_all_five_router_endpoints(client):
         "coverage-map-dom.js",
         "coverage-areas-dom.js",
         "coverage-diagrams-dom.js",
-        "coverage-tree-dom.js",
         "coverage.js",
     ):
         resp = await client.get(f"/{name}")

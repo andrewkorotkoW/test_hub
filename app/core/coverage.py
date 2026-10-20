@@ -725,8 +725,27 @@ def nodeid_last_result_map(
                     "status": by_full_name[full_name],
                     "run_id": run["id"],
                     "finished": run["finished"] or run["started"],
+                    "cause": None,
                 }
+    _attach_failure_causes(conn, result)
     return result
+
+
+def _attach_failure_causes(conn: sqlite3.Connection, result: dict[str, dict]) -> None:
+    """Причина падения (failure_causes: code/stand/session/throttling) из
+    run_test_results для найденных (run_id, nodeid) — режим «только проблемы» блока
+    «Тесты по областям». У старых прогонов строк может не быть — тогда None."""
+    run_ids = sorted({r["run_id"] for r in result.values()})
+    if not run_ids:
+        return
+    placeholders = ",".join("?" * len(run_ids))
+    rows = conn.execute(
+        f"SELECT run_id, nodeid, cause FROM run_test_results WHERE run_id IN ({placeholders}) AND cause IS NOT NULL",
+        run_ids,
+    ).fetchall()
+    causes = {(row["run_id"], row["nodeid"]): row["cause"] for row in rows}
+    for nodeid, res in result.items():
+        res["cause"] = causes.get((res["run_id"], nodeid))
 
 
 def _coverage_stand_status(

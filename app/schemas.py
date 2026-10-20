@@ -251,6 +251,7 @@ class TestLastResult(BaseModel):
     status: str
     run_id: int
     finished: Optional[str] = None
+    cause: Optional[str] = None  # failure_causes: code/stand/session/throttling, если известна
 
 
 class CoverageTree(BaseModel):

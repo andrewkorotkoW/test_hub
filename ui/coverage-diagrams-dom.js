@@ -214,9 +214,7 @@
     chartGraphTestChip.hidden = false;
     chartGraphTestChip.textContent = `Тест: ${nodeid} ×`;
     chartGraphAreaSelect.disabled = true;
-    chartsBody.hidden = false;
-    localStorage.setItem(CHARTS_COLLAPSED_KEY, "0");
-    applyChartsCollapsed(false);
+    setViewMode("routes"); // граф живёт на вкладке «Маршруты»
     document.getElementById("chart-graph-box").scrollIntoView({ behavior: "smooth", block: "start" });
     loadGraph();
   }

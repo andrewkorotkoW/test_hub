@@ -563,8 +563,8 @@ async def test_get_coverage_tree_matches_discover_nodeids_with_run_status(
     assert body["statuses"]["stage"] == {}
     # last_results — тот же прогон, плюс run_id/finished на каждый тест (finished у прогона не задан -> null)
     assert body["last_results"]["develop"] == {
-        "tests/test_foo.py::test_list_foo": {"status": "passed", "run_id": run_id, "finished": None},
-        "tests/test_foo.py::TestBar::test_x": {"status": "failed", "run_id": run_id, "finished": None},
+        "tests/test_foo.py::test_list_foo": {"status": "passed", "run_id": run_id, "finished": None, "cause": None},
+        "tests/test_foo.py::TestBar::test_x": {"status": "failed", "run_id": run_id, "finished": None, "cause": None},
     }
     assert body["last_results"]["stage"] == {}
 

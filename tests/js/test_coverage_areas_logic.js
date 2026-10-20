@@ -313,6 +313,68 @@ test("fmtShortDate: ISO -> «дд.мм чч:мм», пусто -> «—», не�
   assert.strictEqual(Logic.fmtShortDate("вчера"), "вчера");
 });
 
+// ---------------- режим «только проблемы» ----------------
+
+function problemResults() {
+  return {
+    "tests/api/auth/test_login.py::test_ok": { status: "passed", run_id: 84, finished: "2026-10-17T09:58:12" },
+    "tests/api/auth/test_login.py::test_bad_password": { status: "broken", run_id: 81, finished: "2026-10-16T13:05:00", cause: "stand" },
+    "tests/api/users/test_profile.py::TestProfile::test_get": { status: "failed", run_id: 74, finished: "2026-10-14T18:14:00", cause: "code" },
+    "tests/api/users/test_profile.py::TestProfile::test_update": { status: "xfail", run_id: 74, finished: "2026-10-14T18:14:00" },
+    "tests/api/test_smoke.py::test_health": { status: "failed", run_id: 84, finished: "2026-10-17T09:58:12" },
+    "tests/ui/test_home.py::test_loads": { status: "passed", run_id: 60, finished: null },
+    // e2e — без результата
+  };
+}
+
+test("normalizeProblemKinds: порядок фиксирован, мусор отбрасывается, пусто -> failed", function () {
+  assert.deepStrictEqual(Logic.normalizeProblemKinds(["none", "failed", "zzz"]), ["failed", "none"]);
+  assert.deepStrictEqual(Logic.normalizeProblemKinds(new Set(["xfail"])), ["xfail"]);
+  assert.deepStrictEqual(Logic.normalizeProblemKinds([]), ["failed"]);
+  assert.deepStrictEqual(Logic.normalizeProblemKinds(null), ["failed"]);
+});
+
+test("buildAreaRows: тесты несут rawStatus/cause/file для списка проблем", function () {
+  var rows = Logic.buildAreaRows(sampleTree(), problemResults());
+  var auth = rowByKey(rows, "api/auth");
+  var bad = auth.files[0].tests.filter(function (t) { return t.label === "test_bad_password"; })[0];
+  assert.strictEqual(bad.status, "failed");
+  assert.strictEqual(bad.rawStatus, "broken");
+  assert.strictEqual(bad.cause, "stand");
+  assert.strictEqual(bad.file, "tests/api/auth/test_login.py");
+  assert.strictEqual(bad.fileName, "test_login.py");
+});
+
+test("problemTests: по видам статусов и поиску, в порядке файлов", function () {
+  var rows = Logic.buildAreaRows(sampleTree(), problemResults());
+  var users = rowByKey(rows, "api/users");
+  assert.deepStrictEqual(Logic.problemTests(users, ["failed"]).map(function (t) { return t.label; }), ["test_get"]);
+  assert.deepStrictEqual(Logic.problemTests(users, ["failed", "xfail"]).map(function (t) { return t.label; }), ["test_get", "test_update"]);
+  assert.deepStrictEqual(Logic.problemTests(users, ["xfail"], "UPDATE").map(function (t) { return t.label; }), ["test_update"]);
+  assert.deepStrictEqual(Logic.problemTests(users, ["xfail"], "nope"), []);
+  var e2e = rowByKey(rows, "e2e/(корень)");
+  assert.deepStrictEqual(Logic.problemTests(e2e, ["none"]).map(function (t) { return t.label; }), ["test_full_flow"]);
+  assert.deepStrictEqual(Logic.problemTests(e2e, ["failed"]), []);
+});
+
+test("problemSummary: тесты/файлы/области и разбивка по причине (unknown — без причины)", function () {
+  var rows = Logic.buildAreaRows(sampleTree(), problemResults());
+  assert.deepStrictEqual(Logic.problemSummary(rows, ["failed"]), { tests: 3, files: 3, areas: 3, byCause: { stand: 1, code: 1, unknown: 1 } });
+  assert.deepStrictEqual(Logic.problemSummary(rows, ["xfail"]), { tests: 1, files: 1, areas: 1, byCause: {} }, "причины считаются только у failed");
+  assert.deepStrictEqual(Logic.problemSummary(rows, ["failed", "none"]).byCause, { stand: 1, code: 1, unknown: 1 });
+  assert.deepStrictEqual(Logic.problemSummary(rows, ["failed"], "profile"), { tests: 1, files: 1, areas: 1, byCause: { code: 1 } });
+});
+
+test("rowMatchesSearch / testMatchesSearch: по ключу области и nodeid, без учёта регистра, пустой запрос — всё", function () {
+  var rows = Logic.buildAreaRows(sampleTree(), problemResults());
+  var auth = rowByKey(rows, "api/auth");
+  assert.strictEqual(Logic.rowMatchesSearch(auth, ""), true);
+  assert.strictEqual(Logic.rowMatchesSearch(auth, "AUTH"), true, "по ключу области");
+  assert.strictEqual(Logic.rowMatchesSearch(auth, "bad_password"), true, "по nodeid теста");
+  assert.strictEqual(Logic.rowMatchesSearch(auth, "profile"), false);
+  assert.strictEqual(Logic.testMatchesSearch({ nodeid: "tests/x.py::Test::test_a[1]" }, "test_a["), true);
+});
+
 // ---------------- buildRouteStatsByArea / matchRouteStats ----------------
 
 test("buildRouteStatsByArea + matchRouteStats: сопоставление по имени папки", function () {

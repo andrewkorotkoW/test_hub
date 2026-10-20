@@ -63,7 +63,7 @@ async def test_coverage_html_serves_traffic_logic_script(client):
     assert 'src="coverage-traffic-logic.js"' in html
     # coverage-traffic-logic.js подключён после coverage-areas-logic.js (нужен
     # AREA_LABELS_RU / statusKey) и до coverage.js, который его использует
-    order = ["coverage-tree-logic.js", "coverage-areas-logic.js", "coverage-traffic-logic.js", "coverage.js"]
+    order = ["sections-tree-logic.js", "coverage-areas-logic.js", "coverage-traffic-logic.js", "coverage.js"]
     positions = [html.index(f'src="{name}"') for name in order]
     assert positions == sorted(positions)
 
@@ -84,12 +84,16 @@ def test_coverage_js_persists_view_mode_choice_in_localstorage():
     assert "TrafficLogic.VIEW_MODE_KEY" in js
     assert "localStorage.getItem(TrafficLogic.VIEW_MODE_KEY)" in js
     assert 'localStorage.setItem(TrafficLogic.VIEW_MODE_KEY, viewMode)' in js
-    assert "viewToggleTrafficBtn.addEventListener" in js
-    assert "viewToggleSchemeBtn.addEventListener" in js
+    # с 20.10.2026 вкладок четыре — один обработчик на панели по data-view, плюс #hash
+    assert 'viewToggle.addEventListener("click"' in js
+    assert 'button[data-view]' in js
+    assert "function setViewMode(mode)" in js
     # применение выбора не ломает схему v5: applyViewMode переключает hidden на
-    # обоих контейнерах, а не удаляет один из них из DOM
+    # контейнерах, а не удаляет их из DOM
     assert "trafficBody.hidden = !isTraffic" in js
-    assert "schemeBody.hidden = isTraffic" in js
+    assert "schemeBody.hidden = !isScheme" in js
+    assert 'areasBody.hidden = viewMode !== "areas"' in js
+    assert 'routesBody.hidden = viewMode !== "routes"' in js
 
 
 def test_coverage_js_card_click_builds_href_only_for_non_empty_sections():

@@ -72,8 +72,8 @@ const TOUR_STEPS = [
     page: "coverage.html",
     needsProject: true,
     title: "Покрытие",
-    text: "Карта покрытия маршрутов проекта автотестами — по областям и стендам.",
-    resolve: () => document.getElementById("summary-card"),
+    text: "Светофор покрытия: какие разделы продукта закрыты автотестами и проходят, где есть проблемы, где тестов нет — по стендам.",
+    resolve: () => document.getElementById("traffic-body"),
   },
   {
     page: "xfail.html",

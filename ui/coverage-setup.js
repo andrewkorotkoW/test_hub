@@ -26,14 +26,12 @@
   document.getElementById("project-title").textContent = `Покрытие — ${projectName}`;
   document.getElementById("project-link").href = `project.html?name=${encodeURIComponent(projectName)}`;
 
-  const summaryKpiRow = document.getElementById("summary-kpi-row");
-  const summaryStands = document.getElementById("summary-stands");
-  const summaryPages = document.getElementById("summary-pages");
-  const summaryZero = document.getElementById("summary-zero");
-  const summaryZeroList = document.getElementById("summary-zero-list");
-  const chartsToggle = document.getElementById("charts-toggle");
-  const chartsToggleBtn = document.getElementById("charts-toggle-btn");
-  const chartsBody = document.getElementById("charts-body");
+  const coverageViewCard = document.getElementById("coverage-view-card");
+  const areasBody = document.getElementById("areas-body");
+  const routesBody = document.getElementById("routes-body");
+  const viewToggle = document.getElementById("view-toggle");
+  const routesExpandAllBtn = document.getElementById("routes-expand-all");
+  const routesCollapseAllBtn = document.getElementById("routes-collapse-all");
   const chartRingsBody = document.getElementById("chart-rings-body");
   const chartStatusBody = document.getElementById("chart-status-body");
   const chartGraphBody = document.getElementById("chart-graph-body");
@@ -42,16 +40,10 @@
   const areasBlockBody = document.getElementById("areas-block-body");
   const areasSortChips = document.getElementById("areas-sort-chips");
   const areasHideEmptyInput = document.getElementById("areas-hide-empty");
-  const treeToggle = document.getElementById("tree-toggle");
-  const treeToggleBtn = document.getElementById("tree-toggle-btn");
-  const treeInnerBody = document.getElementById("tree-inner-body");
-  const chartTreeBody = document.getElementById("chart-tree-body");
-  const treeLayoutTopdownBtn = document.getElementById("tree-layout-topdown");
-  const treeLayoutRadialBtn = document.getElementById("tree-layout-radial");
-  const treeExpandAllBtn = document.getElementById("tree-expand-all");
-  const treeCollapseAllBtn = document.getElementById("tree-collapse-all");
-  const treeFailedOnlyBtn = document.getElementById("tree-failed-only");
-  const treeResetViewBtn = document.getElementById("tree-reset-view");
+  const areasProblemsBtn = document.getElementById("areas-problems-toggle");
+  const areasProblemKindsEl = document.getElementById("areas-problem-kinds"); // массив видов — areasProblemKinds в coverage-areas-dom.js
+  const areasSearchInput = document.getElementById("areas-search");
+  const areasSummaryEl = document.getElementById("areas-summary");
   const standSelect = document.getElementById("cov-stand-select");
   const filterUncovered = document.getElementById("cov-filter-uncovered");
   const filterFailed = document.getElementById("cov-filter-failed");
@@ -70,8 +62,6 @@
   const pmCanvas = document.getElementById("pm-canvas");
   const pmTip = document.getElementById("pm-tip");
   const coverageViewTitle = document.getElementById("coverage-view-title");
-  const viewToggleTrafficBtn = document.getElementById("view-toggle-traffic");
-  const viewToggleSchemeBtn = document.getElementById("view-toggle-scheme");
   const trafficBody = document.getElementById("traffic-body");
   const schemeBody = document.getElementById("scheme-body");
   const trafficKpiRow = document.getElementById("traffic-kpi-row");
@@ -82,42 +72,10 @@
   const trafficColEmpty = document.getElementById("traffic-col-empty");
   const trafficColumns = document.getElementById("traffic-columns");
 
-  // ---------------- диаграммы: сворачивание ----------------
-  const CHARTS_COLLAPSED_KEY = "cov-charts-collapsed";
-
-  function applyChartsCollapsed(collapsed) {
-    chartsBody.hidden = collapsed;
-    chartsToggleBtn.textContent = collapsed ? "▸" : "▾";
-    chartsToggleBtn.setAttribute("aria-expanded", String(!collapsed));
-  }
-
-  applyChartsCollapsed(localStorage.getItem(CHARTS_COLLAPSED_KEY) === "1");
-
-  chartsToggle.addEventListener("click", () => {
-    const collapsed = !chartsBody.hidden;
-    applyChartsCollapsed(collapsed);
-    localStorage.setItem(CHARTS_COLLAPSED_KEY, collapsed ? "1" : "0");
-  });
-
-  // Дерево проекта — тяжёлый и не самый нужный на первый взгляд виджет, свёрнут по
-  // умолчанию (в отличие от блока «Тесты по областям» выше, который виден сразу).
-  const TREE_COLLAPSED_KEY = "cov-tree-collapsed";
-
-  function applyTreeCollapsed(collapsed) {
-    treeInnerBody.hidden = collapsed;
-    treeToggleBtn.textContent = collapsed ? "▸" : "▾";
-    treeToggleBtn.setAttribute("aria-expanded", String(!collapsed));
-  }
-
-  applyTreeCollapsed(localStorage.getItem(TREE_COLLAPSED_KEY) !== "0");
-
-  treeToggle.addEventListener("click", () => {
-    const collapsed = !treeInnerBody.hidden;
-    applyTreeCollapsed(collapsed);
-    localStorage.setItem(TREE_COLLAPSED_KEY, collapsed ? "1" : "0");
-    // fit-to-view дерева считался по нулевой ширине скрытого контейнера — пересчитать сейчас
-    if (!collapsed && treeRoot) syncTreeView();
-  });
+  // Раздел «Подробно»/карточка «Диаграммы» со своим сворачиванием ушли 20.10.2026 —
+  // теперь это вкладки «Области»/«Маршруты» (applyViewMode в coverage-traffic-dom.js).
+  // Тогда же убран d3-виджет «Дерево проекта»: его роль («только упавшие») выполняет
+  // режим «только проблемы» блока «Тесты по областям» (coverage-areas-dom.js).
 
   let productMap = null;       // последний ProductMap (схема продукта) с сервера
   let summary = null;          // последний CoverageSummary с сервера
@@ -137,11 +95,11 @@
     toolbarMsg.classList.toggle("hint-box", !isError);
   }
 
-  // ---------------- summary ----------------
-  // вариант A «Панель» (DESIGN.md: KPI-карточка) — общие по проекту величины из
-  // CoverageSummary (routes_total/covered, pages_total/covered, zero_coverage_areas,
-  // generated_at), не зависящие от стенда — переиспользует .kpi-tile из project.js/
-  // style.css, только без спарклайна (нет истории пересчётов).
+  // ---------------- KPI-плитка ----------------
+  // Переиспользует .kpi-tile из project.js/style.css, только без спарклайна —
+  // используется светофором (coverage-traffic-dom.js). Карточка «Сводка» с теми же
+  // величинами убрана 20.10.2026 как дубль светофора (KPI, бейджи стендов = кольца
+  // «Покрытие маршрутов по стендам», список областей без покрытия = колонка «Не покрыто»).
   function kpiTile(label, valueText, footText, valueFontSize) {
     const style = valueFontSize ? ` style="font-size: ${valueFontSize}"` : "";
     return `
@@ -151,44 +109,6 @@
         ${footText ? `<div class="kpi-tile-foot"><span class="muted">${escapeHtml(footText)}</span></div>` : ""}
       </div>
     `;
-  }
-
-  function renderSummaryKpiRow() {
-    const routesPercent = summary.routes_total ? Math.round((summary.routes_covered / summary.routes_total) * 1000) / 10 : 0;
-    const pagesPercent = summary.pages_total ? Math.round((summary.pages_covered / summary.pages_total) * 1000) / 10 : 0;
-    const tiles = [
-      kpiTile("Покрыто маршрутов", `${routesPercent}%`, `${summary.routes_covered} из ${summary.routes_total}`),
-      kpiTile("Покрыто страниц", summary.pages_total ? `${pagesPercent}%` : "—", summary.pages_total ? `${summary.pages_covered} из ${summary.pages_total}` : "страниц нет в инвентаре"),
-      // цвет var(--xfail) недостаточно контрастен как цвет текста на светлой теме
-      // (см. ui/style.css — тот же токен уже используется только для пилюль/точек с
-      // белым текстом поверх, не как цвет текста на var(--surface)) — значение KPI
-      // остаётся обычным text, статус виден по самому числу и подписи.
-      kpiTile(
-        "Областей без тестов",
-        String(summary.zero_coverage_areas.length),
-        summary.zero_coverage_areas.length ? summary.zero_coverage_areas.join(" · ") : "все области покрыты",
-      ),
-      kpiTile("Пересчитано", fmtDate(summary.generated_at), "по данным проекта", "18px"),
-    ];
-    summaryKpiRow.innerHTML = tiles.join("");
-  }
-
-  function renderSummary() {
-    renderSummaryKpiRow();
-    summaryStands.innerHTML = summary.stands.map((s) => `
-      <span class="badge stand-summary">${escapeHtml(s.stand)}: ${s.routes_covered}/${s.routes_total} (${s.percent}%)</span>
-    `).join("") || `<span class="muted">Стенды не настроены.</span>`;
-
-    summaryPages.innerHTML = summary.pages_total
-      ? `<span class="badge stand-summary">Страниц покрыто: ${summary.pages_covered}/${summary.pages_total}</span>`
-      : "";
-
-    if (summary.zero_coverage_areas.length) {
-      summaryZeroList.textContent = summary.zero_coverage_areas.join(", ");
-      summaryZero.hidden = false;
-    } else {
-      summaryZero.hidden = true;
-    }
   }
 
   function renderStandOptions() {

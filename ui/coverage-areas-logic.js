@@ -123,12 +123,14 @@
   // {status, run_id, finished} (last_results).
   function resultOf(statuses, nodeid) {
     var raw = statuses[nodeid];
-    if (raw === undefined || raw === null) return { status: "none", runId: null, finished: null };
-    if (typeof raw === "string") return { status: statusKey(raw), runId: null, finished: null };
+    if (raw === undefined || raw === null) return { status: "none", rawStatus: null, runId: null, finished: null, cause: null };
+    if (typeof raw === "string") return { status: statusKey(raw), rawStatus: raw, runId: null, finished: null, cause: null };
     return {
       status: statusKey(raw.status),
+      rawStatus: raw.status || null,
       runId: raw.run_id === undefined ? null : raw.run_id,
       finished: raw.finished || null,
+      cause: raw.cause || null,
     };
   }
 
@@ -191,8 +193,8 @@
           var counts = emptyCounts();
           counts[result.status] = 1;
           fileNode.children.push({
-            id: nodeid, kind: "test", label: test, nodeid: nodeid, status: result.status,
-            runId: result.runId, finished: result.finished,
+            id: nodeid, kind: "test", label: test, nodeid: nodeid, status: result.status, rawStatus: result.rawStatus,
+            runId: result.runId, finished: result.finished, cause: result.cause, file: file,
             lastFinished: result.finished, lastRunId: result.runId,
             value: 1, counts: counts, children: [],
           });
@@ -275,7 +277,8 @@
               fileName: f.label,
               counts: f.counts,
               tests: f.children.map(function (t) {
-                return { nodeid: t.nodeid, label: t.label, status: t.status, runId: t.runId, finished: t.finished };
+                return { nodeid: t.nodeid, label: t.label, status: t.status, rawStatus: t.rawStatus, runId: t.runId,
+                         finished: t.finished, cause: t.cause, file: f.id, fileName: f.label };
               }),
             };
           }),
@@ -402,8 +405,87 @@
     return result;
   }
 
+  // ---- режим «только проблемы» (вместо отдельного списка и «Дерева проекта») ----
+  // Какие статусы считаются проблемой — чипы в шапке блока: failed (вкл. broken),
+  // xfail, none («без результата»). Короткие подписи причин — как в окне прогона
+  // (run-report-logic.js CAUSE_LABELS), только короче, под узкую колонку.
+  var PROBLEM_KINDS = ["failed", "xfail", "none"];
+  var CAUSE_LABELS_SHORT = { code: "код", stand: "стенд", session: "сессия", throttling: "троттлинг" };
+
+  function normalizeProblemKinds(kinds) {
+    var out = [];
+    var src = kinds || [];
+    for (var i = 0; i < PROBLEM_KINDS.length; i++) {
+      var k = PROBLEM_KINDS[i];
+      if (typeof src.has === "function" ? src.has(k) : src.indexOf(k) !== -1) out.push(k);
+    }
+    return out.length ? out : ["failed"];
+  }
+
+  function testMatchesSearch(test, query) {
+    var q = (query || "").trim().toLowerCase();
+    if (!q) return true;
+    return String(test.nodeid).toLowerCase().indexOf(q) !== -1;
+  }
+
+  function rowMatchesSearch(row, query) {
+    var q = (query || "").trim().toLowerCase();
+    if (!q) return true;
+    if (String(row.key).toLowerCase().indexOf(q) !== -1) return true;
+    for (var i = 0; i < row.files.length; i++) {
+      for (var j = 0; j < row.files[i].tests.length; j++) {
+        if (testMatchesSearch(row.files[i].tests[j], q)) return true;
+      }
+    }
+    return false;
+  }
+
+  // Проблемные тесты области: статусы из kinds, с поиском по nodeid; порядок — по
+  // файлам и порядку в файле (как в дереве discover).
+  function problemTests(row, kinds, query) {
+    var ks = normalizeProblemKinds(kinds);
+    var out = [];
+    for (var i = 0; i < row.files.length; i++) {
+      var tests = row.files[i].tests;
+      for (var j = 0; j < tests.length; j++) {
+        var t = tests[j];
+        if (ks.indexOf(t.status) !== -1 && testMatchesSearch(t, query)) out.push(t);
+      }
+    }
+    return out;
+  }
+
+  // Сводка для шапки блока в режиме проблем: сколько тестов, в скольких файлах и
+  // областях, разбивка по причине (unknown — причина не записана, старый прогон).
+  function problemSummary(rows, kinds, query) {
+    var files = {};
+    var areas = 0;
+    var byCause = {};
+    var total = 0;
+    for (var i = 0; i < rows.length; i++) {
+      var tests = problemTests(rows[i], kinds, query);
+      if (!tests.length) continue;
+      areas += 1;
+      for (var j = 0; j < tests.length; j++) {
+        total += 1;
+        files[tests[j].file] = true;
+        if (tests[j].status !== "failed") continue; // причина есть только у падений
+        var c = tests[j].cause || "unknown";
+        byCause[c] = (byCause[c] || 0) + 1;
+      }
+    }
+    return { tests: total, files: Object.keys(files).length, areas: areas, byCause: byCause };
+  }
+
   var api = {
     AREA_ROOT_LABEL: AREA_ROOT_LABEL,
+    PROBLEM_KINDS: PROBLEM_KINDS,
+    CAUSE_LABELS_SHORT: CAUSE_LABELS_SHORT,
+    normalizeProblemKinds: normalizeProblemKinds,
+    testMatchesSearch: testMatchesSearch,
+    rowMatchesSearch: rowMatchesSearch,
+    problemTests: problemTests,
+    problemSummary: problemSummary,
     AREA_LABELS_RU: AREA_LABELS_RU,
     KIND_LABELS_RU: KIND_LABELS_RU,
     SORT_MODES: SORT_MODES,

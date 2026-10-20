@@ -444,6 +444,39 @@ def test_recalc_broken_status_maps_to_red(db_path, isolated_allure_dir, isolated
     assert result["stands"][STAND]["nodes"]["health"]["state"] == "red"
 
 
+def test_recalc_uses_last_known_result_not_only_latest_run(
+    db_path, isolated_allure_dir, isolated_product_map_dir, pm_project_dir
+):
+    """Последний прогон стенда отменён без результатов (или выборочный) — узлы берут
+    статус из предыдущих прогонов (coverage.nodeid_last_result_map), а не серят всю
+    схему; run_id при этом остаётся ключом кэша = последний завершённый прогон."""
+    from app.config import settings
+
+    _write_map(pm_project_dir / "tests")
+    conn = get_connection()
+    try:
+        _insert_project_and_stand(conn, pm_project_dir)
+        old_run = _insert_run(conn, status="passed")
+        cancelled_run = _insert_run(conn, status="cancelled")
+    finally:
+        conn.close()
+    _write_allure_result(settings.ALLURE_RESULTS_DIR / str(old_run), "00-result.json", _fmap("tests.api.health.test_health", "test_ping"), "passed")
+    _write_allure_result(settings.ALLURE_RESULTS_DIR / str(old_run), "01-result.json", _fmap("tests.e2e.test_checkout", "test_full_checkout"), "failed")
+    # в отменённом прогоне успел пройти только e2e-тест — его статус свежее
+    _write_allure_result(settings.ALLURE_RESULTS_DIR / str(cancelled_run), "00-result.json", _fmap("tests.e2e.test_checkout", "test_full_checkout"), "passed")
+
+    conn = get_connection()
+    try:
+        result = product_map.recalc(PROJECT, conn)
+    finally:
+        conn.close()
+
+    stand_data = result["stands"][STAND]
+    assert stand_data["run_id"] == cancelled_run
+    assert stand_data["nodes"]["health"]["state"] == "green", "результат из прошлого прогона не потерян"
+    assert stand_data["nodes"]["flow"]["state"] == "green", "свежий результат из отменённого прогона побеждает старый failed"
+
+
 def test_recalc_node_with_tests_but_no_run_yet_is_grey_with_nonzero_count(
     db_path, isolated_allure_dir, isolated_product_map_dir, pm_project_dir
 ):

@@ -31,24 +31,29 @@
     </div>
     <div id="page-error" class="error-box" hidden></div>
 
-    <!-- Вид «Светофор» (v6/K, по умолчанию) и схема продукта (v5) — два вида
-         одной страницы «Покрытие», переключатель хранится в localStorage
-         (cov-view-mode, ui/coverage-traffic-logic.js::normalizeViewMode).
-         Стенд общий на оба вида и на раздел «Подробно» ниже (id="cov-stand-
-         select" — тот же элемент). -->
-    <div class="card" id="coverage-view-card">
+    <!-- Четыре вкладки одной страницы «Покрытие» (20.10.2026): Светофор (v6/K, по
+         умолчанию), Схема продукта (v5), Области (тесты по областям + статусы + кольца)
+         и Маршруты (инвентарь маршрутов аккордеоном + связи + граф). Вся разметка
+         статична, JS (applyViewMode, ui/coverage-traffic-dom.js) только переключает
+         hidden; выбор — в localStorage (cov-view-mode) и в #hash URL. Панель с
+         вкладками и стендом липкая: стенд общий для всех вкладок. -->
+    <div class="card coverage-tabs-bar" id="coverage-tabs-bar">
       <div class="pm-toolbar">
         <h2 id="coverage-view-title">Светофор</h2>
-        <div class="chart-tree-layout-toggle" id="view-toggle" role="group" aria-label="Вид страницы покрытия">
-          <button type="button" id="view-toggle-traffic" class="active">Светофор</button>
-          <button type="button" id="view-toggle-scheme">Схема</button>
+        <div class="chart-tree-layout-toggle coverage-tabs" id="view-toggle" role="tablist" aria-label="Вид страницы покрытия">
+          <button type="button" id="view-toggle-traffic" class="active" role="tab" data-view="traffic" aria-selected="true">Светофор</button>
+          <button type="button" id="view-toggle-scheme" role="tab" data-view="scheme" aria-selected="false">Схема</button>
+          <button type="button" id="view-toggle-areas" role="tab" data-view="areas" aria-selected="false">Области</button>
+          <button type="button" id="view-toggle-routes" role="tab" data-view="routes" aria-selected="false">Маршруты</button>
         </div>
         <div class="field">
           <label for="cov-stand-select">Стенд</label>
           <select id="cov-stand-select"></select>
         </div>
       </div>
+    </div>
 
+    <div class="card" id="coverage-view-card">
       <!-- вид «Светофор»: KPI-шапка + ряд колец + три колонки разделов -->
       <div id="traffic-body">
         <div class="kpi-row kpi-row-4" id="traffic-kpi-row"></div>
@@ -95,26 +100,10 @@
     </div>
     <div class="pm-tip" id="pm-tip" hidden></div>
 
-    <details class="coverage-details-spoiler" id="coverage-details">
-      <summary><h2>Подробно</h2></summary>
-
-      <div class="card" id="summary-card">
-        <h2>Сводка</h2>
-        <!-- вариант A «Панель» (DESIGN.md: KPI-карточка) — общие по проекту величины,
-             не привязанные к выбранному стенду (см. app/core/coverage.py::recalc). -->
-        <div class="kpi-row kpi-row-4" id="summary-kpi-row"></div>
-        <div id="summary-stands" class="summary-badges"></div>
-        <div id="summary-pages" class="summary-badges"></div>
-        <div id="summary-zero" class="zero-coverage-box" hidden>
-          <strong>Области без покрытия:</strong> <span id="summary-zero-list"></span>
-        </div>
-      </div>
-
+    <!-- вкладка «Области»: тесты по областям, дерево проекта (свёрнуто), кольца по
+         стендам, статусы тестов на стенде -->
+    <div id="areas-body" hidden>
       <div class="card" id="charts-card">
-        <div class="charts-header" id="charts-toggle">
-          <h2>Диаграммы</h2>
-          <button type="button" class="charts-toggle-btn" id="charts-toggle-btn" aria-expanded="true">▾</button>
-        </div>
         <div id="charts-body">
           <div class="charts-grid">
             <div class="chart-box chart-box-wide" id="areas-block-box">
@@ -125,6 +114,16 @@
                   <button type="button" class="ab-chip" data-ab-sort="size">по размеру</button>
                   <button type="button" class="ab-chip" data-ab-sort="name">по имени</button>
                   <label class="ab-chip ab-chip-check"><input type="checkbox" id="areas-hide-empty"> скрыть без результатов</label>
+                  <!-- режим «только проблемы» (вместо «Дерева проекта» с его «Только упавшие»):
+                       остаются области с проблемными тестами, раскрытые списком тестов с
+                       причиной/датой/прогоном; чипы ниже выбирают, что считать проблемой -->
+                  <button type="button" class="ab-chip ab-chip-problems" id="areas-problems-toggle" aria-pressed="false">только проблемы</button>
+                  <span class="areas-problem-kinds" id="areas-problem-kinds" role="group" aria-label="Что считать проблемой" hidden>
+                    <button type="button" class="ab-chip ab-chip-kind" data-ab-kind="failed">failed</button>
+                    <button type="button" class="ab-chip ab-chip-kind" data-ab-kind="xfail">xfail</button>
+                    <button type="button" class="ab-chip ab-chip-kind" data-ab-kind="none">без результата</button>
+                  </span>
+                  <input type="search" id="areas-search" class="areas-search" placeholder="поиск по пути теста">
                 </div>
                 <div class="areas-legend">
                   <span><span class="ab-swatch ab-passed"></span>passed</span>
@@ -134,34 +133,12 @@
                   <span><span class="ab-swatch ab-none"></span>нет результата</span>
                 </div>
               </div>
+              <div id="areas-summary" class="areas-summary" hidden></div>
               <div id="areas-block-body" class="areas-block-body"><p class="muted">Загрузка…</p></div>
               <p class="muted areas-block-hint">Статус теста — последний известный результат на выбранном стенде (дата и номер
                 прогона — в строке), а не только самый последний прогон. Клик по строке раскрывает тесты области: ячейка — тест,
-                клик по ней открывает панель связей. Клик по имени области фильтрует карту маршрутов ниже.</p>
-            </div>
-            <div class="chart-box chart-box-wide" id="chart-tree-box">
-              <div class="chart-tree-head" id="tree-toggle">
-                <h3>Дерево проекта</h3>
-                <button type="button" class="charts-toggle-btn" id="tree-toggle-btn" aria-expanded="false">▸</button>
-              </div>
-              <div id="tree-inner-body" hidden>
-                <div class="chart-tree-controls">
-                  <div class="chart-tree-layout-toggle" role="group" aria-label="Раскладка дерева">
-                    <button type="button" id="tree-layout-topdown" class="active">Сверху вниз</button>
-                    <button type="button" id="tree-layout-radial">Радиальная</button>
-                  </div>
-                  <button type="button" id="tree-expand-all">Развернуть всё</button>
-                  <button type="button" id="tree-collapse-all">Свернуть всё</button>
-                  <button type="button" id="tree-failed-only">Только упавшие</button>
-                  <button type="button" id="tree-reset-view">Сбросить вид</button>
-                </div>
-                <div id="chart-tree-body" class="chart-tree-body"><p class="muted">Загрузка…</p></div>
-                <p class="muted chart-tree-hint">Колесо — зум, перетаскивание — панорама, клик по узлу — раскрыть/свернуть
-                  или открыть связи теста. По умолчанию видна только структура каталогов до папок областей —
-                  на свёрнутых узлах число тестов и полоска статусов внутри. «Развернуть всё» / «Свернуть всё» и
-                  «Только упавшие» — быстрая навигация по большому дереву; «Сбросить вид» возвращает автоподгон
-                  масштаба, если до этого зумили вручную.</p>
-              </div>
+                клик по ней открывает связи теста на вкладке «Маршруты». Клик по имени области фильтрует там же карту маршрутов.
+                «Только проблемы» (или клик по «✗ N» в строке) показывает упавшие тесты списком — с причиной, датой и прогоном.</p>
             </div>
             <div class="chart-box" id="chart-rings-box">
               <h3>Покрытие маршрутов по стендам</h3>
@@ -171,19 +148,15 @@
               <h3>Статусы тестов на стенде</h3>
               <div id="chart-status-body"></div>
             </div>
-            <div class="chart-box chart-box-wide" id="chart-graph-box">
-              <div class="chart-graph-head">
-                <h3>Связи тестов и маршрутов</h3>
-                <select id="chart-graph-area"></select>
-                <span id="chart-graph-test-chip" class="badge" hidden></span>
-              </div>
-              <div id="chart-graph-body"></div>
-            </div>
           </div>
         </div>
       </div>
+    </div>
 
-      <div class="card" id="coverage-toolbar-card">
+    <!-- вкладка «Маршруты»: липкий тулбар фильтров, карта маршрутов-аккордеон
+         (строка на область, чипы по клику/фильтру) + панель «Связи», граф связей -->
+    <div id="routes-body" hidden>
+      <div class="card coverage-toolbar-card" id="coverage-toolbar-card">
         <div class="coverage-toolbar">
           <label><input type="checkbox" id="cov-filter-uncovered"> только непокрытые</label>
           <label><input type="checkbox" id="cov-filter-failed"> только упавшие</label>
@@ -201,7 +174,15 @@
 
       <div class="coverage-layout">
         <div class="card" id="coverage-map-card">
-          <h2>Карта маршрутов</h2>
+          <div class="routes-map-head">
+            <h2>Карта маршрутов</h2>
+            <div class="routes-map-actions">
+              <button type="button" id="routes-expand-all" class="toolbar-mini-btn">Развернуть все</button>
+              <button type="button" id="routes-collapse-all" class="toolbar-mini-btn">Свернуть все</button>
+            </div>
+          </div>
+          <p class="muted routes-map-hint">Строка — область маршрутов из routes.tsv: покрыто тестами / всего, число падений на стенде.
+            Клик раскрывает маршруты; при фильтре или поиске области с совпадениями раскрываются сами.</p>
           <div id="coverage-map"><p class="muted">Загрузка…</p></div>
         </div>
 
@@ -210,16 +191,25 @@
           <div id="coverage-detail"><p class="muted">Выберите маршрут или тест на карте.</p></div>
         </div>
       </div>
-    </details>
+
+      <div class="card" id="chart-graph-box">
+        <div class="chart-graph-head">
+          <h3>Связи тестов и маршрутов</h3>
+          <select id="chart-graph-area"></select>
+          <span id="chart-graph-test-chip" class="badge" hidden></span>
+        </div>
+        <div id="chart-graph-body"></div>
+      </div>
+    </div>
   </main>
     </div>
   </div>
 
-  <script src="coverage-tree-logic.js"></script>
   <script src="sections-tree-logic.js"></script>
   <script src="coverage-areas-logic.js"></script>
   <script src="coverage-traffic-logic.js"></script>
   <script src="coverage-scheme-logic.js"></script>
+  <script src="coverage-map-logic.js"></script>
   <!-- coverage-setup.js и coverage-*-dom.js делят один lexical scope с coverage.js
        (классические <script>, без type="module") — см. шапку coverage-setup.js. -->
   <script src="coverage-setup.js"></script>
@@ -228,7 +218,6 @@
   <script src="coverage-map-dom.js"></script>
   <script src="coverage-areas-dom.js"></script>
   <script src="coverage-diagrams-dom.js"></script>
-  <script src="coverage-tree-dom.js"></script>
   <script src="coverage.js"></script>
 </body>
 </html>

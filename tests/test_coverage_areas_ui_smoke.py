@@ -19,7 +19,7 @@ def test_treemap_is_gone_from_scenario_and_markup():
     assert not (UI_DIR / "coverage-treemap-dom.js").exists()
     assert "coverage-treemap-dom.js" not in COVERAGE_HTML
     assert 'id="chart-treemap-body"' not in COVERAGE_HTML and 'id="areas-table"' not in COVERAGE_HTML
-    for name in ("coverage-setup.js", "coverage.js", "coverage-tree-dom.js"):
+    for name in ("coverage-setup.js", "coverage.js", "coverage-areas-dom.js"):
         js = (UI_DIR / name).read_text()
         assert "renderTreemap" not in js and "renderAreasTable" not in js, name
     assert "squarify" not in AREAS_LOGIC_JS and "STATUS_COLORS" not in AREAS_LOGIC_JS
@@ -38,22 +38,48 @@ def test_traffic_tree_and_status_chart_share_stand_status_source():
     что и блок областей — иначе цифры на одной странице расходились (замечание
     владельца 20.10.2026)."""
     traffic = (UI_DIR / "coverage-traffic-dom.js").read_text()
-    tree = (UI_DIR / "coverage-tree-dom.js").read_text()
     diagrams = (UI_DIR / "coverage-diagrams-dom.js").read_text()
     assert "const statusMap = standStatusStrings();" in traffic
-    assert "const statusMap = standStatusStrings();" in tree
     assert "AreasLogic.statusCounts(treeApiData.tree || {}, standStatusMap())" in diagrams
-    for js in (traffic, tree, diagrams):
+    for js in (traffic, diagrams):
         assert "treeApiData.statuses" not in js
-    # после загрузки дерева диаграмма статусов перерисовывается уже по его данным
-    load_tree = tree[tree.index("async function loadTree()"):]
-    assert load_tree.count("renderStatusChart();") == 2
+    # d3-«Дерево проекта» удалено (20.10.2026); загрузка /coverage/tree живёт в areas-dom
+    # и после неё перерисовываются блок областей, диаграмма статусов и светофор
+    assert not (UI_DIR / "coverage-tree-dom.js").exists() and not (UI_DIR / "coverage-tree-logic.js").exists()
+    load_tree = AREAS_DOM_JS[AREAS_DOM_JS.index("async function loadTree()"):AREAS_DOM_JS.index("function runLink(")]
+    for needle in ("renderAreasBlock();", "renderStatusChart();", "renderTraffic();"):
+        assert needle in load_tree, needle
+
+
+def test_areas_problem_mode_replaces_project_tree():
+    """Режим «только проблемы» (вместо «Дерева проекта» с «Только упавшие»): чипы
+    failed/xfail/без результата, поиск по пути, сводка с причинами, список тестов с
+    причиной/датой/прогоном и переходами, «✗ N» в строке включает режим для области."""
+    for needle in ('id="areas-problems-toggle"', 'id="areas-problem-kinds"', 'data-ab-kind="failed"', 'data-ab-kind="xfail"',
+                   'data-ab-kind="none"', 'id="areas-search"', 'id="areas-summary"'):
+        assert needle in COVERAGE_HTML, needle
+    assert 'id="chart-tree-box"' not in COVERAGE_HTML and "coverage-tree-dom.js" not in COVERAGE_HTML
+    for needle in (
+        "AreasLogic.problemTests(row, areasProblemKinds, areasSearch)",
+        "AreasLogic.problemSummary(rows, areasProblemKinds, areasSearch)",
+        "AreasLogic.rowMatchesSearch(row, areasSearch)",
+        'data-ab-problems="${escapeHtml(row.key)}"',
+        'setAreasProblemMode(true, ["failed"]);',
+        "function problemListHtml(row, tests)",
+        "AreasLogic.CAUSE_LABELS_SHORT[test.cause]",
+        'class="ab-link-btn" data-ab-nodeid="${escapeHtml(t.nodeid)}">связи</button>',
+        "localStorage.setItem(AREAS_PROBLEMS_KEY",
+    ):
+        assert needle in AREAS_DOM_JS, needle
+    for needle in (".ab-problem {", ".ab-pbadge-failed {", ".ab-cause-code {", ".areas-summary {", ".ab-chip-problems.active {"):
+        assert needle in STYLE_CSS, needle
+    assert ".chart-tree-body {" not in STYLE_CSS and ".tree-node {" not in STYLE_CSS
 
 
 def test_areas_dom_renders_rows_waffle_and_wires_clicks():
     for needle in (
         "AreasLogic.buildAreaRows(treeApiData.tree || {}, standStatusMap())",
-        "AreasLogic.groupRowsByKind(rows, areasSortMode, areasHideEmpty)",
+        "AreasLogic.groupRowsByKind(rows, areasSortMode, areasHideEmpty && !areasProblemMode)",
         "AreasLogic.matchRouteStats(row, routeStats)",
         'data-ab-row="${escapeHtml(row.key)}"',
         'data-ab-area="${escapeHtml(row.matchArea)}"',

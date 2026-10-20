@@ -577,14 +577,26 @@ def test_nodeid_last_result_map_takes_newest_run_per_test_and_skips_runs_without
             "tests/test_foo.py::test_never",
         ]
         _write_allure_result(settings.ALLURE_RESULTS_DIR / str(old_run), "tests.test_foo#test_param", "passed")
+        # причина падения — из run_test_results того прогона, где найден результат (у test_b — старого)
+        conn.execute(
+            "INSERT INTO run_test_results (run_id, nodeid, full_name, status, duration, cause, finished_ts) "
+            "VALUES (?, 'tests/test_foo.py::test_b', 'tests.test_foo#test_b', 'passed', 1.0, 'stand', NULL)",
+            (old_run,),
+        )
+        conn.execute(
+            "INSERT INTO run_test_results (run_id, nodeid, full_name, status, duration, cause, finished_ts) "
+            "VALUES (?, 'tests/test_foo.py::test_a', 'tests.test_foo#test_a', 'failed', 1.0, 'code', NULL)",
+            (old_run,),  # старый прогон — для test_a результат взят из new_run, его причина не подходит
+        )
+        conn.commit()
         result = coverage.nodeid_last_result_map(conn, "p", "develop", nodeids)
         assert result == {
-            "tests/test_foo.py::test_a": {"status": "passed", "run_id": new_run, "finished": "2026-10-12T12:00:00"},
-            "tests/test_foo.py::test_b": {"status": "passed", "run_id": old_run, "finished": "2026-10-10T10:00:00"},
-            "tests/test_foo.py::test_xf": {"status": "xfail", "run_id": old_run, "finished": "2026-10-10T10:00:00"},
+            "tests/test_foo.py::test_a": {"status": "passed", "run_id": new_run, "finished": "2026-10-12T12:00:00", "cause": None},
+            "tests/test_foo.py::test_b": {"status": "passed", "run_id": old_run, "finished": "2026-10-10T10:00:00", "cause": "stand"},
+            "tests/test_foo.py::test_xf": {"status": "xfail", "run_id": old_run, "finished": "2026-10-10T10:00:00", "cause": None},
             # параметризованные nodeid делят один allure fullName
-            "tests/test_foo.py::test_param[x]": {"status": "passed", "run_id": old_run, "finished": "2026-10-10T10:00:00"},
-            "tests/test_foo.py::test_param[y]": {"status": "passed", "run_id": old_run, "finished": "2026-10-10T10:00:00"},
+            "tests/test_foo.py::test_param[x]": {"status": "passed", "run_id": old_run, "finished": "2026-10-10T10:00:00", "cause": None},
+            "tests/test_foo.py::test_param[y]": {"status": "passed", "run_id": old_run, "finished": "2026-10-10T10:00:00", "cause": None},
         }
         # лимит просматриваемых прогонов: только самый новый -> test_b/xfail/param не найдены
         limited = coverage.nodeid_last_result_map(conn, "p", "develop", nodeids, max_runs=1)

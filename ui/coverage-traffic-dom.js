@@ -13,30 +13,49 @@
   const TrafficLogic = window.CoverageTrafficLogic;
   let productMapLoaded = false;
 
+  // Четыре вкладки (traffic/scheme/areas/routes): разметка всех четырёх уже в HTML,
+  // JS только переключает hidden — ничего не удаляется из DOM, состояние виджетов
+  // (раскрытые области, фильтры карты) переживает переключение.
   function applyViewMode() {
     const isTraffic = viewMode === "traffic";
+    const isScheme = viewMode === "scheme";
     trafficBody.hidden = !isTraffic;
-    schemeBody.hidden = isTraffic;
-    coverageViewTitle.textContent = isTraffic ? "Светофор" : "Схема продукта";
-    viewToggleTrafficBtn.classList.toggle("active", isTraffic);
-    viewToggleSchemeBtn.classList.toggle("active", !isTraffic);
-    if (!isTraffic && !productMapLoaded) {
+    schemeBody.hidden = !isScheme;
+    coverageViewCard.hidden = !(isTraffic || isScheme);
+    areasBody.hidden = viewMode !== "areas";
+    routesBody.hidden = viewMode !== "routes";
+    coverageViewTitle.textContent = TrafficLogic.VIEW_TITLES[viewMode] || "Покрытие";
+    viewToggle.querySelectorAll("button[data-view]").forEach((btn) => {
+      const active = btn.dataset.view === viewMode;
+      btn.classList.toggle("active", active);
+      btn.setAttribute("aria-selected", String(active));
+    });
+    if (isScheme && !productMapLoaded) {
       productMapLoaded = true;
       loadProductMap();
     }
+    if (window.location.hash !== `#${viewMode}`) history.replaceState(null, "", `#${viewMode}`);
   }
 
-  let viewMode = TrafficLogic.normalizeViewMode(localStorage.getItem(TrafficLogic.VIEW_MODE_KEY));
+  function setViewMode(mode) {
+    viewMode = TrafficLogic.normalizeViewMode(mode);
+    localStorage.setItem(TrafficLogic.VIEW_MODE_KEY, viewMode);
+    applyViewMode();
+  }
 
-  viewToggleTrafficBtn.addEventListener("click", () => {
-    viewMode = "traffic";
-    localStorage.setItem(TrafficLogic.VIEW_MODE_KEY, viewMode);
-    applyViewMode();
+  // #hash в URL (ссылка на вкладку) сильнее запомненного в localStorage выбора
+  const hashMode = window.location.hash.replace(/^#/, "");
+  let viewMode = TrafficLogic.VIEW_MODES.includes(hashMode)
+    ? hashMode
+    : TrafficLogic.normalizeViewMode(localStorage.getItem(TrafficLogic.VIEW_MODE_KEY));
+
+  viewToggle.addEventListener("click", (ev) => {
+    const btn = ev.target.closest("button[data-view]");
+    if (btn) setViewMode(btn.dataset.view);
   });
-  viewToggleSchemeBtn.addEventListener("click", () => {
-    viewMode = "scheme";
-    localStorage.setItem(TrafficLogic.VIEW_MODE_KEY, viewMode);
-    applyViewMode();
+  window.addEventListener("hashchange", () => {
+    const mode = window.location.hash.replace(/^#/, "");
+    if (TrafficLogic.VIEW_MODES.includes(mode) && mode !== viewMode) setViewMode(mode);
   });
 
   function trafficRingSvg(percent) {

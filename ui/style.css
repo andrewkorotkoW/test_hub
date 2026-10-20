@@ -1256,8 +1256,20 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
   padding: 10px 14px;
   font-size: 13px;
 }
-.stand-summary { background: var(--accent); }
-
+/* Вкладки «Покрытия»: панель с вкладками и стендом липкая — стенд общий для всех
+   вкладок и должен быть виден на любой глубине; тулбар фильтров вкладки «Маршруты»
+   липнет под ней, панель «Связи» — ниже обеих. */
+.coverage-tabs-bar { position: sticky; top: 8px; z-index: 6; padding: 10px 16px; }
+.coverage-tabs-bar .pm-toolbar { margin-bottom: 0; }
+.coverage-tabs button { padding: 6px 14px; }
+/* 8 (top панели вкладок) + ~78 (её высота) + 8 зазора */
+.coverage-toolbar-card { position: sticky; top: 94px; z-index: 5; }
+.toolbar-mini-btn { font-size: 12px; padding: 6px 10px; }
+.coverage-toolbar-card .coverage-toolbar #cov-search { flex: 1 1 200px; max-width: 360px; }
+.routes-map-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.routes-map-head h2 { margin: 0; }
+.routes-map-actions { display: flex; gap: 6px; }
+.routes-map-hint { margin: 0 0 12px; font-size: 12px; }
 .coverage-layout {
   display: grid;
   grid-template-columns: 2.2fr 1fr;
@@ -1268,13 +1280,30 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 @media (max-width: 1024px) {
   .coverage-layout { grid-template-columns: 1fr; }
 }
-#coverage-detail-card { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow: auto; }
+/* под панелью вкладок (8+78) и тулбаром (8+76) + 8 зазора */
+#coverage-detail-card { position: sticky; top: 178px; max-height: calc(100vh - 194px); overflow: auto; }
+#chart-graph-box { margin-top: 16px; }
 
-.route-area { margin-bottom: 18px; }
+/* карта маршрутов — аккордеон: строка на область, чипы маршрутов по клику/фильтру */
+.route-area { margin-bottom: 4px; border-radius: 8px; }
 .route-area:last-child { margin-bottom: 0; }
-.route-area h3 { margin-bottom: 8px; }
 .route-area-empty { display: none; }
-.route-area-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+.route-area-selected { box-shadow: inset 0 0 0 1px var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.route-area-head {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; cursor: pointer;
+  font: inherit; font-size: 13px; color: var(--text); background: transparent; border: none; border-radius: 8px; padding: 7px 8px;
+}
+.route-area-head:hover { background: var(--surface-hover); }
+.route-area-head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.route-area-head .ab-caret { width: 12px; }
+.route-area-name { font-family: var(--font-mono); font-size: 12.5px; font-weight: 600; min-width: 160px; }
+.route-area-bar { display: inline-block; width: 90px; height: 6px; border-radius: 999px; background: var(--ab-none-fill); border: 1px solid var(--ab-none-stroke); overflow: hidden; }
+.route-area-bar > span { display: block; height: 100%; background: var(--passed); }
+.route-area-n { font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; min-width: 44px; }
+.route-area-failed { font-size: 12px; color: var(--failed); font-variant-numeric: tabular-nums; }
+.route-area-found { font-size: 12px; }
+.route-area-grid { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 8px 12px 30px; }
+.route-area-grid[hidden] { display: none; }
 
 .route-cell {
   position: relative;
@@ -1444,6 +1473,9 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 
 /* «Подробно» — старый набор виджетов (treemap/таблица областей/карта маршрутов),
    свёрнут по умолчанию (см. .longest-tests-spoiler — тот же приём стрелки ▸/▾) */
+/* Спойлер-раздел на <details> (стрелка ▸/▾ у h2). Раздел «Подробно» на «Покрытии»
+   ушёл во вкладки (20.10.2026), класс остался у «Состава набора» на project.html
+   (set-composition-spoiler). */
 .coverage-details-spoiler { margin-top: 16px; }
 .coverage-details-spoiler > summary { cursor: pointer; list-style: none; margin-bottom: 4px; }
 .coverage-details-spoiler > summary::-webkit-details-marker { display: none; }
@@ -1457,13 +1489,6 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 .detail-list li.clickable:hover { color: var(--accent); }
 
 /* ---------- coverage: диаграммы ---------- */
-.charts-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  cursor: pointer;
-  user-select: none;
-}
 .charts-toggle-btn {
   border: none;
   background: transparent;
@@ -1620,75 +1645,58 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 .ab-cell.ab-skipped { background: var(--tm-skipped); border-color: var(--tm-skipped); }
 .ab-cell:hover, .ab-cell:focus-visible, .ab-cell.ab-cell-active { outline: 2px solid var(--accent); outline-offset: 1px; }
 
+/* режим «только проблемы»: чипы, поиск, сводка, список проблемных тестов */
+.ab-chip-problems.active { border-color: var(--failed); color: var(--failed); background: color-mix(in srgb, var(--failed) 12%, transparent); }
+.areas-problem-kinds { display: inline-flex; gap: 4px; }
+.areas-problem-kinds[hidden] { display: none; }
+.ab-chip-kind { font-size: 11.5px; padding: 3px 8px; color: var(--text-muted); }
+.ab-chip-kind.active { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.areas-search { font: inherit; font-size: 12px; padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px; background: transparent; color: var(--text); min-width: 200px; }
+.areas-search:focus { outline: none; border-color: var(--accent); }
+.areas-summary { font-size: 13px; color: var(--text-muted); margin: 0 0 8px; padding: 8px 10px; border-radius: 8px; background: var(--surface-hover); display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.areas-summary[hidden] { display: none; }
+.ab-sum-n { font-size: 18px; color: var(--failed); font-weight: 700; }
+.ab-sum-causes { display: inline-flex; gap: 10px; }
+.ab-sum-cause b { color: var(--text); }
+.ab-c-link { font: inherit; font-size: 12px; background: transparent; border: none; padding: 0 2px; border-radius: 4px; cursor: pointer; text-decoration: underline dotted; }
+.ab-c-link:hover { background: color-mix(in srgb, var(--failed) 14%, transparent); }
+.ab-problem-n { font-size: 11px; color: var(--text-muted); margin-left: 8px; }
+.ab-expand-problems { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; }
+.ab-problem { display: grid; grid-template-columns: 96px minmax(200px, 1fr) 84px 112px 110px; gap: 10px; align-items: center; font-size: 12.5px; padding: 4px 6px; border-radius: 6px; }
+.ab-problem:hover { background: var(--surface); }
+.ab-pbadge { font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 2px 7px; border-radius: 999px; text-align: center; }
+.ab-pbadge-failed { background: color-mix(in srgb, var(--failed) 18%, transparent); color: var(--failed); }
+.ab-pbadge-xfail { background: color-mix(in srgb, var(--xfail) 22%, transparent); color: var(--xfail); }
+.ab-pbadge-none { background: var(--ab-none-fill); color: var(--text-muted); text-transform: none; font-weight: 500; letter-spacing: 0; }
+.ab-problem-path { font-family: var(--font-mono); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ab-problem-file { color: var(--text-muted); }
+.ab-cause { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-muted); text-align: center; white-space: nowrap; }
+.ab-cause-code { border-color: var(--failed); color: var(--failed); }
+.ab-cause-stand, .ab-cause-throttling { border-color: var(--xfail); color: var(--xfail); }
+.ab-cause-session { border-color: var(--accent); color: var(--accent); }
+.ab-cause-na, .ab-cause-unknown { border-style: dashed; }
+.ab-problem-actions { display: flex; gap: 10px; font-size: 12px; justify-content: flex-end; }
+.ab-link-btn { font: inherit; font-size: 12px; background: transparent; border: none; padding: 0; color: var(--accent); cursor: pointer; }
+.ab-link-btn:hover, .ab-problem-actions .ab-run-link:hover { text-decoration: underline; }
+.ab-problem-actions .ab-run-link { color: var(--accent); }
+@media (max-width: 900px) {
+  .ab-problem { grid-template-columns: 80px 1fr 90px; }
+  .ab-problem .ab-cause, .ab-problem .ab-when { display: none; }
+}
+
 @media (max-width: 900px) {
   .ab-head-row { display: none; }
   .ab-row { grid-template-columns: minmax(120px, 1fr) 36px minmax(100px, 1fr) 56px 18px; }
   .ab-row .ab-counts, .ab-row .ab-when, .ab-row .ab-routes { display: none; }
 }
 
-/* ---------------- дерево проекта (свёрнуто по умолчанию, интерактивная диаграмма) ---------------- */
-.chart-tree-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; cursor: pointer; user-select: none; }
-.chart-tree-head h3 { margin: 0; }
-.chart-tree-controls { display: flex; align-items: center; gap: 8px; }
+/* ---------------- сегментированный переключатель (вкладки «Покрытия» #view-toggle) ----------------
+   Имя класса осталось от удалённого 20.10.2026 d3-«Дерева проекта» (там это был
+   переключатель раскладки) — остальные стили дерева убраны вместе с ним. */
 .chart-tree-layout-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
 .chart-tree-layout-toggle button { border: none; border-radius: 0; margin: 0; }
 .chart-tree-layout-toggle button + button { border-left: 1px solid var(--border); }
 .chart-tree-layout-toggle button.active { background: var(--action-accent); color: var(--action-accent-text); }
-.chart-tree-controls button#tree-failed-only.active { background: var(--failed); border-color: var(--failed); color: #fff; }
-.chart-tree-hint { margin: 6px 0 0; font-size: 11px; }
-.chart-tree-body {
-  position: relative;
-  height: 460px;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg);
-  cursor: grab;
-  touch-action: none;
-}
-.chart-tree-body.dragging { cursor: grabbing; }
-/* без width/height:100% — иначе viewBox сам масштабирует SVG под контейнер (в т.ч. по
-   самому узкому измерению) ДО нашего treeView.scale, и широкое развёрнутое дерево
-   получает двойное сжатие («тонкая линия»). Единственный источник масштаба — JS ниже. */
-.chart-tree-body svg { display: block; }
-.tree-viewport { transition: transform 120ms ease-out; }
-.tree-edge {
-  fill: none;
-  stroke: var(--border);
-  stroke-width: 1.4;
-  opacity: 0;
-  transition: opacity .4s ease, d .3s ease;
-}
-.tree-edge.tree-visible { opacity: .8; }
-.tree-edge.tree-edge-highlighted { stroke: var(--accent); stroke-width: 2.2; opacity: 1; }
-.tree-node { cursor: pointer; opacity: 0; transition: opacity .4s ease, transform .3s ease; }
-.tree-node.tree-visible { opacity: 1; }
-.tree-node circle { stroke: var(--surface); stroke-width: 1.5; transition: fill .2s ease, stroke .2s ease, r .15s ease; }
-.tree-node text { font-size: 10px; fill: var(--text); pointer-events: none; }
-.tree-node .tree-node-count { font-size: 9px; fill: var(--text-muted); }
-.tree-node:hover circle { stroke: var(--accent); stroke-width: 2.5; }
-.tree-node.tree-node-highlighted circle { stroke: var(--accent); stroke-width: 2.5; }
-.tree-node.tree-node-dim { opacity: .25; }
-.tree-node-passed circle { fill: var(--passed); }
-.tree-node-failed circle { fill: var(--failed); }
-.tree-node-xfail circle { fill: var(--xfail); }
-.tree-node-skipped circle { fill: var(--skipped); }
-.tree-node-root circle { fill: var(--accent); }
-.tree-node.tree-node-failed circle { animation: tree-pulse 1.8s ease-in-out infinite; }
-@keyframes tree-pulse {
-  0%, 100% { r: 6; opacity: 1; }
-  50% { r: 8; opacity: .65; }
-}
-.tree-node-collapsed circle { stroke-dasharray: 2 2; }
-.tree-node .tree-node-statusbar rect { rx: 1; }
-.tree-statusbar-empty { fill: var(--border); }
-.tree-statusbar-passed { fill: var(--passed); }
-.tree-statusbar-failed { fill: var(--failed); }
-.tree-statusbar-xfail { fill: var(--xfail); }
-.tree-statusbar-skipped { fill: var(--skipped); }
-/* соседние узлы top-down ближе TREE_LABEL_HIDE_GAP — подпись только на hover, чтобы не наезжали друг на друга */
-.tree-node-label-hoveronly text { opacity: 0; transition: opacity .15s ease; }
-.tree-node-label-hoveronly:hover text { opacity: 1; }
 
 /* логотип проекта: ui/img/logos/<имя проекта>_256.png, если файла нет — не показывается */
 .project-logo { height: 28px; width: auto; vertical-align: middle; margin-right: 8px; }

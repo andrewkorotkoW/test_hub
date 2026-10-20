@@ -38,6 +38,10 @@ def _cache_is_current(cached: dict, project: sqlite3.Row, conn: sqlite3.Connecti
     по аналогии с app.routers.coverage._cache_is_current/sections._ensure_cached)."""
     if "stands" not in cached or "zones" not in cached:
         return False
+    # кэш, посчитанный до перехода на последние результаты (status_source отсутствует
+    # или другой) — пересчитать, иначе run_id не изменился и серая схема осталась бы
+    if cached.get("status_source") != product_map.STATUS_SOURCE:
+        return False
     if cached.get("map_signature") != product_map.map_signature(project["path"]):
         return False
     stands = [

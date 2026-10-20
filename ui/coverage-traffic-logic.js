@@ -23,9 +23,13 @@
   var E2E_SECTION_KEY = "__e2e__";
   var E2E_SECTION_LABEL = "Сквозные сценарии";
 
+  // Вкладки страницы «Покрытие» (20.10.2026: один длинный свиток разложен на четыре):
+  // светофор, схема продукта, области (тесты по областям + статусы + кольца),
+  // маршруты (инвентарь-аккордеон + связи). Хранится в localStorage и в #hash URL.
   var VIEW_MODE_KEY = "cov-view-mode";
-  var VIEW_MODES = ["traffic", "scheme"];
+  var VIEW_MODES = ["traffic", "scheme", "areas", "routes"];
   var DEFAULT_VIEW_MODE = "traffic";
+  var VIEW_TITLES = { traffic: "Светофор", scheme: "Схема продукта", areas: "Тесты по областям", routes: "Маршруты и связи" };
 
   function normalizeViewMode(raw) {
     return VIEW_MODES.indexOf(raw) !== -1 ? raw : DEFAULT_VIEW_MODE;
@@ -272,6 +276,7 @@
     E2E_SECTION_LABEL: E2E_SECTION_LABEL,
     VIEW_MODE_KEY: VIEW_MODE_KEY,
     VIEW_MODES: VIEW_MODES,
+    VIEW_TITLES: VIEW_TITLES,
     DEFAULT_VIEW_MODE: DEFAULT_VIEW_MODE,
     normalizeViewMode: normalizeViewMode,
     splitTrafficPath: splitTrafficPath,

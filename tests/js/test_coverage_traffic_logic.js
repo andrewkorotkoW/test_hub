@@ -234,9 +234,13 @@ test("sectionHref: null/undefined секция тоже не формирует 
 
 // ---------------- переключатель «Светофор | Схема» (localStorage) ----------------
 
-test("normalizeViewMode: валидные значения проходят как есть", function () {
+test("normalizeViewMode: валидные значения проходят как есть (четыре вкладки)", function () {
   assert.strictEqual(Logic.normalizeViewMode("traffic"), "traffic");
   assert.strictEqual(Logic.normalizeViewMode("scheme"), "scheme");
+  assert.strictEqual(Logic.normalizeViewMode("areas"), "areas");
+  assert.strictEqual(Logic.normalizeViewMode("routes"), "routes");
+  assert.deepStrictEqual(Logic.VIEW_MODES, ["traffic", "scheme", "areas", "routes"]);
+  assert.deepStrictEqual(Object.keys(Logic.VIEW_TITLES).sort(), Logic.VIEW_MODES.slice().sort(), "у каждой вкладки есть заголовок");
 });
 
 test("normalizeViewMode: отсутствующее значение (null — как из пустого localStorage) -> дефолт «Светофор»", function () {
