@@ -167,7 +167,7 @@ Seed-пользователи (создаются автоматически п�
 аватара — кружок с инициалами (из ФИО, иначе из логина) в стиле `.logo-placeholder`
 проектов.
 
-![Страница профиля с загруженным аватаром](docs/screenshots/profile_page_light.png)
+![Страница профиля с загруженным аватаром](docs/screenshots/profile_page_v2_light.png)
 
 **Аватар в шапке** (`ui/common.js::renderHeader`) — кружок рядом с логином и
 бейджем роли (бейдж роли остался текстом, аватар добавлен, а не заменил его),
@@ -175,7 +175,7 @@ Seed-пользователи (создаются автоматически п�
 выставленном `avatar_url` (удалён вручную) — автоматический откат на кружок с
 инициалами, без битой картинки.
 
-![Аватар в шапке рядом с логином и ролью](docs/screenshots/profile_header_avatar_light.png)
+![Аватар в шапке рядом с логином и ролью](docs/screenshots/profile_header_avatar_v2_light.png)
 
 ## Суперадминка
 
@@ -730,8 +730,8 @@ stub_1.webm`/`stub_2.webm` первым 1–2 прошедшим тестам э
 `docs/missions/2026-09-29_run_window_stage2.md`). Скриншоты карточки в обеих
 темах:
 
-![Окно прогона, светлая тема](docs/screenshots/run_window_light.png)
-![Окно прогона, тёмная тема](docs/screenshots/run_window_dark.png)
+![Окно прогона, светлая тема](docs/screenshots/run_window_v2_light.png)
+![Окно прогона, тёмная тема](docs/screenshots/run_window_v2_dark.png)
 
 ### Эфир (живая трансляция прогона)
 
@@ -782,7 +782,7 @@ touch, мобильный user-agent». При включении «Мобиль
 Pixel 7». В Allure-отчёте ничего не меняется — параметр устройства пишет сам
 плагин.
 
-![Рамка телефона на странице прогона](docs/screenshots/mobile_phone_frame.png)
+![Рамка телефона на странице прогона](docs/screenshots/mobile_phone_frame_v2.png)
 
 `MOBILE=1` и профиль Pixel 7 — тот же контракт, что и у режима `--mobile`/
 `MOBILE=1` в автотестах `auto_tests_vshgu` (парная миссия
@@ -885,10 +885,10 @@ project-run-compare.js`) из уже загруженных `/causes` и, есл
 общие правила тем, здесь — сами вкладки (данные и пояснения к скриншотам — в
 отчёте `docs/reports/2026-10-13_run_compare_and_causes.md`):
 
-![Сравнить с…, светлая тема](docs/screenshots/run_compare_light.png)
-![Сравнить с…, тёмная тема](docs/screenshots/run_compare_dark.png)
-![Причины, светлая тема](docs/screenshots/run_causes_light.png)
-![Причины, тёмная тема](docs/screenshots/run_causes_dark.png)
+![Сравнить с…, светлая тема](docs/screenshots/run_compare_v2_light.png)
+![Сравнить с…, тёмная тема](docs/screenshots/run_compare_v2_dark.png)
+![Причины, светлая тема](docs/screenshots/run_causes_v2_light.png)
+![Причины, тёмная тема](docs/screenshots/run_causes_v2_dark.png)
 
 ### Вкладка «Прогоны» (история)
 
@@ -1027,8 +1027,8 @@ VSHGU схема показывала «1 из 61» при 36 из 86 у све�
 (`ui/coverage-scheme-dom.js`). На карте VSHGU: 46 связей, ~0.6 с, без
 пересечений узлов.
 
-![Покрытие — Схема, светлая тема](docs/screenshots/coverage_scheme_light.png)
-![Покрытие — Схема, тёмная тема](docs/screenshots/coverage_scheme_dark.png)
+![Покрытие — Схема, светлая тема](docs/screenshots/coverage_scheme_v2_light.png)
+![Покрытие — Схема, тёмная тема](docs/screenshots/coverage_scheme_v2_dark.png)
 
 ### Области
 
@@ -1262,8 +1262,8 @@ UI Y» (плюс «· E2E Z», если в разделах есть e2e-тес�
 обе есть и для тёмной темы в `docs/screenshots/`):
 
 ![Дерево разделов на «Запуске», до](docs/screenshots/run_sections_tree_before_light.png)
-![Дерево разделов на «Запуске», после](docs/screenshots/run_sections_tree_after_light.png)
-![Дерево разделов на «Запуске», после (раскрыто)](docs/screenshots/run_sections_tree_after_expanded_light.png)
+![Дерево разделов на «Запуске», после](docs/screenshots/run_sections_tree_after_v2_light.png)
+![Дерево разделов на «Запуске», после (раскрыто)](docs/screenshots/run_sections_tree_after_expanded_v2_light.png)
 ![Дерево разделов на «Расписаниях», до](docs/screenshots/sched_sections_tree_before_light.png)
 ![Дерево разделов на «Расписаниях», после](docs/screenshots/sched_sections_tree_after_light.png)
 
