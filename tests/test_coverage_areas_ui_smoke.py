@@ -26,15 +26,33 @@ def test_treemap_is_gone_from_scenario_and_markup():
 
 
 def test_areas_dom_uses_last_results_with_fallback_to_statuses():
-    fn = AREAS_DOM_JS[AREAS_DOM_JS.index("function areasStatusMap()"):]
+    fn = AREAS_DOM_JS[AREAS_DOM_JS.index("function standStatusMap()"):]
     fn = fn[: fn.index("function areaBarHtml")]
     assert "treeApiData.last_results" in fn
     assert "treeApiData.statuses" in fn, "старый сервер без last_results — статусы последнего прогона"
+    assert "return AreasLogic.statusStringMap(standStatusMap());" in fn
+
+
+def test_traffic_tree_and_status_chart_share_stand_status_source():
+    """Светофор, дерево проекта и диаграмма статусов считают по тем же last_results,
+    что и блок областей — иначе цифры на одной странице расходились (замечание
+    владельца 20.10.2026)."""
+    traffic = (UI_DIR / "coverage-traffic-dom.js").read_text()
+    tree = (UI_DIR / "coverage-tree-dom.js").read_text()
+    diagrams = (UI_DIR / "coverage-diagrams-dom.js").read_text()
+    assert "const statusMap = standStatusStrings();" in traffic
+    assert "const statusMap = standStatusStrings();" in tree
+    assert "AreasLogic.statusCounts(treeApiData.tree || {}, standStatusMap())" in diagrams
+    for js in (traffic, tree, diagrams):
+        assert "treeApiData.statuses" not in js
+    # после загрузки дерева диаграмма статусов перерисовывается уже по его данным
+    load_tree = tree[tree.index("async function loadTree()"):]
+    assert load_tree.count("renderStatusChart();") == 2
 
 
 def test_areas_dom_renders_rows_waffle_and_wires_clicks():
     for needle in (
-        "AreasLogic.buildAreaRows(treeApiData.tree || {}, areasStatusMap())",
+        "AreasLogic.buildAreaRows(treeApiData.tree || {}, standStatusMap())",
         "AreasLogic.groupRowsByKind(rows, areasSortMode, areasHideEmpty)",
         "AreasLogic.matchRouteStats(row, routeStats)",
         'data-ab-row="${escapeHtml(row.key)}"',

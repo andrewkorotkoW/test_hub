@@ -569,6 +569,34 @@ async def test_get_coverage_tree_matches_discover_nodeids_with_run_status(
     assert body["last_results"]["stage"] == {}
 
 
+async def test_coverage_recalculated_when_stands_change(qa_client, isolated_coverage_dir, coverage_project_dir):
+    """Кэш считался со стендами develop/stage; после добавления стенда в таблицу
+    GET /coverage сам пересчитывает и отдаёт новый стенд, после удаления — убирает."""
+    await _register_with_stands(qa_client, "cov_proj", coverage_project_dir)
+    resp = await qa_client.get("/api/projects/cov_proj/coverage")
+    assert resp.status_code == 200, resp.text
+    assert [s["stand"] for s in resp.json()["stands"]] == ["develop", "stage"]
+
+    conn = get_connection()
+    try:
+        conn.execute("INSERT INTO stands (project, name, url) VALUES ('cov_proj', 'v3', 'https://v3.example')")
+        conn.commit()
+    finally:
+        conn.close()
+    resp = await qa_client.get("/api/projects/cov_proj/coverage")
+    assert [s["stand"] for s in resp.json()["stands"]] == ["develop", "stage", "v3"]
+    assert coverage.load_cached("cov_proj")["stands"] == ["develop", "stage", "v3"], "кэш обновлён на диске"
+
+    conn = get_connection()
+    try:
+        conn.execute("DELETE FROM stands WHERE project = 'cov_proj' AND name = 'stage'")
+        conn.commit()
+    finally:
+        conn.close()
+    resp = await qa_client.get("/api/projects/cov_proj/coverage")
+    assert [s["stand"] for s in resp.json()["stands"]] == ["develop", "v3"]
+
+
 def test_stale_cache_without_status_is_recalculated(tmp_path, monkeypatch):
     """Кэш старого формата (страницы без status) не должен ронять /coverage 500 — пересчитываем."""
     from app.routers import coverage as router

@@ -1511,6 +1511,7 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 .chart-ring { text-align: center; }
 .chart-ring-label { margin-top: 6px; font-size: 12px; color: var(--text-muted); }
 .ring-text { font-size: 18px; font-weight: 600; fill: var(--text); }
+.chart-status-foot { margin: 4px 0 0; font-size: 11px; }
 .chart-axis-label { font-size: 10px; fill: var(--text-muted); }
 .chart-value-label { font-size: 11px; fill: var(--text); font-weight: 600; }
 .chart-graph-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }

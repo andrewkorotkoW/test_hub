@@ -120,8 +120,9 @@
 
   function renderTraffic() {
     if (!summary || !treeApiData || treeApiData.error) return;
-    const stand = currentStand();
-    const statusMap = (treeApiData.statuses && treeApiData.statuses[stand]) || {};
+    // последний известный результат теста на стенде (см. standStatusStrings в
+    // coverage-areas-dom.js) — те же цифры, что в блоке «Тесты по областям»
+    const statusMap = standStatusStrings();
     const tree = treeApiData.tree || {};
     const treeSections = TrafficLogic.buildSections(tree, statusMap, AreasLogic.AREA_LABELS_RU);
     const sections = TrafficLogic.mergeUncoveredAreas(treeSections, summary.zero_coverage_areas, AreasLogic.AREA_LABELS_RU);

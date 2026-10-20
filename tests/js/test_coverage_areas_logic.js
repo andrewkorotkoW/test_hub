@@ -148,6 +148,25 @@ test("buildAreaTree: статус теста не запускавшегося �
   assert.strictEqual(root.lastRunId, null);
 });
 
+// ---------------- statusStringMap / statusCounts ----------------
+
+test("statusStringMap: объекты last_results -> строки, строки как есть, пустое пропускается", function () {
+  var out = Logic.statusStringMap({
+    a: { status: "broken", run_id: 1, finished: null },
+    b: "passed",
+    c: null,
+  });
+  assert.deepStrictEqual(out, { a: "broken", b: "passed" });
+  assert.deepStrictEqual(Logic.statusStringMap(null), {});
+});
+
+test("statusCounts: счётчики по всем тестам дерева, как counts корня", function () {
+  assert.deepStrictEqual(Logic.statusCounts(sampleTree(), sampleLastResults()),
+    { passed: 3, failed: 1, xfail: 1, skipped: 1, none: 1 });
+  assert.deepStrictEqual(Logic.statusCounts(sampleTree(), {}),
+    { passed: 0, failed: 0, xfail: 0, skipped: 0, none: 7 });
+});
+
 // ---------------- buildAreaRows ----------------
 
 test("buildAreaRows: по одной строке на область внутри kind, с файлами и тестами", function () {

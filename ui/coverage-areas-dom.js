@@ -18,12 +18,21 @@
   let areasHideEmpty = localStorage.getItem(AREAS_HIDE_EMPTY_KEY) === "1";
   const areasExpanded = new Set(); // row.key раскрытых областей
 
-  function areasStatusMap() {
+  // Единый источник статусов тестов на выбранном стенде для всей страницы
+  // (блок областей, светофор, дерево, диаграмма статусов): last_results —
+  // последний известный результат теста по последним прогонам стенда.
+  function standStatusMap() {
+    if (!treeApiData) return {};
     const stand = currentStand();
     const last = treeApiData.last_results && treeApiData.last_results[stand];
     if (last && Object.keys(last).length) return last;
     // старый сервер без last_results — статусы последнего прогона стенда
     return (treeApiData.statuses && treeApiData.statuses[stand]) || {};
+  }
+
+  // То же, но nodeid -> строка статуса (светофор/дерево ждут строки, как раньше statuses).
+  function standStatusStrings() {
+    return AreasLogic.statusStringMap(standStatusMap());
   }
 
   function areaBarHtml(counts, total) {
@@ -167,7 +176,7 @@
       areasBlockBody.innerHTML = `<p class="error-box">${escapeHtml(treeApiData.error)}</p>`;
       return;
     }
-    const rows = AreasLogic.buildAreaRows(treeApiData.tree || {}, areasStatusMap());
+    const rows = AreasLogic.buildAreaRows(treeApiData.tree || {}, standStatusMap());
     if (!rows.length) {
       areasBlockBody.innerHTML = `<p class="muted">Тестов не найдено.</p>`;
       return;

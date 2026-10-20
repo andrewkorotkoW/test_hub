@@ -808,6 +808,23 @@ def _test_status_counts(items: list[dict], stands: list[str]) -> dict[str, dict[
 
 # ------------------------------------------------------------------ публичный API: recalc/load_cached
 
+def project_stands(project_name: str, conn: sqlite3.Connection | None = None) -> list[str]:
+    """Стенды проекта из таблицы stands (по имени) — тот список, с которым считается
+    кэш покрытия; роутер сверяет с ним cached["stands"], чтобы добавленный/удалённый
+    стенд не ждал ручного «Пересчитать»."""
+    own = conn is None
+    if own:
+        conn = get_connection()
+    try:
+        return [
+            row["name"]
+            for row in conn.execute("SELECT name FROM stands WHERE project = ? ORDER BY name", (project_name,)).fetchall()
+        ]
+    finally:
+        if own:
+            conn.close()
+
+
 def recalc(project_name: str) -> dict:
     """Пересчитывает покрытие для зарегистрированного проекта (путь/стенды берутся из
     app.db) и кладёт результат в workspace/coverage/<project>/coverage.json."""
@@ -816,10 +833,7 @@ def recalc(project_name: str) -> dict:
         project = conn.execute("SELECT * FROM projects WHERE name = ?", (project_name,)).fetchone()
         if project is None:
             raise ValueError(f"проект {project_name} не найден")
-        stands = [
-            row["name"]
-            for row in conn.execute("SELECT name FROM stands WHERE project = ? ORDER BY name", (project_name,)).fetchall()
-        ]
+        stands = project_stands(project_name, conn)
 
         tsv_routes = load_routes(project_name)
         api_tsv_routes = [r for r in tsv_routes if _is_api_path(r.path)]

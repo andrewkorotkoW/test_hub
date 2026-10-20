@@ -49,9 +49,16 @@ def _ensure_cached(project_name: str) -> dict:
     зашедшему на страницу «Покрытие» первым, не нужно знать про существование
     отдельной ручки /recalc."""
     cached = coverage.load_cached(project_name)
-    if cached is None or not _cache_is_current(cached):
+    if cached is None or not _cache_is_current(cached) or not _cache_stands_current(cached, project_name):
         cached = coverage.recalc(project_name)
     return cached
+
+
+def _cache_stands_current(cached: dict, project_name: str) -> bool:
+    """Стенд добавили/удалили после последнего пересчёта — список стендов в тулбаре
+    «Покрытия» берётся из кэша и без этого не менялся до ручного «Пересчитать»
+    (на VSHGU так не было видно стенда v3 и висел удалённый k8s)."""
+    return list(cached.get("stands") or []) == coverage.project_stands(project_name)
 
 
 def _cache_is_current(cached: dict) -> bool:

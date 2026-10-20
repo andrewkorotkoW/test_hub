@@ -21,7 +21,13 @@
   // ---------------- диаграммы: (c) статусы покрывающих тестов на стенде ----------------
   function renderStatusChart() {
     const stand = currentStand();
-    const counts = (summary.test_status && summary.test_status[stand]) || {};
+    // По всем тестам проекта и последним известным результатам на стенде (как блок
+    // областей и светофор); пока дерево не загружено — покрывающие тесты из кэша
+    // /coverage (summary.test_status, только последний прогон стенда).
+    const fromTree = treeApiData && !treeApiData.error;
+    const counts = fromTree
+      ? AreasLogic.statusCounts(treeApiData.tree || {}, standStatusMap())
+      : (summary.test_status && summary.test_status[stand]) || {};
     const order = [
       ["passed", "var(--passed)"],
       ["failed", "var(--failed)"],
@@ -51,6 +57,9 @@
           `;
         }).join("")}
       </svg>
+      <p class="muted chart-status-foot">${fromTree
+        ? `по последним прогонам стенда${counts.none ? ` · без результата: ${counts.none}` : ""}`
+        : "покрывающие тесты, последний прогон стенда"}</p>
     `;
   }
 

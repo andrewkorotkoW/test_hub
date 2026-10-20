@@ -47,7 +47,9 @@
 
   // ---- статусы (перевычисляются при смене стенда, структура дерева не меняется) ----
   function computeTreeStatuses(stand) {
-    const statusMap = (treeApiData && treeApiData.statuses && treeApiData.statuses[stand]) || {};
+    // stand == currentStand(): статусы — последний известный результат на стенде,
+    // как в блоке областей и светофоре (standStatusStrings в coverage-areas-dom.js)
+    const statusMap = standStatusStrings();
     TreeLogic.computeTreeStatuses(treeRoot, statusMap);
     if (treeFailedOnlyActive) TreeLogic.applyFailedOnlyCollapse(treeRoot);
   }
@@ -593,6 +595,7 @@
       if (treeApiData.error) {
         chartTreeBody.innerHTML = `<p class="error-box">${escapeHtml(treeApiData.error)}</p>`;
         renderAreasBlock();
+        renderStatusChart();
         return;
       }
       treeRoot = TreeLogic.buildTreeRoot(treeApiData.tree || {}, projectName);
@@ -605,6 +608,7 @@
       treeEdgeEls.clear();
       if (!treeInnerBody.hidden) syncTreeView();
       renderAreasBlock();
+      renderStatusChart();
       renderTraffic();
     } catch (err) {
       chartTreeBody.innerHTML = `<p class="error-box">Не удалось построить дерево: ${escapeHtml(err.message)}</p>`;

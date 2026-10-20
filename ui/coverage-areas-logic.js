@@ -132,6 +132,27 @@
     };
   }
 
+  // last_results[stand] (nodeid -> {status, run_id, finished}) -> nodeid -> статус
+  // строкой, как в старом statuses — для светофора/дерева, которые ждут строки.
+  // Строковые значения проходят как есть.
+  function statusStringMap(statusMap) {
+    var src = statusMap || {};
+    var out = {};
+    var keys = Object.keys(src);
+    for (var i = 0; i < keys.length; i++) {
+      var raw = src[keys[i]];
+      if (raw === null || raw === undefined) continue;
+      out[keys[i]] = typeof raw === "string" ? raw : raw.status;
+    }
+    return out;
+  }
+
+  // Счётчики статусов по всем тестам дерева: {passed, failed, xfail, skipped, none}
+  // — диаграмма «Статусы тестов на стенде» по тем же данным, что блок областей.
+  function statusCounts(tree, statusMap) {
+    return buildAreaTree(tree, statusMap, "tests").counts;
+  }
+
   // Строит иерархию tests -> api/ui/e2e -> область (папка) -> файл -> тест. Каждый
   // контейнерный узел получает value (число тестов-потомков), counts (агрегат
   // passed/failed/xfail/skipped/none) и lastFinished/lastRunId (самый свежий
@@ -390,6 +411,8 @@
     statusLabelRu: statusLabelRu,
     kindLabelRu: kindLabelRu,
     splitFilePath: splitFilePath,
+    statusStringMap: statusStringMap,
+    statusCounts: statusCounts,
     buildAreaTree: buildAreaTree,
     buildAreaRows: buildAreaRows,
     sortAreaRows: sortAreaRows,
