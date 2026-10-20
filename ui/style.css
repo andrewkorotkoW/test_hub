@@ -1335,10 +1335,24 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
   color: var(--accent); padding: 8px 12px; pointer-events: none;
 }
 
+/* Связи: path со скруглёнными углами (CoverageSchemeLogic.pmPathD), толще и
+   контрастнее прежних 1.5px/.55 — на масштабированной под карточку схеме они
+   терялись и сливались с рамками узлов (замечание владельца 20.10.2026). При
+   наведении на узел его связи и соседи подсвечиваются акцентом, остальное гаснет. */
 .pm-edges { position: absolute; inset: 0; pointer-events: none; }
-.pm-edges .pm-edge { fill: none; stroke: var(--text-muted); stroke-opacity: .55; stroke-width: 1.5; }
-.pm-edges .pm-edge-int { stroke-dasharray: 3 3; stroke-opacity: .7; }
-.pm-arrow-head { fill: var(--border); }
+.pm-edges .pm-edge {
+  fill: none; stroke: var(--text-muted); stroke-opacity: .85; stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round;
+  transition: stroke-opacity .15s ease, stroke-width .15s ease;
+}
+.pm-edges .pm-edge-int { stroke-dasharray: 5 4; }
+.pm-arrow-head { fill: var(--text-muted); }
+.pm-arrow-head-hot { fill: var(--accent); }
+.pm-canvas.pm-hover .pm-edge { stroke-opacity: .14; }
+.pm-canvas.pm-hover .pm-edge.pm-edge-hot { stroke: var(--accent); stroke-opacity: 1; stroke-width: 2.5; marker-end: url(#pm-arrow-hot); }
+.pm-canvas.pm-hover .pm-node { opacity: .45; }
+.pm-canvas.pm-hover .pm-node.pm-node-hot, .pm-canvas.pm-hover .pm-node:hover, .pm-canvas.pm-hover .pm-node:focus-visible { opacity: 1; }
+.pm-canvas.pm-hover .pm-node.pm-node-hot { border-color: var(--accent); }
 
 .pm-node {
   position: absolute; display: flex; align-items: center; gap: 5px; border-radius: 10px;

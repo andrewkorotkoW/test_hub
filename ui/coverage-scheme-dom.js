@@ -95,15 +95,30 @@
     if (url) window.location.href = url;
   }
 
+  // Наведение на узел подсвечивает его связи и соседей, остальное приглушается —
+  // на карте с десятками линий иначе не разобрать, какая куда ведёт.
+  function highlightNodeEdges(nodeId) {
+    pmCanvas.classList.toggle("pm-hover", Boolean(nodeId));
+    const neighbors = new Set();
+    pmCanvas.querySelectorAll(".pm-edge").forEach((edge) => {
+      const hot = Boolean(nodeId) && (edge.dataset.source === nodeId || edge.dataset.target === nodeId);
+      edge.classList.toggle("pm-edge-hot", hot);
+      if (hot) { neighbors.add(edge.dataset.source); neighbors.add(edge.dataset.target); }
+    });
+    pmCanvas.querySelectorAll(".pm-node").forEach((n) => {
+      n.classList.toggle("pm-node-hot", Boolean(nodeId) && neighbors.has(n.dataset.id));
+    });
+  }
+
   function bindProductMapNodeEvents() {
     const nodeById = new Map(productMap.nodes.map((n) => [n.id, n]));
     pmCanvas.querySelectorAll(".pm-node").forEach((el) => {
       const node = nodeById.get(el.dataset.id);
       if (!node) return;
-      el.addEventListener("mouseenter", () => showProductMapTip(node, el));
-      el.addEventListener("mouseleave", hideProductMapTip);
-      el.addEventListener("focus", () => showProductMapTip(node, el));
-      el.addEventListener("blur", hideProductMapTip);
+      el.addEventListener("mouseenter", () => { showProductMapTip(node, el); highlightNodeEdges(node.id); });
+      el.addEventListener("mouseleave", () => { hideProductMapTip(); highlightNodeEdges(null); });
+      el.addEventListener("focus", () => { showProductMapTip(node, el); highlightNodeEdges(node.id); });
+      el.addEventListener("blur", () => { hideProductMapTip(); highlightNodeEdges(null); });
       el.addEventListener("click", () => goToNodeTests(node));
       el.addEventListener("keydown", (ev) => {
         if (ev.key === "Enter" || ev.key === " ") {
@@ -133,17 +148,17 @@
       html += `<div class="pm-zone-label" style="left:${z.x}px;top:${z.y}px;width:${Math.max(0, z.w - 24)}px">${escapeHtml(z.label)}</div>`;
     });
 
-    const grid = CoverageSchemeLogic.pmBuildRouteGrid(productMap.nodes, canvas);
+    // Разводка — CoverageSchemeLogic.pmEdgesWithRoutes (концы разнесены по сторонам
+    // узлов, Дейкстра с штрафами за повороты/чужие зоны/прилипание к узлам), линия —
+    // path со скруглёнными углами (pmPathD). Две стрелки: обычная и акцентная для
+    // подсвеченных связей (marker-end переключает CSS .pm-edge-hot).
     html += `<svg class="pm-edges" width="${canvas.width}" height="${canvas.height}">`;
-    html += `<defs><marker id="pm-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8 z" class="pm-arrow-head" /></marker></defs>`;
-    CoverageSchemeLogic.pmAllEdges(productMap).forEach((e) => {
-      const a = nodeById.get(e.source);
-      const b = nodeById.get(e.target);
-      if (!a || !b) return;
-      const isInt = a.zone === "int" || b.zone === "int";
-      const pts = CoverageSchemeLogic.pmEdgeRoute(a, b, grid, productMap.nodes);
-      const s = pts.map((p) => `${p[0]},${p[1]}`).join(" ");
-      html += `<polyline class="pm-edge${isInt ? " pm-edge-int" : ""}" data-source="${escapeHtml(e.source)}" data-target="${escapeHtml(e.target)}" points="${s}" marker-end="url(#pm-arrow)" />`;
+    html += `<defs>`
+      + `<marker id="pm-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,0.5 L10,5 L0,9.5 z" class="pm-arrow-head" /></marker>`
+      + `<marker id="pm-arrow-hot" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,0.5 L10,5 L0,9.5 z" class="pm-arrow-head pm-arrow-head-hot" /></marker>`
+      + `</defs>`;
+    CoverageSchemeLogic.pmEdgesWithRoutes(productMap).forEach((e) => {
+      html += `<path class="pm-edge${e.isInt ? " pm-edge-int" : ""}" data-source="${escapeHtml(e.source)}" data-target="${escapeHtml(e.target)}" d="${CoverageSchemeLogic.pmPathD(e.pts, 6)}" marker-end="url(#pm-arrow)" />`;
     });
     html += `</svg>`;
 

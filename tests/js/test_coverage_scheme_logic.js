@@ -282,6 +282,117 @@ test("nodeTestsUrl: строит project.html с уникальными файл
   assert.deepStrictEqual(files, ["tests/api/orders/test_orders.py", "tests/api/health/test_health.py"]);
 });
 
+// ------------------------------------------------------------------ разводка v2 (20.10.2026): штрафы, разнесённые концы, path
+
+var pmSegmentHugs = CoverageSchemeLogic.pmSegmentHugs;
+var pmSpreadAnchors = CoverageSchemeLogic.pmSpreadAnchors;
+var pmEdgesWithRoutes = CoverageSchemeLogic.pmEdgesWithRoutes;
+var pmPathD = CoverageSchemeLogic.pmPathD;
+
+test("pmSegmentHugs: отрезок впритирку вдоль узла — да, далеко или мимо по длине — нет", function () {
+  var obstacles = [{ x: 100, y: 100, w: 50, h: 20 }];
+  assert.strictEqual(pmSegmentHugs(92, 90, 92, 130, obstacles), true, "вертикаль в 8px слева от узла");
+  assert.strictEqual(pmSegmentHugs(60, 90, 60, 130, obstacles), false, "в 40px — не впритирку");
+  assert.strictEqual(pmSegmentHugs(92, 200, 92, 240, obstacles), false, "рядом по X, но вне протяжённости узла");
+  assert.strictEqual(pmSegmentHugs(0, 126, 300, 126, obstacles), true, "горизонталь в 6px под узлом");
+});
+
+test("pmRouteOnGrid: штраф за поворот — прямой путь предпочтительнее зигзага равной длины", function () {
+  var grid = { xs: [0, 10, 20, 30], ys: [0, 10, 20] };
+  var route = pmRouteOnGrid(grid, 0, 10, 30, 10, []);
+  assert.deepStrictEqual(norm(route), [[0, 10], [30, 10]]);
+});
+
+test("pmRouteOnGrid: чужая зона — мягкое препятствие, путь обходит её, когда есть коридор", function () {
+  // сквозь зону: 120 + 60×2 штрафа = 240; обход поверху (y=12, граница зоны − margin):
+  // 18 + 120 + 18 + 2 поворота×24 = 204 — дешевле, значит обходим; при узкой зоне
+  // (штраф меньше цены обхода) прямая осталась бы прямой — на то он и мягкий
+  var zone = { x: 30, y: 20, w: 60, h: 20 };
+  var canvas = { width: 120, height: 60 };
+  var grid = pmBuildRouteGrid([], canvas, { zones: [zone], ys: [30] });
+  var route = pmRouteOnGrid(grid, 0, 30, 120, 30, [], { softZones: [zone] });
+  assert.ok(route, "путь найден");
+  for (var i = 0; i < route.length - 1; i++) {
+    var mx = (route[i][0] + route[i + 1][0]) / 2, my = (route[i][1] + route[i + 1][1]) / 2;
+    var inside = mx > zone.x && mx < zone.x + zone.w && my > zone.y && my < zone.y + zone.h;
+    assert.strictEqual(inside, false, "сегмент " + i + " проходит сквозь чужую зону: " + JSON.stringify(route));
+  }
+});
+
+test("pmRouteOnGrid: окно поиска, не содержащее обхода, — null; без окна путь есть", function () {
+  var blocker = { id: "b", x: 40, y: 0, w: 20, h: 90 };
+  var canvas = { width: 100, height: 100 };
+  var grid = pmBuildRouteGrid([blocker], canvas);
+  // y=45 — центр blocker, он есть в сетке; обход возможен только снизу (y=98)
+  var narrow = pmRouteOnGrid(grid, 0, 45, 100, 45, [blocker], { window: { x0: 0, x1: 100, y0: 40, y1: 60 } });
+  assert.strictEqual(narrow, null);
+  assert.ok(pmRouteOnGrid(grid, 0, 45, 100, 45, [blocker]), "полная сетка обходит снизу");
+});
+
+test("pmSpreadAnchors: одна связь на стороне — середина, две — равноотстоящие в порядке другого конца", function () {
+  var a = { id: "a", x: 0, y: 0, w: 40, h: 60 };
+  var b = { id: "b", x: 200, y: 0, w: 40, h: 20 };   // правее и выше центра a
+  var c = { id: "c", x: 200, y: 100, w: 40, h: 20 }; // правее и ниже
+  var edges = [{ source: "a", target: "c" }, { source: "a", target: "b" }];
+  var anchors = pmSpreadAnchors(edges, [a, b, c]);
+  // обе выходят справа из a: верхняя (к b) — на 1/3 высоты, нижняя (к c) — на 2/3
+  assert.deepStrictEqual(norm(anchors[1].s), [40, 20]);
+  assert.deepStrictEqual(norm(anchors[0].s), [40, 40]);
+  // у b и c по одной связи — вход в середину левой стороны
+  assert.deepStrictEqual(norm(anchors[1].t), [200, 10]);
+  assert.deepStrictEqual(norm(anchors[0].t), [200, 110]);
+});
+
+test("pmSpreadAnchors: связь с неизвестным узлом — null на её месте, длина массива = числу связей", function () {
+  var a = { id: "a", x: 0, y: 0, w: 10, h: 10 };
+  var anchors = pmSpreadAnchors([{ source: "a", target: "ghost" }, { source: "a", target: "a2" }], [a, { id: "a2", x: 50, y: 0, w: 10, h: 10 }]);
+  assert.strictEqual(anchors.length, 2);
+  assert.strictEqual(anchors[0], null);
+  assert.ok(anchors[1].s && anchors[1].t);
+});
+
+test("pmEdgeRoute: разнесённые концы на разной высоте — путь по сетке начинается и заканчивается в них", function () {
+  var a = { id: "a", x: 0, y: 0, w: 40, h: 60 };
+  var b = { id: "b", x: 200, y: 0, w: 40, h: 20 };
+  var anchor = { s: [40, 20], t: [200, 10] };
+  var grid = pmBuildRouteGrid([a, b], { width: 300, height: 100 }, { xs: [40, 200], ys: [20, 10] });
+  var pts = pmEdgeRoute(a, b, grid, [a, b], { anchor: anchor });
+  assert.deepStrictEqual(norm(pts[0]), [40, 20]);
+  assert.deepStrictEqual(norm(pts[pts.length - 1]), [200, 10]);
+});
+
+test("pmEdgesWithRoutes: маршруты для всех связей карты, концы на границах узлов, без прохода сквозь чужие узлы", function () {
+  var productMap = {
+    canvas: { width: 400, height: 200 },
+    zones: [{ id: "z1", x: 0, y: 0, w: 200, h: 200 }, { id: "z2", x: 200, y: 0, w: 200, h: 200 }],
+    nodes: [
+      { id: "a", zone: "z1", x: 20, y: 20, w: 60, h: 30 },
+      { id: "m", zone: "z1", x: 20, y: 90, w: 60, h: 30 },
+      { id: "b", zone: "z1", x: 20, y: 160, w: 60, h: 30 },
+      { id: "i", zone: "int", x: 300, y: 90, w: 60, h: 30, target: "a" },
+    ],
+    edges: [{ source: "a", target: "b" }, { source: "a", target: "m" }],
+  };
+  var routes = pmEdgesWithRoutes(productMap);
+  assert.deepStrictEqual(routes.map(function (r) { return [r.source, r.target, r.isInt]; }), [["a", "b", false], ["a", "m", false], ["i", "a", true]]);
+  var byId = {}; productMap.nodes.forEach(function (n) { byId[n.id] = n; });
+  routes.forEach(function (r) {
+    var obstacles = productMap.nodes.filter(function (n) { return n.id !== r.source && n.id !== r.target; });
+    for (var i = 0; i < r.pts.length - 1; i++) {
+      assert.strictEqual(pmSegmentBlocked(r.pts[i][0], r.pts[i][1], r.pts[i + 1][0], r.pts[i + 1][1], obstacles), false, r.source + "->" + r.target + " сквозь узел: " + JSON.stringify(r.pts));
+    }
+  });
+  assert.deepStrictEqual(pmEdgesWithRoutes(null), []);
+});
+
+test("pmPathD: две точки — M/L; поворот — укороченные отрезки и Q через угол; радиус не больше половины отрезка", function () {
+  assert.strictEqual(pmPathD([[0, 0], [50, 0]]), "M0,0 L50,0");
+  assert.strictEqual(pmPathD([[0, 0], [50, 0], [50, 40]], 6), "M0,0 L44,0 Q50,0 50,6 L50,40");
+  assert.strictEqual(pmPathD([[0, 0], [4, 0], [4, 40]], 6), "M0,0 L2,0 Q4,0 4,2 L4,40");
+  assert.strictEqual(pmPathD([], 6), "");
+  assert.strictEqual(pmPathD([[3, 4]], 6), "M3,4");
+});
+
 var failed = 0;
 tests.forEach(function (t) {
   try {
