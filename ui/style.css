@@ -734,9 +734,12 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
 .run-stats .badge { padding: 4px 9px; font-size: 12px; min-width: 0; }
 .run-stat-causes { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; color: var(--text-muted); }
 .run-stat-causes[hidden] { display: none; }
-.report-chart-spoiler { margin-bottom: 12px; font-size: 13px; }
-.report-chart-spoiler summary { cursor: pointer; color: var(--text-muted); }
-.report-chart-spoiler[open] summary { margin-bottom: 10px; }
+/* Графики отчёта на клиенте (кольцо · тренд · топ-10) вместо серверного PNG — те же
+   .chart-box/.chart-donut-wrap/.hbar-*, что на дашборде, цвета из темы. */
+.report-charts { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 14px; margin-bottom: 14px; }
+.report-charts[hidden] { display: none; }
+.report-charts .chart-donut-wrap { height: 180px; max-width: 220px; margin: 0 auto; }
+@media (max-width: 760px) { .report-charts { grid-template-columns: minmax(0, 1fr); } }
 
 /* ---------- «Итог прогона»: фильтр по причине и колонка «Причина» ---------- */
 h3 .h3-hint { text-transform: none; letter-spacing: 0; font-weight: 400; font-size: 12px; color: var(--text-muted); margin-left: 6px; }

@@ -183,8 +183,12 @@
   const rcTg = document.getElementById("rc-tg");
   const rcList = document.getElementById("rc-list");
   const rcListNote = document.getElementById("rc-list-note");
-  const reportChart = document.getElementById("report-chart");
-  const reportChartSpoiler = document.getElementById("report-chart-spoiler");
+  const reportCharts = document.getElementById("report-charts");
+  const reportDonutCanvas = document.getElementById("report-donut-chart");
+  const reportDonutCenter = document.getElementById("report-donut-center");
+  const reportDonutLegend = document.getElementById("report-donut-legend");
+  const reportTrendCanvas = document.getElementById("report-trend-chart");
+  const reportLongestTests = document.getElementById("report-longest-tests");
   const reportCauseFilter = document.getElementById("report-cause-filter");
   const runStats = document.getElementById("run-stats");
   const runStatStand = document.getElementById("run-stat-stand");

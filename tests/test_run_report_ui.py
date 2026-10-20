@@ -34,12 +34,17 @@ async def test_project_html_run_stats_strip_between_status_bar_and_split(client)
     assert stats < html.index('id="summary-badges"') < split
 
 
-async def test_project_html_report_chart_under_lazy_spoiler(client):
+async def test_project_html_report_charts_block_replaces_png(client):
+    # графики отчёта — на клиенте, в цветах темы (замечание владельца 20.10.2026);
+    # серверный PNG остаётся только для Telegram/share
     html = (await client.get("/project.html")).text
-    spoiler = re.search(r'<details id="report-chart-spoiler"[^>]*\bhidden\b[^>]*>(.*?)</details>', html, re.S)
-    assert spoiler, "график отчёта должен быть внутри <details id=report-chart-spoiler hidden>"
-    assert 'id="report-chart"' in spoiler.group(1)
-    assert 'src=' not in spoiler.group(1)  # src ставится в JS только при открытии спойлера
+    block = re.search(r'<div id="report-charts" class="report-charts" hidden>(.*?)<div id="report-section"', html, re.S)
+    assert block, "блок графиков #report-charts должен стоять перед «Итогом прогона»"
+    for needle in ('id="report-donut-chart"', 'id="report-donut-center"', 'id="report-donut-legend"',
+                   'id="report-trend-chart"', 'id="report-longest-tests"'):
+        assert needle in block.group(1)
+    assert 'id="report-chart"' not in html
+    assert "report-chart-spoiler" not in html
 
 
 async def test_project_html_report_table_has_cause_column_and_filter(client):
@@ -59,7 +64,7 @@ def test_style_css_split_stretch_and_new_blocks():
     assert "grid-template-columns: 260px minmax(0, 1fr); gap: 14px; align-items: stretch;" in STYLE_CSS
     for needle in (".run-stats {", ".run-stats[hidden] { display: none; }", ".test-group {",
                    ".cause-chip {", ".cause-chip[aria-current=\"true\"]", "td.report-reason .msg {",
-                   ".report-chart-spoiler"):
+                   ".report-charts {", ".report-charts[hidden] { display: none; }"):
         assert needle in STYLE_CSS
 
 
@@ -97,16 +102,27 @@ def test_run_window_js_report_rows_sorted_filtered_and_open_in_split():
     assert '<td colspan="4"><pre class="trace-pre">' in handler
 
 
-def test_run_window_js_chart_loads_lazily_and_resets_on_open_run():
-    assert 'reportChartSpoiler.addEventListener("toggle"' in RUN_WINDOW_JS
+def test_run_window_js_renders_themed_charts_and_resets_on_open_run():
+    charts_fn = RUN_WINDOW_JS[RUN_WINDOW_JS.index("function renderReportCharts(payload)"):]
+    charts_fn = charts_fn[: charts_fn.index("new MutationObserver(")]
+    assert "RunReportLogic.donutSegments(counts)" in charts_fn
+    assert "RunReportLogic.trendRuns(lastRunsList || [], payload, 10)" in charts_fn
+    assert "labels: trend.map(RunReportLogic.trendLabel)" in charts_fn
+    assert "DashboardChartsLogic.longestTestsBarsHtml(payload.tests || [], { top: 10 })" in charts_fn
+    # цвета — из CSS-переменных темы, а не захардкоженные hex
+    assert "cssVar(s.colorVar)" in charts_fn and 'cssVar("--passed")' in charts_fn and 'cssVar("--failed")' in charts_fn
+    # PNG больше не грузится в карточку (в комментарии упоминание остаётся — он для Telegram/share)
+    assert "report.png`" not in RUN_WINDOW_JS and "reportChart.src" not in RUN_WINDOW_JS
+    # смена темы перерисовывает графики открытого отчёта
+    assert 'attributeFilter: ["data-theme"]' in RUN_WINDOW_JS
     render = RUN_WINDOW_JS[RUN_WINDOW_JS.index("function renderReport(payload, runId)"):]
-    render = render[: render.index("reportChartSpoiler.addEventListener")]
-    assert "if (reportChartSpoiler.open) reportChart.src" in render
+    render = render[: render.index("function reportRowHtml(t, i)")]
     assert "renderRunStats(payload)" in render and "renderCauseFilter(payload)" in render
+    assert "renderReportCharts(payload)" in render
     open_run = RUN_WINDOW_JS[RUN_WINDOW_JS.index("async function openRun(runId)"):]
     open_run = open_run[: open_run.index("await refreshReport(runId)")]
-    for needle in ("runStats.hidden = true;", "reportChartSpoiler.hidden = true;", "reportChartSpoiler.open = false;",
-                   'activeReportCause = "all";', "reportChartRunId = null;"):
+    for needle in ("runStats.hidden = true;", "reportCharts.hidden = true;", "destroyReportCharts();",
+                   'activeReportCause = "all";'):
         assert needle in open_run
 
 
@@ -131,7 +147,10 @@ def test_style_css_hidden_attribute_wins_over_flex_blocks():
 
 
 def test_project_setup_js_declares_report_dom_refs():
-    for needle in ('const reportChartSpoiler = document.getElementById("report-chart-spoiler");',
+    for needle in ('const reportCharts = document.getElementById("report-charts");',
+                   'const reportDonutCanvas = document.getElementById("report-donut-chart");',
+                   'const reportTrendCanvas = document.getElementById("report-trend-chart");',
+                   'const reportLongestTests = document.getElementById("report-longest-tests");',
                    'const reportCauseFilter = document.getElementById("report-cause-filter");',
                    'const runStats = document.getElementById("run-stats");',
                    'const runStatCauses = document.getElementById("run-stat-causes");'):

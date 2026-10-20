@@ -107,6 +107,44 @@
     return sec + " с";
   }
 
+  // Кольцо статусов прогона: только статусы с ненулевым счётчиком, в фиксированном
+  // порядке; colorVar — CSS-переменная темы (кольцо рисуется в цветах текущей темы,
+  // а не как серверный PNG, который всегда тёмный — замечание владельца 20.10.2026).
+  var DONUT_STATUSES = ["passed", "failed", "broken", "skipped"];
+  function donutSegments(counts) {
+    var c = counts || {};
+    return DONUT_STATUSES
+      .map(function (status) { return { status: status, count: Number(c[status] || 0), colorVar: "--" + status }; })
+      .filter(function (s) { return s.count > 0; });
+  }
+
+  // Тренд passed/failed — те же прогоны, что берёт серверный PNG (app/routers/runs.py
+  // _run_history + app/core/charts.py _prepare_history): того же проекта и того же
+  // стенда (null == null), последние limit по id, в хронологическом порядке.
+  function trendRuns(runs, run, limit) {
+    var stand = run ? (run.stand == null ? null : run.stand) : null;
+    var same = (runs || []).filter(function (r) {
+      var s = r.stand == null ? null : r.stand;
+      return s === stand;
+    });
+    same.sort(function (a, b) { return (b.id || 0) - (a.id || 0); });
+    var latest = limit ? same.slice(0, limit) : same;
+    latest.sort(function (a, b) {
+      var sa = String(a.started || ""), sb = String(b.started || "");
+      if (sa !== sb) return sa < sb ? -1 : 1;
+      return (a.id || 0) - (b.id || 0);
+    });
+    return latest;
+  }
+
+  // Подпись столбца тренда: «#88 · 18.10» (дата старта), без даты — просто «#88».
+  function trendLabel(run) {
+    var id = run && run.id != null ? "#" + run.id : "";
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String((run && run.started) || ""));
+    if (!m) return id;
+    return (id ? id + " · " : "") + m[3] + "." + m[2];
+  }
+
   function filterByCause(tests, cause) {
     if (!cause || cause === "all") return (tests || []).slice();
     return (tests || []).filter(function (t) { return t.cause === cause; });
@@ -131,6 +169,9 @@
     firstTestToSelect: firstTestToSelect,
     passRate: passRate,
     fmtRunDuration: fmtRunDuration,
+    donutSegments: donutSegments,
+    trendRuns: trendRuns,
+    trendLabel: trendLabel,
     filterByCause: filterByCause,
     causeChips: causeChips,
   };

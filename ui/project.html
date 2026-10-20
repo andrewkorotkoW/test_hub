@@ -287,10 +287,24 @@
           </div>
         </div>
 
-        <details id="report-chart-spoiler" class="report-chart-spoiler" hidden>
-          <summary>График отчёта <span class="muted">(PNG — тот же, что в Telegram-сводке и на share-странице)</span></summary>
-          <img id="report-chart" class="report-chart" alt="График отчёта прогона">
-        </details>
+        <div id="report-charts" class="report-charts" hidden>
+          <div class="chart-box">
+            <h3>Результаты</h3>
+            <div class="chart-donut-wrap">
+              <canvas id="report-donut-chart"></canvas>
+              <div class="chart-donut-center" id="report-donut-center"></div>
+            </div>
+            <div class="chart-legend" id="report-donut-legend"></div>
+          </div>
+          <div class="chart-box">
+            <h3>Тренд <span class="h3-hint">passed / failed на этом стенде, последние 10 прогонов</span></h3>
+            <div class="chart-canvas-wrap"><canvas id="report-trend-chart"></canvas></div>
+          </div>
+          <div class="chart-box chart-box-wide">
+            <h3>Топ-10 самых долгих тестов</h3>
+            <div id="report-longest-tests"></div>
+          </div>
+        </div>
         <div id="report-section" hidden>
           <h3>Итог прогона <span class="h3-hint">упавшие и broken — первыми</span></h3>
           <div class="report-filters">

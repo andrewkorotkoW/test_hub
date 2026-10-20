@@ -112,6 +112,50 @@ test("fmtRunDuration: часы с минутами, минуты с секунд
   assert.strictEqual(Logic.fmtRunDuration(-5), "—");
 });
 
+// ------------------------------------------------------------ donutSegments / trendRuns / trendLabel
+
+test("donutSegments: только ненулевые статусы, порядок passed/failed/broken/skipped, colorVar темы", function () {
+  var segs = Logic.donutSegments({ passed: 4, failed: 2, broken: 1, skipped: 0 });
+  assert.deepStrictEqual(segs, [
+    { status: "passed", count: 4, colorVar: "--passed" },
+    { status: "failed", count: 2, colorVar: "--failed" },
+    { status: "broken", count: 1, colorVar: "--broken" },
+  ]);
+  assert.deepStrictEqual(Logic.donutSegments({}), []);
+  assert.deepStrictEqual(Logic.donutSegments(null), []);
+});
+
+test("trendRuns: тот же стенд (null == null), последние limit по id, хронологически", function () {
+  var runs = [
+    { id: 96, stand: null, started: "2026-10-19T22:01:00", counts: { passed: 4, failed: 2 } },
+    { id: 95, stand: "develop", started: "2026-10-19T21:51:03", counts: { passed: 5, failed: 0 } },
+    { id: 94, stand: null, started: "2026-10-19T21:46:05", counts: { passed: 5, failed: 0 } },
+    { id: 90, stand: null, started: "2026-10-19T20:39:20", counts: { passed: 1, failed: 0 } },
+    { id: 70, stand: null, started: "2026-10-14T12:53:09", counts: { passed: 0, failed: 1 } },
+  ];
+  var ids = Logic.trendRuns(runs, { id: 96, stand: null }, 3).map(function (r) { return r.id; });
+  assert.deepStrictEqual(ids, [90, 94, 96]);
+  assert.deepStrictEqual(Logic.trendRuns(runs, { id: 95, stand: "develop" }, 10).map(function (r) { return r.id; }), [95]);
+  assert.deepStrictEqual(Logic.trendRuns(runs, { id: 1, stand: "stage" }, 10), []);
+  assert.deepStrictEqual(Logic.trendRuns([], { id: 1, stand: null }, 10), []);
+});
+
+test("trendRuns: без limit — все прогоны стенда; одинаковый started — по id", function () {
+  var runs = [
+    { id: 2, stand: "s", started: "2026-10-19T10:00:00" },
+    { id: 1, stand: "s", started: "2026-10-19T10:00:00" },
+    { id: 3, stand: "s", started: null },
+  ];
+  assert.deepStrictEqual(Logic.trendRuns(runs, { stand: "s" }, 0).map(function (r) { return r.id; }), [3, 1, 2]);
+});
+
+test("trendLabel: «#id · дд.мм», без даты — только id", function () {
+  assert.strictEqual(Logic.trendLabel({ id: 88, started: "2026-10-18T16:11:09" }), "#88 · 18.10");
+  assert.strictEqual(Logic.trendLabel({ id: 88, started: null }), "#88");
+  assert.strictEqual(Logic.trendLabel({ started: "2026-10-18T16:11:09" }), "18.10");
+  assert.strictEqual(Logic.trendLabel(null), "");
+});
+
 // ------------------------------------------------------------ filterByCause / causeChips
 
 test("filterByCause: all/пусто — всё; иначе только тесты с этой причиной", function () {

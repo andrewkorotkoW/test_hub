@@ -482,10 +482,64 @@
   // Фильтр «Причина» в «Итоге прогона» (all/throttling/session/stand/code) —
   // сбрасывается на all при открытии другого прогона (openRun).
   let activeReportCause = "all";
-  // PNG-график грузится лениво — только когда спойлер открыли: его рисует
-  // matplotlib на сервере (/api/runs/{id}/report.png), а в карточке он больше не
-  // виден по умолчанию (сводка над сплитом говорит то же самое текстом).
-  let reportChartRunId = null;
+  // Графики отчёта (кольцо статусов, тренд passed/failed по стенду, топ-10 долгих)
+  // рисуются на клиенте из payload отчёта и lastRunsList — в цветах текущей темы
+  // (Chart.js + cssVar, как на дашборде). Серверный PNG (/api/runs/{id}/report.png)
+  // всегда тёмный и остаётся только для Telegram-сводки и share-страницы.
+  let reportDonutChart = null;
+  let reportTrendChart = null;
+
+  function destroyReportCharts() {
+    if (reportDonutChart) { reportDonutChart.destroy(); reportDonutChart = null; }
+    if (reportTrendChart) { reportTrendChart.destroy(); reportTrendChart = null; }
+  }
+
+  function renderReportCharts(payload) {
+    destroyReportCharts();
+    const counts = payload.counts || {};
+    const segments = RunReportLogic.donutSegments(counts);
+    const rate = RunReportLogic.passRate(counts);
+    reportDonutCenter.innerHTML = segments.length
+      ? `<span class="value">${rate == null ? "—" : rate + "%"}</span><span class="label">passed</span>`
+      : `<span class="label">нет данных</span>`;
+    reportDonutLegend.innerHTML = segments.map((s) =>
+      `<span class="chart-legend-item"><span class="chart-legend-dot" style="background:var(${s.colorVar})"></span>${escapeHtml(s.status)} ${s.count}</span>`
+    ).join("");
+    if (segments.length && window.Chart) {
+      applyChartFontDefaults();
+      reportDonutChart = new Chart(reportDonutCanvas, {
+        type: "doughnut",
+        data: {
+          labels: segments.map((s) => s.status),
+          datasets: [{ data: segments.map((s) => s.count), backgroundColor: segments.map((s) => cssVar(s.colorVar)), borderWidth: 0 }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false, cutout: "72%",
+          animation: { duration: 500, easing: "easeOutQuart" },
+          plugins: { legend: { display: false }, tooltip: tooltipStyle() },
+        },
+      });
+    }
+    const trend = RunReportLogic.trendRuns(lastRunsList || [], payload, 10);
+    if (trend.length && window.Chart) {
+      reportTrendChart = buildBarChart(reportTrendCanvas, {
+        labels: trend.map(RunReportLogic.trendLabel),
+        datasets: [
+          { label: "passed", data: trend.map((r) => Number((r.counts || {}).passed || 0)), backgroundColor: cssVar("--passed"), borderRadius: 4, maxBarThickness: 22 },
+          { label: "failed", data: trend.map((r) => Number((r.counts || {}).failed || 0)), backgroundColor: cssVar("--failed"), borderRadius: 4, maxBarThickness: 22 },
+        ],
+      });
+    }
+    const bars = DashboardChartsLogic.longestTestsBarsHtml(payload.tests || [], { top: 10 });
+    reportLongestTests.innerHTML = bars || `<p class="muted">Нет данных о длительности тестов.</p>`;
+    reportCharts.hidden = false;
+  }
+
+  // Переключение темы (common.js applyTheme ставит data-theme на <html>): Chart.js
+  // читает цвета один раз при создании — перерисовываем графики открытого отчёта.
+  new MutationObserver(() => {
+    if (currentReportPayload && !reportCharts.hidden) renderReportCharts(currentReportPayload);
+  }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
   function renderRunStats(payload) {
     const counts = payload.counts || {};
@@ -535,18 +589,10 @@
     currentTests = payload.tests || [];
     renderRunStats(payload);
     renderCauseFilter(payload);
-    reportChartRunId = runId;
-    if (reportChartSpoiler.open) reportChart.src = `/api/runs/${runId}/report.png`;
-    reportChartSpoiler.hidden = false;
+    renderReportCharts(payload);
     reportSection.hidden = false;
     renderReportRows();
   }
-
-  reportChartSpoiler.addEventListener("toggle", () => {
-    if (!reportChartSpoiler.open || !reportChartRunId) return;
-    const src = `/api/runs/${reportChartRunId}/report.png`;
-    if (reportChart.getAttribute("src") !== src) reportChart.src = src;
-  });
 
   function reportRowHtml(t, i) {
     const status = RunWindowSplitLogic.normalizeTestStatus(t.status);
@@ -722,10 +768,8 @@
     logBox.textContent = "";
     reportSection.hidden = true;
     runStats.hidden = true;
-    reportChartSpoiler.hidden = true;
-    reportChartSpoiler.open = false;
-    reportChart.removeAttribute("src");
-    reportChartRunId = null;
+    reportCharts.hidden = true;
+    destroyReportCharts();
     activeReportCause = "all";
     currentRunLive = false;
     currentRunMobile = false;
