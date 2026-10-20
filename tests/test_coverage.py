@@ -539,3 +539,71 @@ def test_nodeid_status_map_matches_by_full_name_and_skips_other_stands(db_path, 
         assert no_statuses == {}
     finally:
         conn.close()
+
+
+# ------------------------------------------------------------------ nodeid_last_result_map («Тесты по областям»)
+
+def _insert_run(conn, stand, status="passed", finished=None):
+    cur = conn.execute(
+        "INSERT INTO runs (project, stand, target, status, counts, finished) VALUES ('p', ?, 'all', ?, '{}', ?)",
+        (stand, status, finished),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def test_nodeid_last_result_map_takes_newest_run_per_test_and_skips_runs_without_it(db_path, isolated_allure_dir):
+    """Отменённый/выборочный последний прогон не обнуляет остальные тесты: каждый тест
+    берёт статус из самого свежего прогона, где он есть, вместе с run_id и датой."""
+    conn = get_connection()
+    try:
+        conn.execute("INSERT INTO projects (name, path, venv, stands) VALUES ('p', '/x', '.venv', '[]')")
+        conn.execute("INSERT INTO stands (project, name, url) VALUES ('p', 'develop', '')")
+        old_run = _insert_run(conn, "develop", "failed", "2026-10-10T10:00:00")
+        _write_allure_result(settings.ALLURE_RESULTS_DIR / str(old_run), "tests.test_foo#test_a", "failed")
+        _write_allure_result(settings.ALLURE_RESULTS_DIR / str(old_run), "tests.test_foo#test_b", "passed")
+        _write_allure_result(settings.ALLURE_RESULTS_DIR / str(old_run), "tests.test_foo#test_xf", "skipped", message="xfail: bug")
+        running = _insert_run(conn, "develop", "running")  # незавершённый — не учитывается
+        _write_allure_result(settings.ALLURE_RESULTS_DIR / str(running), "tests.test_foo#test_a", "passed")
+        new_run = _insert_run(conn, "develop", "cancelled", "2026-10-12T12:00:00")
+        _write_allure_result(settings.ALLURE_RESULTS_DIR / str(new_run), "tests.test_foo#test_a", "passed")
+
+        nodeids = [
+            "tests/test_foo.py::test_a",
+            "tests/test_foo.py::test_b",
+            "tests/test_foo.py::test_xf",
+            "tests/test_foo.py::test_param[x]",
+            "tests/test_foo.py::test_param[y]",
+            "tests/test_foo.py::test_never",
+        ]
+        _write_allure_result(settings.ALLURE_RESULTS_DIR / str(old_run), "tests.test_foo#test_param", "passed")
+        result = coverage.nodeid_last_result_map(conn, "p", "develop", nodeids)
+        assert result == {
+            "tests/test_foo.py::test_a": {"status": "passed", "run_id": new_run, "finished": "2026-10-12T12:00:00"},
+            "tests/test_foo.py::test_b": {"status": "passed", "run_id": old_run, "finished": "2026-10-10T10:00:00"},
+            "tests/test_foo.py::test_xf": {"status": "xfail", "run_id": old_run, "finished": "2026-10-10T10:00:00"},
+            # параметризованные nodeid делят один allure fullName
+            "tests/test_foo.py::test_param[x]": {"status": "passed", "run_id": old_run, "finished": "2026-10-10T10:00:00"},
+            "tests/test_foo.py::test_param[y]": {"status": "passed", "run_id": old_run, "finished": "2026-10-10T10:00:00"},
+        }
+        # лимит просматриваемых прогонов: только самый новый -> test_b/xfail/param не найдены
+        limited = coverage.nodeid_last_result_map(conn, "p", "develop", nodeids, max_runs=1)
+        assert set(limited) == {"tests/test_foo.py::test_a"}
+        assert coverage.nodeid_last_result_map(conn, "p", "stage", nodeids) == {}
+    finally:
+        conn.close()
+
+
+def test_run_statuses_cache_invalidates_when_results_dir_changes(isolated_allure_dir):
+    results_dir = settings.ALLURE_RESULTS_DIR / "1"
+    assert coverage._run_statuses_by_full_name(results_dir) == {}  # папки ещё нет — не падает
+    _write_allure_result(results_dir, "tests.test_foo#test_a", "passed")
+    assert coverage._run_statuses_by_full_name(results_dir) == {"tests.test_foo#test_a": "passed"}
+    import os
+    import time
+    _write_allure_result(results_dir, "tests.test_foo#test_b", "failed")
+    # новый файл меняет mtime папки; на FS с грубым mtime подталкиваем вручную
+    os.utime(results_dir, ns=(time.time_ns(), time.time_ns() + 1_000_000))
+    assert coverage._run_statuses_by_full_name(results_dir) == {
+        "tests.test_foo#test_a": "passed", "tests.test_foo#test_b": "failed",
+    }

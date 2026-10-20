@@ -1,12 +1,15 @@
 /*
- * Страница «Покрытие»: чистая логика для двух новых виджетов первым экраном —
- * treemap «Тесты по областям» и таблицы «Области». Без обращений к DOM, поэтому
- * юнит-тестируется через node (см. tests/js/test_coverage_areas_logic.js) —
- * coverage.js подключает этот файл и использует window.CoverageAreasLogic.
+ * Страница «Покрытие»: чистая логика блока «Тесты по областям» (вариант A,
+ * 20.10.2026 — полосы по областям вместо treemap: строка = область, по клику —
+ * «вафля» тестов). Без обращений к DOM, поэтому юнит-тестируется через node
+ * (см. tests/js/test_coverage_areas_logic.js) — coverage-areas-dom.js подключает
+ * этот файл и использует window.CoverageAreasLogic.
  *
- * Источник данных — тот же tree/statusMap, что у coverage-tree-logic.js (GET
- * .../coverage/tree): { file: { className_or_"": [testName, ...] } } и
- * statuses[stand][nodeid] = "passed"|"failed"|"broken"|"xfail"|"skipped".
+ * Источник данных — GET .../coverage/tree: tree = { file: { className_or_"":
+ * [testName, ...] } } и last_results[stand][nodeid] = {status, run_id, finished}
+ * — последний известный результат теста на стенде (не только из самого
+ * последнего прогона, см. app/core/coverage.py::nodeid_last_result_map). Для
+ * совместимости statusMap может быть и старой формы nodeid -> "passed".
  *
  * Раскладка файлов по проекту предполагается по конвенции автотестов:
  * tests/<api|ui|e2e>/[<область>/...]/<файл>.py — см. splitFilePath.
@@ -20,18 +23,10 @@
     ? require("./sections-tree-logic.js")
     : globalRoot.SectionsTreeLogic;
 
-  // Цвета ячеек treemap и сегментов статус-полосы таблицы областей — фиксированы
-  // постановкой задачи, держать в синхроне с --tm-* переменными в ui/style.css.
-  var STATUS_COLORS = {
-    passed: "#2eaa4a",
-    failed: "#e04848",
-    xfail: "#e0a020",
-    skipped: "#a0a4ad",
-    none: "#d5d7dc",
-  };
-
   var AREA_ROOT_LABEL = "(корень)";
   var KIND_ORDER = ["api", "ui", "e2e"];
+  var KIND_LABELS_RU = { api: "API", ui: "UI", e2e: "E2E", other: "Прочее" };
+  var SORT_MODES = ["failed", "size", "name"];
 
   // Русские подписи известных разделов (папка второго уровня tests/api|ui/<область>) —
   // переиспользуются страницей «Покрытие: Светофор» (coverage-traffic-logic.js) и
@@ -52,9 +47,12 @@
     return key;
   }
 
+  function kindLabelRu(kind) {
+    return KIND_LABELS_RU[kind] || kind;
+  }
+
   // tests/<kind>/[<область>/...]/<файл>.py — kind и область берутся по фиксированным
-  // позициям (parts[1], parts[2]); каталоги глубже области сворачиваются в неё же
-  // (в treemap нет отдельного уровня под вложенными подпапками, см. задачу).
+  // позициям (parts[1], parts[2]); каталоги глубже области сворачиваются в неё же.
   function splitFilePath(file) {
     var parts = String(file).split("/");
     if (parts.length < 3) {
@@ -81,16 +79,33 @@
     return target;
   }
 
+  function laterOf(a, b) {
+    if (!a) return b || null;
+    if (!b) return a;
+    return a >= b ? a : b;
+  }
+
   function finalizeCounts(node) {
     if (node.kind === "test") return node;
     var total = emptyCounts();
     var value = 0;
+    var lastFinished = null;
+    var lastRunId = null;
     for (var i = 0; i < node.children.length; i++) {
-      value += node.children[i].value;
-      addCounts(total, node.children[i].counts);
+      var child = node.children[i];
+      value += child.value;
+      addCounts(total, child.counts);
+      if (child.lastFinished && laterOf(lastFinished, child.lastFinished) === child.lastFinished) {
+        lastFinished = child.lastFinished;
+        lastRunId = child.lastRunId;
+      } else if (!lastFinished && child.lastRunId !== null && child.lastRunId !== undefined && lastRunId === null) {
+        lastRunId = child.lastRunId;
+      }
     }
     node.value = value;
     node.counts = total;
+    node.lastFinished = lastFinished;
+    node.lastRunId = lastRunId;
     return node;
   }
 
@@ -104,12 +119,25 @@
     return a < b ? -1 : a > b ? 1 : 0;
   }
 
-  // Строит иерархию tests -> api/ui/e2e -> область (папка) -> файл -> тест для
-  // treemap. Каждый контейнерный узел получает value (число тестов-потомков) и
-  // counts (агрегат passed/failed/xfail/skipped/none); у area-узлов дополнительно
-  // matchAreaKey — имя для сопоставления с областью маршрутов из /coverage (null
-  // для "(корень)", т.к. сопоставлять не с чем).
-  function buildAreaTreemap(tree, statusMap, rootLabel) {
+  // statusMap[nodeid] — либо строка статуса (старый формат statuses), либо объект
+  // {status, run_id, finished} (last_results).
+  function resultOf(statuses, nodeid) {
+    var raw = statuses[nodeid];
+    if (raw === undefined || raw === null) return { status: "none", runId: null, finished: null };
+    if (typeof raw === "string") return { status: statusKey(raw), runId: null, finished: null };
+    return {
+      status: statusKey(raw.status),
+      runId: raw.run_id === undefined ? null : raw.run_id,
+      finished: raw.finished || null,
+    };
+  }
+
+  // Строит иерархию tests -> api/ui/e2e -> область (папка) -> файл -> тест. Каждый
+  // контейнерный узел получает value (число тестов-потомков), counts (агрегат
+  // passed/failed/xfail/skipped/none) и lastFinished/lastRunId (самый свежий
+  // результат среди потомков); у area-узлов дополнительно matchAreaKey — имя для
+  // сопоставления с областью маршрутов из /coverage (null для "(корень)").
+  function buildAreaTree(tree, statusMap, rootLabel) {
     var statuses = statusMap || {};
     var kindsMap = {};
     var kindKeysSeen = [];
@@ -138,11 +166,14 @@
         for (var ti = 0; ti < tests.length; ti++) {
           var test = tests[ti];
           var nodeid = cls ? file + "::" + cls + "::" + test : file + "::" + test;
-          var status = statusKey(statuses[nodeid]);
+          var result = resultOf(statuses, nodeid);
           var counts = emptyCounts();
-          counts[status] = 1;
+          counts[result.status] = 1;
           fileNode.children.push({
-            id: nodeid, kind: "test", label: test, nodeid: nodeid, status: status, value: 1, counts: counts, children: [],
+            id: nodeid, kind: "test", label: test, nodeid: nodeid, status: result.status,
+            runId: result.runId, finished: result.finished,
+            lastFinished: result.finished, lastRunId: result.runId,
+            value: 1, counts: counts, children: [],
           });
         }
       }
@@ -179,33 +210,11 @@
     return root;
   }
 
-  // Строки таблицы «Области»: одна на каждую область (папку) внутри каждого
-  // api/ui/e2e — та же группировка, что у buildAreaTreemap, area-уровень.
-  function aggregateAreaRows(tree, statusMap) {
-    var root = buildAreaTreemap(tree, statusMap, "tests");
-    var rows = [];
-    for (var ki = 0; ki < root.children.length; ki++) {
-      var kindNode = root.children[ki];
-      for (var ai = 0; ai < kindNode.children.length; ai++) {
-        var areaNode = kindNode.children[ai];
-        rows.push({
-          key: kindNode.label + "/" + areaNode.label,
-          kind: kindNode.label,
-          area: areaNode.label,
-          matchArea: areaNode.matchAreaKey,
-          total: areaNode.value,
-          counts: areaNode.counts,
-          percent: percentPassed(areaNode.counts),
-        });
-      }
-    }
-    return rows;
-  }
-
-  // % прошедших без skipped в знаменателе: passed / (passed+failed+xfail+none).
-  // null, если знаменатель 0 (в области только skipped-тесты или тестов нет).
-  function percentPassed(counts) {
-    var denom = counts.passed + counts.failed + counts.xfail + counts.none;
+  // % прошедших среди тестов с результатом: passed / (passed+failed+xfail). skipped
+  // и «не запускался» в знаменатель не входят — область, которую не гоняли, не
+  // должна выглядеть как «0 %». null, если результатов нет.
+  function percentOfRan(counts) {
+    var denom = counts.passed + counts.failed + counts.xfail;
     if (denom <= 0) return null;
     return Math.round((counts.passed / denom) * 1000) / 10;
   }
@@ -215,6 +224,113 @@
     if (percent >= 80) return "good";
     if (percent >= 50) return "warn";
     return "bad";
+  }
+
+  // Строки блока «Тесты по областям»: одна на каждую область внутри каждого
+  // api/ui/e2e, с файлами и тестами для раскрытия «вафлей».
+  function buildAreaRows(tree, statusMap) {
+    var root = buildAreaTree(tree, statusMap, "tests");
+    var rows = [];
+    for (var ki = 0; ki < root.children.length; ki++) {
+      var kindNode = root.children[ki];
+      for (var ai = 0; ai < kindNode.children.length; ai++) {
+        var areaNode = kindNode.children[ai];
+        var counts = areaNode.counts;
+        rows.push({
+          key: kindNode.label + "/" + areaNode.label,
+          kind: kindNode.label,
+          area: areaNode.label,
+          areaLabelRu: AREA_LABELS_RU[areaNode.label] || null,
+          matchArea: areaNode.matchAreaKey,
+          total: areaNode.value,
+          counts: counts,
+          ran: counts.passed + counts.failed + counts.xfail + counts.skipped,
+          percent: percentOfRan(counts),
+          lastFinished: areaNode.lastFinished,
+          lastRunId: areaNode.lastRunId,
+          files: areaNode.children.map(function (f) {
+            return {
+              file: f.id,
+              fileName: f.label,
+              counts: f.counts,
+              tests: f.children.map(function (t) {
+                return { nodeid: t.nodeid, label: t.label, status: t.status, runId: t.runId, finished: t.finished };
+              }),
+            };
+          }),
+        });
+      }
+    }
+    return rows;
+  }
+
+  function cmpStr(a, b) {
+    return a < b ? -1 : a > b ? 1 : 0;
+  }
+
+  // Порядок строк внутри одной группы (kind). "failed": сначала области с
+  // падениями (больше упавших — выше, при равенстве — ниже %), затем остальные с
+  // результатами по %, области без результатов — последними, по размеру.
+  // "size": по числу тестов; "name": по имени. Не мутирует rows.
+  function sortAreaRows(rows, mode) {
+    var sorted = rows.slice();
+    if (mode === "name") {
+      sorted.sort(function (a, b) { return sortAreaLabel(a.area, b.area) || cmpStr(a.key, b.key); });
+      return sorted;
+    }
+    if (mode === "size") {
+      sorted.sort(function (a, b) { return (b.total - a.total) || cmpStr(a.key, b.key); });
+      return sorted;
+    }
+    sorted.sort(function (a, b) {
+      var aRan = a.percent !== null ? 1 : 0;
+      var bRan = b.percent !== null ? 1 : 0;
+      if (aRan !== bRan) return bRan - aRan;
+      if (!aRan) return (b.total - a.total) || cmpStr(a.key, b.key);
+      var aFail = a.counts.failed > 0 ? 1 : 0;
+      var bFail = b.counts.failed > 0 ? 1 : 0;
+      if (aFail !== bFail) return bFail - aFail;
+      if (a.counts.failed !== b.counts.failed) return b.counts.failed - a.counts.failed;
+      if (a.percent !== b.percent) return a.percent - b.percent;
+      return (b.total - a.total) || cmpStr(a.key, b.key);
+    });
+    return sorted;
+  }
+
+  // Группы api/ui/e2e для заголовков блока: [{kind, label, total, ran, rows}] в
+  // порядке KIND_ORDER, строки внутри — sortAreaRows(mode); hideEmpty убирает
+  // области без результатов (группа без строк остаётся с rows: [] и счётчиками,
+  // чтобы заголовок мог сказать «результатов нет»).
+  function groupRowsByKind(rows, mode, hideEmpty) {
+    var byKind = {};
+    var kinds = [];
+    for (var i = 0; i < rows.length; i++) {
+      var row = rows[i];
+      if (!byKind[row.kind]) {
+        byKind[row.kind] = { kind: row.kind, label: kindLabelRu(row.kind), total: 0, ran: 0, rows: [], hidden: 0 };
+        kinds.push(row.kind);
+      }
+      var group = byKind[row.kind];
+      group.total += row.total;
+      group.ran += row.ran;
+      if (hideEmpty && row.percent === null) group.hidden += 1;
+      else group.rows.push(row);
+    }
+    kinds.sort(function (a, b) { return kindSortIndex(a) - kindSortIndex(b) || cmpStr(a, b); });
+    return kinds.map(function (k) {
+      var g = byKind[k];
+      g.rows = sortAreaRows(g.rows, mode);
+      return g;
+    });
+  }
+
+  // "2026-10-17T09:58:12" -> "17.10 09:58" (год опускаем — в блоке важна свежесть,
+  // а не точная дата; полная дата — в title). Непохожие строки возвращаются как есть.
+  function fmtShortDate(iso) {
+    if (!iso) return "—";
+    var m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/.exec(String(iso));
+    if (!m) return String(iso);
+    return m[3] + "." + m[2] + " " + m[4] + ":" + m[5];
   }
 
   // Área маршрутов из /coverage (summary.map): [{area, routes: [{tests_count}]}]
@@ -240,109 +356,50 @@
     return (routeStatsByArea || {})[areaRow.matchArea.toLowerCase()] || null;
   }
 
-  // ---- squarify: раскладка прямоугольников площадью, пропорциональной value,
-  // внутри (x, y, width, height) — квадратные ячейки (минимизация соотношения
-  // сторон), не slice-and-dice. Возвращает массив той же длины и порядка, что
-  // items, каждый элемент — {x, y, width, height} либо null (value <= 0 или нет
-  // места). items не мутируется.
-  function worstRatio(areas, length) {
-    var sum = 0, max = areas[0], min = areas[0];
-    for (var i = 0; i < areas.length; i++) {
-      sum += areas[i];
-      if (areas[i] > max) max = areas[i];
-      if (areas[i] < min) min = areas[i];
+  // Области маршрутов из /coverage (summary.map), у которых нет своей папки
+  // тестов среди rows (buildAreaRows) — то, что раньше показывал отдельный виджет
+  // «Маршруты по областям» и чего в строках областей нет: [{area, covered, total}]
+  // по убыванию total, затем по имени.
+  function unmatchedRouteAreas(mapAreas, rows) {
+    var matched = {};
+    for (var i = 0; i < (rows || []).length; i++) {
+      if (rows[i].matchArea) matched[String(rows[i].matchArea).toLowerCase()] = true;
     }
-    var lenSq = length * length;
-    var sumSq = sum * sum;
-    return Math.max((lenSq * max) / sumSq, sumSq / (lenSq * min));
-  }
-
-  function placeRow(row, rowAreas, rect, rects) {
-    var rowTotal = 0;
-    for (var i = 0; i < rowAreas.length; i++) rowTotal += rowAreas[i];
-    if (rowTotal <= 0) return;
-    var vertical = rect.w >= rect.h; // столбец слева, элементы сверху вниз
-    if (vertical) {
-      var stripW = rowTotal / rect.h;
-      var cy = rect.y;
-      for (var k = 0; k < row.length; k++) {
-        var h = rowAreas[k] / stripW;
-        rects[row[k].index] = { x: rect.x, y: cy, width: stripW, height: h };
-        cy += h;
+    var result = [];
+    var areas = mapAreas || [];
+    for (var j = 0; j < areas.length; j++) {
+      var a = areas[j];
+      if (matched[String(a.area).toLowerCase()]) continue;
+      var routes = a.routes || [];
+      var covered = 0;
+      for (var k = 0; k < routes.length; k++) {
+        if (routes[k].tests_count > 0) covered += 1;
       }
-      rect.x += stripW;
-      rect.w -= stripW;
-    } else {
-      var stripH = rowTotal / rect.w;
-      var cx = rect.x;
-      for (var k2 = 0; k2 < row.length; k2++) {
-        var w = rowAreas[k2] / stripH;
-        rects[row[k2].index] = { x: cx, y: rect.y, width: w, height: stripH };
-        cx += w;
-      }
-      rect.y += stripH;
-      rect.h -= stripH;
+      result.push({ area: String(a.area), covered: covered, total: routes.length });
     }
-  }
-
-  function layoutRow(scaled, startIndex, rect, rects) {
-    var length = Math.min(rect.w, rect.h);
-    var row = [];
-    var rowAreas = [];
-    var i = startIndex;
-    while (i < scaled.length) {
-      var candidateAreas = rowAreas.concat([scaled[i].area]);
-      if (row.length === 0 || worstRatio(candidateAreas, length) <= worstRatio(rowAreas, length)) {
-        row.push(scaled[i]);
-        rowAreas.push(scaled[i].area);
-        i += 1;
-      } else {
-        break;
-      }
-    }
-    placeRow(row, rowAreas, rect, rects);
-    return i;
-  }
-
-  function squarify(items, x, y, width, height) {
-    var rects = new Array(items.length).fill(null);
-    if (width <= 0 || height <= 0) return rects;
-
-    var positive = [];
-    for (var idx = 0; idx < items.length; idx++) {
-      var v = items[idx] && items[idx].value > 0 ? items[idx].value : 0;
-      if (v > 0) positive.push({ index: idx, value: v });
-    }
-    if (!positive.length) return rects;
-    positive.sort(function (a, b) { return b.value - a.value; });
-
-    var totalValue = 0;
-    for (var pi = 0; pi < positive.length; pi++) totalValue += positive[pi].value;
-    var areaScale = (width * height) / totalValue;
-    var scaled = positive.map(function (e) { return { index: e.index, area: e.value * areaScale }; });
-
-    var rect = { x: x, y: y, w: width, h: height };
-    var i = 0;
-    while (i < scaled.length && rect.w > 0 && rect.h > 0) {
-      i = layoutRow(scaled, i, rect, rects);
-    }
-    return rects;
+    result.sort(function (x, y) { return (y.total - x.total) || cmpStr(x.area, y.area); });
+    return result;
   }
 
   var api = {
-    STATUS_COLORS: STATUS_COLORS,
     AREA_ROOT_LABEL: AREA_ROOT_LABEL,
     AREA_LABELS_RU: AREA_LABELS_RU,
+    KIND_LABELS_RU: KIND_LABELS_RU,
+    SORT_MODES: SORT_MODES,
     statusKey: statusKey,
     statusLabelRu: statusLabelRu,
+    kindLabelRu: kindLabelRu,
     splitFilePath: splitFilePath,
-    buildAreaTreemap: buildAreaTreemap,
-    aggregateAreaRows: aggregateAreaRows,
-    percentPassed: percentPassed,
+    buildAreaTree: buildAreaTree,
+    buildAreaRows: buildAreaRows,
+    sortAreaRows: sortAreaRows,
+    groupRowsByKind: groupRowsByKind,
+    percentOfRan: percentOfRan,
     percentClass: percentClass,
+    fmtShortDate: fmtShortDate,
     buildRouteStatsByArea: buildRouteStatsByArea,
     matchRouteStats: matchRouteStats,
-    squarify: squarify,
+    unmatchedRouteAreas: unmatchedRouteAreas,
   };
 
   if (typeof module !== "undefined" && module.exports) {

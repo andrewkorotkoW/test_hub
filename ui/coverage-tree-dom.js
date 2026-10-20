@@ -592,8 +592,7 @@
       treeApiData = await api(`/api/projects/${encodeURIComponent(projectName)}/coverage/tree`);
       if (treeApiData.error) {
         chartTreeBody.innerHTML = `<p class="error-box">${escapeHtml(treeApiData.error)}</p>`;
-        renderTreemap();
-        renderAreasTable();
+        renderAreasBlock();
         return;
       }
       treeRoot = TreeLogic.buildTreeRoot(treeApiData.tree || {}, projectName);
@@ -605,8 +604,7 @@
       treeNodeEls.clear();
       treeEdgeEls.clear();
       if (!treeInnerBody.hidden) syncTreeView();
-      renderTreemap();
-      renderAreasTable();
+      renderAreasBlock();
       renderTraffic();
     } catch (err) {
       chartTreeBody.innerHTML = `<p class="error-box">Не удалось построить дерево: ${escapeHtml(err.message)}</p>`;

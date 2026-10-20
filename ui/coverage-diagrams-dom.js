@@ -1,8 +1,10 @@
 /*
- * «Покрытие»: диаграммы (a) кольца покрытия по стендам, (b) маршруты по
- * областям, (c) статусы покрывающих тестов на стенде, (d) граф связей
- * тест <-> маршрут/страница. Использует DOM-ссылки и состояние
- * (summary/areaFilter/graphScope) из ui/coverage-setup.js.
+ * «Покрытие»: диаграммы (a) кольца покрытия по стендам, (c) статусы
+ * покрывающих тестов на стенде, (d) граф связей тест <-> маршрут/страница.
+ * Бывший виджет (b) «Маршруты по областям» влит в блок «Тесты по областям»
+ * (coverage-areas-dom.js: колонка «Маршруты» + строка областей маршрутов без
+ * тестов). Использует DOM-ссылки и состояние (summary/areaFilter/graphScope)
+ * из ui/coverage-setup.js.
  */
   // ---------------- диаграммы: (a) кольца покрытия по стендам ----------------
   function renderRings() {
@@ -15,43 +17,6 @@
         `).join("")
       : `<p class="muted">Стенды не настроены.</p>`;
   }
-
-  // ---------------- диаграммы: (b) маршруты по областям ----------------
-  function renderAreaBars() {
-    const areasData = summary.map.map((a) => ({
-      area: a.area,
-      total: a.routes.length,
-      covered: a.routes.filter((r) => r.tests_count > 0).length,
-    })).sort((a, b) => b.total - a.total);
-
-    const maxTotal = Math.max(1, ...areasData.map((a) => a.total));
-    const barWidth = 200;
-
-    chartAreasBody.innerHTML = areasData.length
-      ? areasData.map((a) => {
-          const coveredW = Math.round((a.covered / maxTotal) * barWidth);
-          const totalW = Math.round((a.total / maxTotal) * barWidth);
-          const active = areaFilter === a.area;
-          return `
-            <button type="button" class="area-bar-row ${active ? "area-bar-row-active" : ""}" data-area="${escapeHtml(a.area)}">
-              <span class="area-bar-label" title="${escapeHtml(a.area)}">${escapeHtml(a.area)}</span>
-              <svg width="${barWidth}" height="14" viewBox="0 0 ${barWidth} 14">
-                <title>${escapeHtml(a.area)}: покрыто ${a.covered} из ${a.total}</title>
-                <rect x="0" y="0" width="${totalW}" height="14" rx="3" fill="var(--border)" />
-                <rect x="0" y="0" width="${coveredW}" height="14" rx="3" fill="var(--passed)" />
-              </svg>
-              <span class="area-bar-count">${a.covered}/${a.total}</span>
-            </button>
-          `;
-        }).join("")
-      : `<p class="muted">Областей нет.</p>`;
-  }
-
-  chartAreasBody.addEventListener("click", (ev) => {
-    const row = ev.target.closest(".area-bar-row");
-    if (!row) return;
-    selectAreaFilter(row.dataset.area);
-  });
 
   // ---------------- диаграммы: (c) статусы покрывающих тестов на стенде ----------------
   function renderStatusChart() {

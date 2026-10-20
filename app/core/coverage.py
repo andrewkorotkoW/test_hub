@@ -666,6 +666,69 @@ def nodeid_status_map(
     return run_id, statuses
 
 
+# Сколько последних завершённых прогонов стенда просматривать в поисках последнего
+# результата теста (блок «Тесты по областям»): дальше — всё равно устаревшие данные.
+LAST_RESULT_MAX_RUNS = 30
+
+# Разбор allure-results прогона кэшируется по (папка, mtime папки): у завершённого
+# прогона результаты не меняются, а блок областей заново дёргает до 30 прогонов на
+# стенд при каждом открытии страницы — без кэша это десятки тысяч json-файлов.
+_RUN_STATUS_CACHE: dict[tuple[str, int], dict[str, str]] = {}
+_RUN_STATUS_CACHE_LIMIT = 256
+
+
+def _run_statuses_by_full_name(results_dir: Path) -> dict[str, str]:
+    try:
+        mtime_ns = results_dir.stat().st_mtime_ns
+    except OSError:
+        return {}
+    key = (str(results_dir), mtime_ns)
+    cached = _RUN_STATUS_CACHE.get(key)
+    if cached is not None:
+        return cached
+    statuses = {entry["name"]: _classify_allure_status(entry) for entry in allure_report.parse_results(results_dir)}
+    if len(_RUN_STATUS_CACHE) >= _RUN_STATUS_CACHE_LIMIT:
+        _RUN_STATUS_CACHE.clear()
+    _RUN_STATUS_CACHE[key] = statuses
+    return statuses
+
+
+def nodeid_last_result_map(
+    conn: sqlite3.Connection, project: str, stand: str, nodeids: list[str], max_runs: int = LAST_RESULT_MAX_RUNS
+) -> dict[str, dict]:
+    """nodeid -> {"status", "run_id", "finished"} — последний известный результат каждого
+    из `nodeids` на стенде: просматриваются последние `max_runs` завершённых (passed/
+    failed/cancelled) прогонов от новых к старым, тест получает статус из первого
+    прогона, где у него есть запись в allure-results. В отличие от nodeid_status_map
+    (только самый последний прогон стенда) отменённый или выборочный прогон не
+    «обнуляет» остальные области — источник блока «Тесты по областям» на «Покрытии».
+    Тесты, не найденные ни в одном из прогонов, в результат не попадают."""
+    runs = conn.execute(
+        "SELECT id, started, finished FROM runs WHERE project = ? AND stand = ? "
+        "AND status IN ('passed', 'failed', 'cancelled') ORDER BY id DESC LIMIT ?",
+        (project, stand, max_runs),
+    ).fetchall()
+    # параметризованные тесты (nodeid с [param]) делят один allure fullName
+    pending: dict[str, list[str]] = {}
+    for nodeid in nodeids:
+        pending.setdefault(_nodeid_to_full_name(nodeid), []).append(nodeid)
+    result: dict[str, dict] = {}
+    for run in runs:
+        if not pending:
+            break
+        by_full_name = _run_statuses_by_full_name(_allure_dir(run["id"]))
+        if not by_full_name:
+            continue
+        for full_name in [name for name in pending if name in by_full_name]:
+            for nodeid in pending.pop(full_name):
+                result[nodeid] = {
+                    "status": by_full_name[full_name],
+                    "run_id": run["id"],
+                    "finished": run["finished"] or run["started"],
+                }
+    return result
+
+
 def _coverage_stand_status(
     item_tests: list[TestInfo], stand: str, run: sqlite3.Row | None, by_full_name: dict[str, str]
 ) -> dict:

@@ -24,10 +24,10 @@
      чтобы статус-текст/узлы дерева и ячейки treemap визуально совпадали */
   --xfail: #e0a020;
   --flaky: #a855f7;
-  /* treemap «Тесты по областям» + полоса статусов в таблице «Области»: палитра
-     задана постановкой задачи отдельно от --passed/--failed/--xfail/--skipped
-     выше (те использует остальная страница), держать в синхроне с
-     STATUS_COLORS в ui/coverage-areas-logic.js */
+  /* блок «Тесты по областям» (полосы/вафля, .ab-*): палитра задана постановкой
+     задачи отдельно от --passed/--failed/--xfail/--skipped выше (те использует
+     остальная страница). --tm-none больше не используется блоком — «нет
+     результата» берёт --ab-none-fill/--ab-none-stroke из цветов темы ниже. */
   --tm-passed: #2eaa4a;
   --tm-failed: #e04848;
   --tm-xfail: #e0a020;
@@ -74,6 +74,10 @@
   --text: #e7e9f5;
   --text-muted: #9298b8;
   --shadow-card: 0 8px 24px rgba(0, 0, 0, .35);
+  /* «нет результата» в блоке «Тесты по областям» — приглушённая клетка/полоса в
+     цветах темы (единый светлый --tm-none на тёмной теме был самым ярким пятном) */
+  --ab-none-fill: #262c47;
+  --ab-none-stroke: #343b5c;
   /* подсветка логотипа проекта при наведении (projects.html) — на тёмном
      фоне размытое свечение смотрится как акцент, на белом (см. светлую
      тему ниже) та же сила/размытие выглядит грязным синим пятном. */
@@ -92,6 +96,8 @@
   --text: #1f2430;
   --text-muted: #6b7280;
   --shadow-card: 0 1px 3px rgba(15, 23, 42, .08);
+  --ab-none-fill: #e5e7eb;
+  --ab-none-stroke: #cfd3da;
   --stand: #0284c7;
   /* тот же синий, но меньше размытия и ниже непрозрачность — на белых
      карточках крупное размытое свечение превращается в нечёткое пятно. */
@@ -399,8 +405,7 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
 
 .muted { color: var(--text-muted); }
 /* rgba-тинты поверх var(--surface) вместо непрозрачных светлых цветов — те же
-   боксы иначе выглядели белыми плашками на тёмной теме (см. .area-bar-row-active
-   выше по тому же принципу) */
+   боксы иначе выглядели белыми плашками на тёмной теме */
 .error-box {
   background: rgba(220, 38, 38, .12);
   border: 1px solid rgba(220, 38, 38, .35);
@@ -1506,23 +1511,6 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 .chart-ring { text-align: center; }
 .chart-ring-label { margin-top: 6px; font-size: 12px; color: var(--text-muted); }
 .ring-text { font-size: 18px; font-weight: 600; fill: var(--text); }
-.area-bars { display: flex; flex-direction: column; gap: 6px; }
-.area-bar-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  padding: 4px 6px;
-  cursor: pointer;
-  font-size: 12px;
-  text-align: left;
-}
-.area-bar-row:hover { border-color: var(--border); color: var(--text); }
-.area-bar-row-active { border-color: var(--accent); background: rgba(37, 99, 235, 0.08); }
-.area-bar-label { flex: 0 0 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); }
-.area-bar-count { flex: 0 0 auto; color: var(--text-muted); }
 .chart-axis-label { font-size: 10px; fill: var(--text-muted); }
 .chart-value-label { font-size: 11px; fill: var(--text); font-weight: 600; }
 .chart-graph-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
@@ -1537,53 +1525,105 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 .graph-node-route.cov-3 circle, .graph-node-page.cov-3 circle { fill: var(--tm-passed); }
 .graph-node:hover circle { stroke: var(--accent); }
 
-/* ---------------- treemap «Тесты по областям» ---------------- */
-.chart-treemap-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
-.chart-treemap-head h3 { margin: 0; }
-.treemap-legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 11px; color: var(--text-muted); }
-.tm-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
-.tm-swatch.tm-passed { background: var(--tm-passed); }
-.tm-swatch.tm-failed { background: var(--tm-failed); }
-.tm-swatch.tm-xfail { background: var(--tm-xfail); }
-.tm-swatch.tm-skipped { background: var(--tm-skipped); }
-.tm-swatch.tm-none { background: var(--tm-none); }
-.chart-treemap-body {
-  width: 100%;
-  height: 560px;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
+/* ---------------- блок «Тесты по областям» (вариант A: полосы по областям, вафля по клику) ---------------- */
+.areas-block-head { display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; margin-bottom: 8px; }
+.areas-block-head h3 { margin: 0; }
+.areas-block-controls { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ab-chip {
+  font: inherit; font-size: 12px; line-height: 1.2; padding: 4px 10px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--border); background: transparent; color: var(--text); display: inline-flex; align-items: center; gap: 6px;
 }
-.chart-treemap-body svg { display: block; }
-.chart-treemap-hint { margin: 6px 0 0; font-size: 11px; }
-.tm-border { fill: none; stroke: var(--border); stroke-width: 1; }
-.tm-kind > .tm-border { stroke-width: 1.5; }
-.tm-label { font-size: 10px; fill: var(--text-muted); dominant-baseline: hanging; pointer-events: none; }
-.tm-kind > .tm-label { font-weight: 600; fill: var(--text); }
-/* у файла нет своей полосы (см. TM_FILE_PAD в coverage.js) — подпись лежит поверх
-   ячеек тестов, плашка под ней нужна, чтобы текст не терялся на цветном фоне */
-.tm-file-label-bg { fill: var(--surface); opacity: .82; pointer-events: none; }
-.tm-file > .tm-label { fill: var(--text); }
-.tm-label-clickable { pointer-events: all; cursor: pointer; fill: var(--accent); font-weight: 600; }
-.tm-label-clickable:hover { text-decoration: underline; }
-.tm-area-selected > .tm-border { stroke: var(--accent); stroke-width: 2; }
-.tm-cell rect { stroke: var(--surface); stroke-width: 1; cursor: pointer; }
-.tm-cell:hover rect { stroke: var(--accent); stroke-width: 2; }
+.ab-chip:hover { border-color: var(--accent); }
+.ab-chip.active { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.ab-chip-check input { margin: 0; accent-color: var(--accent); }
+.areas-legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 11px; color: var(--text-muted); }
+.ab-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+.ab-swatch.ab-passed { background: var(--tm-passed); }
+.ab-swatch.ab-failed { background: var(--tm-failed); }
+.ab-swatch.ab-xfail { background: var(--tm-xfail); }
+.ab-swatch.ab-skipped { background: var(--tm-skipped); }
+.ab-swatch.ab-none { background: var(--ab-none-fill); border: 1px solid var(--ab-none-stroke); }
+.areas-block-body { font-size: 13px; }
+.areas-block-hint { margin: 6px 0 0; font-size: 11px; }
 
-/* ---------------- таблица «Области» ---------------- */
-.area-statusbar { display: block; }
-.area-percent.good { color: var(--passed); font-weight: 600; }
-.area-percent.warn { color: var(--broken); font-weight: 600; }
-.area-percent.bad { color: var(--failed); font-weight: 600; }
-.area-row-label { font-family: var(--font-mono); }
-#areas-table tbody tr.clickable { cursor: pointer; }
-#areas-table tbody tr.clickable:hover { background: rgba(37, 99, 235, 0.06); }
-#areas-table tbody tr.area-row-selected { background: rgba(37, 99, 235, 0.1); }
-#areas-table thead th[data-sort] { cursor: pointer; user-select: none; white-space: nowrap; }
-#areas-table thead th[data-sort]:hover { color: var(--accent); }
-#areas-table thead th.sort-active::after { content: " \25B4"; }
-#areas-table thead th.sort-active.sort-desc::after { content: " \25BE"; }
+.ab-group-head { display: flex; align-items: baseline; gap: 10px; margin: 14px 0 4px; font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; }
+.ab-group:first-of-type .ab-group-head { margin-top: 6px; }
+.ab-group-head b { color: var(--text); font-size: 13px; letter-spacing: 0; text-transform: none; }
+.ab-fill { flex: 1; height: 1px; background: var(--border); align-self: center; }
+
+.ab-row, .ab-head-row {
+  display: grid; grid-template-columns: minmax(170px, 1.3fr) 44px minmax(160px, 1fr) minmax(140px, .9fr) 64px 118px 92px 18px;
+  gap: 12px; align-items: center; padding: 6px 8px; border-radius: 8px;
+}
+.ab-head-row { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; padding-bottom: 2px; }
+.ab-row { cursor: pointer; }
+.ab-row:hover { background: var(--surface-hover); }
+.ab-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.ab-row-selected { background: color-mix(in srgb, var(--accent) 12%, transparent); box-shadow: inset 0 0 0 1px var(--accent); }
+.ab-row-open { background: var(--surface-hover); }
+.ab-row-empty .ab-name, .ab-row-empty .ab-total { color: var(--text-muted); }
+.ab-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ab-name-key { font-family: var(--font-mono); font-size: 12.5px; }
+.ab-name-clickable { color: var(--accent); }
+.ab-name-clickable:hover { text-decoration: underline; }
+.ab-name-ru { font-size: 11px; color: var(--text-muted); margin-left: 6px; }
+.ab-total, .ab-pct, .ab-routes { text-align: right; font-variant-numeric: tabular-nums; }
+.ab-total { color: var(--text-muted); font-size: 12px; }
+.ab-routes { color: var(--text-muted); font-size: 12px; display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; white-space: nowrap; }
+.ab-rbar { display: inline-block; width: 34px; height: 6px; border-radius: 999px; background: var(--ab-none-fill); border: 1px solid var(--ab-none-stroke); overflow: hidden; }
+.ab-rbar > span { display: block; height: 100%; background: var(--passed); }
+/* области маршрутов без папки тестов — чипы внизу блока (бывший виджет «Маршруты по областям») */
+.ab-group-routes { margin-top: 6px; }
+.ab-rchips { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 8px; }
+.ab-rchip {
+  font: inherit; font-size: 11.5px; line-height: 1.2; display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px;
+  border: 1px solid var(--border); border-radius: 999px; background: transparent; color: var(--text-muted); cursor: pointer;
+}
+.ab-rchip:hover { border-color: var(--accent); color: var(--text); }
+.ab-rchip.active { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.ab-rchip-name { font-family: var(--font-mono); }
+.ab-rchip-n { font-variant-numeric: tabular-nums; color: var(--passed); }
+.ab-rchip-n.zero { color: var(--text-muted); }
+.ab-bar { display: flex; height: 12px; border-radius: 999px; overflow: hidden; background: var(--ab-none-fill); border: 1px solid var(--ab-none-stroke); }
+.ab-seg { display: block; height: 100%; }
+.ab-seg.ab-passed { background: var(--tm-passed); }
+.ab-seg.ab-failed { background: var(--tm-failed); }
+.ab-seg.ab-xfail { background: var(--tm-xfail); }
+.ab-seg.ab-skipped { background: var(--tm-skipped); }
+.ab-counts { font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ab-c-passed { color: var(--tm-passed); }
+.ab-c-failed { color: var(--tm-failed); }
+.ab-c-xfail { color: var(--tm-xfail); }
+.ab-c-skipped { color: var(--tm-skipped); }
+.ab-n { color: var(--text-muted); }
+.ab-pct { font-weight: 700; }
+.ab-pct.good { color: var(--tm-passed); }
+.ab-pct.warn { color: var(--tm-xfail); }
+.ab-pct.bad { color: var(--tm-failed); }
+.ab-pct.none { color: var(--text-muted); font-weight: 400; }
+.ab-when { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+.ab-run-link { color: var(--text-muted); }
+.ab-run-link:hover { color: var(--accent); }
+.ab-caret { color: var(--text-muted); font-size: 12px; text-align: center; }
+.ab-more { font-size: 12px; padding: 4px 8px; }
+
+.ab-expand { margin: 2px 8px 10px; padding: 10px 12px; border: 1px dashed var(--border); border-radius: 8px; background: var(--surface-hover); }
+.ab-files { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px 24px; }
+.ab-file { min-width: 0; font-size: 12px; }
+.ab-file-name { font-family: var(--font-mono); font-size: 11.5px; color: var(--text); margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ab-waffle { display: flex; flex-wrap: wrap; gap: 3px; }
+.ab-cell { width: 13px; height: 13px; padding: 0; border-radius: 3px; cursor: pointer; background: var(--ab-none-fill); border: 1px solid var(--ab-none-stroke); }
+.ab-cell.ab-passed { background: var(--tm-passed); border-color: var(--tm-passed); }
+.ab-cell.ab-failed { background: var(--tm-failed); border-color: var(--tm-failed); }
+.ab-cell.ab-xfail { background: var(--tm-xfail); border-color: var(--tm-xfail); }
+.ab-cell.ab-skipped { background: var(--tm-skipped); border-color: var(--tm-skipped); }
+.ab-cell:hover, .ab-cell:focus-visible, .ab-cell.ab-cell-active { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+@media (max-width: 900px) {
+  .ab-head-row { display: none; }
+  .ab-row { grid-template-columns: minmax(120px, 1fr) 36px minmax(100px, 1fr) 56px 18px; }
+  .ab-row .ab-counts, .ab-row .ab-when, .ab-row .ab-routes { display: none; }
+}
 
 /* ---------------- дерево проекта (свёрнуто по умолчанию, интерактивная диаграмма) ---------------- */
 .chart-tree-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; cursor: pointer; user-select: none; }

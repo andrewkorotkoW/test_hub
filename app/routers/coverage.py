@@ -207,11 +207,16 @@ async def get_coverage_tree(
     ]
     run_ids: dict[str, int | None] = {}
     statuses: dict[str, dict[str, str]] = {}
+    last_results: dict[str, dict] = {}
     for stand in stands:
         run_id, status_map = coverage.nodeid_status_map(conn, name, stand, nodeids)
         run_ids[stand] = run_id
         statuses[stand] = status_map
-    return CoverageTree(tree=tree, error=discovered.get("error"), stands=stands, run_ids=run_ids, statuses=statuses)
+        last_results[stand] = coverage.nodeid_last_result_map(conn, name, stand, nodeids)
+    return CoverageTree(
+        tree=tree, error=discovered.get("error"), stands=stands, run_ids=run_ids, statuses=statuses,
+        last_results=last_results,
+    )
 
 
 @router.post("/{name}/coverage/recalc")

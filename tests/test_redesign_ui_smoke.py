@@ -88,9 +88,9 @@ async def test_coverage_html_has_areas_and_tree_blocks(client):
     resp = await client.get("/coverage.html")
     html = resp.text
     assert 'id="summary-card"' in html
-    assert 'id="chart-treemap-box"' in html
-    assert 'id="chart-areas-table-box"' in html
-    assert 'id="areas-table"' in html
+    assert 'id="areas-block-box"' in html
+    assert 'id="areas-block-body"' in html
+    assert 'id="areas-sort-chips"' in html
     assert 'id="chart-tree-box"' in html
     # сворачиваемые секции: треугольники-переключатели (▾/▸), не гамбургер-меню сайдбара
     assert 'id="charts-toggle-btn"' in html and "▾" in html

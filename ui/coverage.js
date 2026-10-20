@@ -1,14 +1,14 @@
 /*
  * «Покрытие»: главный файл сценария — тулбар (стенд/фильтры/поиск/пересчёт/
  * загрузка routes.tsv/экспорт CSV), оркестратор renderCharts/loadSummary
- * (дёргает рендер всех разделов — схему, светофор, карту, treemap, диаграммы,
+ * (дёргает рендер всех разделов — схему, светофор, карту, блок областей, диаграммы,
  * дерево) и финальный запуск страницы.
  *
  * Подключается последним (см. порядок <script> в ui/coverage.html) — к этому
  * моменту ui/coverage-setup.js и все coverage-*-dom.js уже выполнились и
  * определили свои функции/DOM-ссылки в общем lexical scope документа
  * (подробности — в шапке ui/coverage-setup.js). Поэтому renderCharts может
- * свободно звать renderRings/renderTreemap/renderTraffic/syncTreeView и т.д.,
+ * свободно звать renderRings/renderAreasBlock/renderTraffic/syncTreeView и т.д.,
  * хотя они объявлены в других файлах.
  *
  * await initPage() и сам запуск (loadSummary + applyViewMode) — единственное
@@ -34,12 +34,10 @@
   }
   function renderCharts() {
     renderRings();
-    renderAreaBars();
     renderStatusChart();
     renderGraphAreaOptions();
     loadGraph();
-    renderTreemap();
-    renderAreasTable();
+    renderAreasBlock();
     renderTraffic();
     if (!treeInnerBody.hidden) syncTreeView();
   }
@@ -63,8 +61,7 @@
     if (productMapLoaded) loadProductMap();
     renderMap();
     renderStatusChart();
-    renderTreemap();
-    renderAreasTable();
+    renderAreasBlock();
     renderTraffic();
     if (!treeInnerBody.hidden) syncTreeView();
   });

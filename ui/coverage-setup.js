@@ -36,13 +36,12 @@
   const chartsBody = document.getElementById("charts-body");
   const chartRingsBody = document.getElementById("chart-rings-body");
   const chartStatusBody = document.getElementById("chart-status-body");
-  const chartAreasBody = document.getElementById("chart-areas-body");
   const chartGraphBody = document.getElementById("chart-graph-body");
   const chartGraphAreaSelect = document.getElementById("chart-graph-area");
   const chartGraphTestChip = document.getElementById("chart-graph-test-chip");
-  const chartTreemapBody = document.getElementById("chart-treemap-body");
-  const areasTableRows = document.getElementById("areas-table-rows");
-  const areasTableHead = document.querySelector("#areas-table thead");
+  const areasBlockBody = document.getElementById("areas-block-body");
+  const areasSortChips = document.getElementById("areas-sort-chips");
+  const areasHideEmptyInput = document.getElementById("areas-hide-empty");
   const treeToggle = document.getElementById("tree-toggle");
   const treeToggleBtn = document.getElementById("tree-toggle-btn");
   const treeInnerBody = document.getElementById("tree-inner-body");
@@ -98,11 +97,10 @@
     const collapsed = !chartsBody.hidden;
     applyChartsCollapsed(collapsed);
     localStorage.setItem(CHARTS_COLLAPSED_KEY, collapsed ? "1" : "0");
-    if (!collapsed) renderTreemap();
   });
 
   // Дерево проекта — тяжёлый и не самый нужный на первый взгляд виджет, свёрнут по
-  // умолчанию (в отличие от treemap/таблицы областей выше, которые видны сразу).
+  // умолчанию (в отличие от блока «Тесты по областям» выше, который виден сразу).
   const TREE_COLLAPSED_KEY = "cov-tree-collapsed";
 
   function applyTreeCollapsed(collapsed) {

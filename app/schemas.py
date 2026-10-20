@@ -246,12 +246,21 @@ class CoverageRoutesUploadResult(BaseModel):
     coverage: CoverageSummary
 
 
+class TestLastResult(BaseModel):
+    """Последний известный результат теста на стенде (coverage.nodeid_last_result_map)."""
+    status: str
+    run_id: int
+    finished: Optional[str] = None
+
+
 class CoverageTree(BaseModel):
     tree: dict[str, dict[str, list[str]]]
     error: Optional[str] = None
     stands: list[str]
     run_ids: dict[str, Optional[int]]
-    statuses: dict[str, dict[str, str]]  # stand -> nodeid -> status
+    statuses: dict[str, dict[str, str]]  # stand -> nodeid -> status (только последний прогон стенда)
+    # stand -> nodeid -> последний результат по последним прогонам стенда — блок «Тесты по областям»
+    last_results: dict[str, dict[str, TestLastResult]] = {}
 
 
 class FlakyTestStat(BaseModel):

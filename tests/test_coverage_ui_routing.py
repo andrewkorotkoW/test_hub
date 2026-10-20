@@ -48,7 +48,7 @@ async def test_coverage_js_calls_all_five_router_endpoints(client):
         "coverage-scheme-dom.js",
         "coverage-traffic-dom.js",
         "coverage-map-dom.js",
-        "coverage-treemap-dom.js",
+        "coverage-areas-dom.js",
         "coverage-diagrams-dom.js",
         "coverage-tree-dom.js",
         "coverage.js",

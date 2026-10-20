@@ -117,38 +117,27 @@
         </div>
         <div id="charts-body">
           <div class="charts-grid">
-            <div class="chart-box chart-box-wide" id="chart-treemap-box">
-              <div class="chart-treemap-head">
+            <div class="chart-box chart-box-wide" id="areas-block-box">
+              <div class="areas-block-head">
                 <h3>Тесты по областям</h3>
-                <div class="treemap-legend">
-                  <span><span class="tm-swatch tm-passed"></span>passed</span>
-                  <span><span class="tm-swatch tm-failed"></span>failed</span>
-                  <span><span class="tm-swatch tm-xfail"></span>xfail</span>
-                  <span><span class="tm-swatch tm-skipped"></span>skipped</span>
-                  <span><span class="tm-swatch tm-none"></span>не запускался</span>
+                <div class="areas-block-controls" id="areas-sort-chips" role="group" aria-label="Порядок областей">
+                  <button type="button" class="ab-chip" data-ab-sort="failed">упавшие сверху</button>
+                  <button type="button" class="ab-chip" data-ab-sort="size">по размеру</button>
+                  <button type="button" class="ab-chip" data-ab-sort="name">по имени</button>
+                  <label class="ab-chip ab-chip-check"><input type="checkbox" id="areas-hide-empty"> скрыть без результатов</label>
+                </div>
+                <div class="areas-legend">
+                  <span><span class="ab-swatch ab-passed"></span>passed</span>
+                  <span><span class="ab-swatch ab-failed"></span>failed</span>
+                  <span><span class="ab-swatch ab-xfail"></span>xfail</span>
+                  <span><span class="ab-swatch ab-skipped"></span>skipped</span>
+                  <span><span class="ab-swatch ab-none"></span>нет результата</span>
                 </div>
               </div>
-              <div id="chart-treemap-body" class="chart-treemap-body"><p class="muted">Загрузка…</p></div>
-              <p class="muted chart-treemap-hint">Площадь ячейки — один тест, цвет — его статус на выбранном стенде.
-                Наведите курсор на ячейку — всплывёт тест и статус; клик по тесту открывает панель связей. Клик по
-                подписи области фильтрует карту маршрутов ниже и подсвечивает строку в таблице «Области».</p>
-            </div>
-            <div class="chart-box chart-box-wide" id="chart-areas-table-box">
-              <h3>Области</h3>
-              <div class="table-wrap table-scroll">
-                <table id="areas-table">
-                  <thead>
-                    <tr>
-                      <th data-sort="area">Область</th>
-                      <th data-sort="total">Тестов</th>
-                      <th>Статусы</th>
-                      <th data-sort="percent">% прошедших</th>
-                      <th data-sort="routes">Маршруты API</th>
-                    </tr>
-                  </thead>
-                  <tbody id="areas-table-rows"><tr><td colspan="5" class="muted">Загрузка…</td></tr></tbody>
-                </table>
-              </div>
+              <div id="areas-block-body" class="areas-block-body"><p class="muted">Загрузка…</p></div>
+              <p class="muted areas-block-hint">Статус теста — последний известный результат на выбранном стенде (дата и номер
+                прогона — в строке), а не только самый последний прогон. Клик по строке раскрывает тесты области: ячейка — тест,
+                клик по ней открывает панель связей. Клик по имени области фильтрует карту маршрутов ниже.</p>
             </div>
             <div class="chart-box chart-box-wide" id="chart-tree-box">
               <div class="chart-tree-head" id="tree-toggle">
@@ -181,10 +170,6 @@
             <div class="chart-box" id="chart-status-box">
               <h3>Статусы тестов на стенде</h3>
               <div id="chart-status-body"></div>
-            </div>
-            <div class="chart-box chart-box-wide" id="chart-areas-box">
-              <h3>Маршруты по областям</h3>
-              <div id="chart-areas-body" class="area-bars"></div>
             </div>
             <div class="chart-box chart-box-wide" id="chart-graph-box">
               <div class="chart-graph-head">
@@ -241,7 +226,7 @@
   <script src="coverage-scheme-dom.js"></script>
   <script src="coverage-traffic-dom.js"></script>
   <script src="coverage-map-dom.js"></script>
-  <script src="coverage-treemap-dom.js"></script>
+  <script src="coverage-areas-dom.js"></script>
   <script src="coverage-diagrams-dom.js"></script>
   <script src="coverage-tree-dom.js"></script>
   <script src="coverage.js"></script>
