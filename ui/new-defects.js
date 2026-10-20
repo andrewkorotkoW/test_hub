@@ -58,11 +58,11 @@
     }).join("") + `</ul>`;
   }
 
-  function defaultPrecondition(steps) {
-    const passed = steps.filter((s) => s.status === "passed" && s.name);
-    if (!passed.length) return "";
-    return passed.map((s, i) => `${i + 1} - ${s.name}`).join("\n");
-  }
+  // Предусловие инженер пишет сам: раньше поле автозаполнялось пройденными шагами
+  // из allure, но те же шаги уже видны списком выше и уходят в комментарий YouTrack
+  // разделом «Шаги» (app/routers/new_defects.py::_build_comment) — выходил дубль с
+  // двойной нумерацией «1 - 1. …» (замечание владельца 20.10.2026).
+  const PRECONDITION_PLACEHOLDER = "Состояние до шагов: стенд, учётка, подготовленные данные…";
 
   function shortName(fullName) {
     return (fullName || "").split("#").pop();
@@ -99,12 +99,12 @@
             <input value="${escapeHtml(item.severity || "—")}" disabled>
           </div>
           <div class="field nd-span2">
-            <label>Пред_условие <span class="nd-auto-tag">авто из allure.steps</span></label>
-            <textarea class="nd-precondition">${escapeHtml(defaultPrecondition(item.steps))}</textarea>
+            <label>Пред_условие</label>
+            <textarea class="nd-precondition" rows="3" placeholder="${PRECONDITION_PLACEHOLDER}"></textarea>
           </div>
           <div class="field nd-span2">
             <label>ОР (ожидаемый результат)</label>
-            <textarea class="nd-expected" placeholder="Что должно было произойти"></textarea>
+            <textarea class="nd-expected" rows="3" placeholder="Что должно было произойти"></textarea>
           </div>
         </div>
         <div class="nd-card-foot">

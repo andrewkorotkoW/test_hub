@@ -52,7 +52,8 @@ def test_project_html_loads_sections_picker_before_run_window():
 def test_style_css_single_column_layout_and_collapsed_rule():
     assert "grid-template-columns: 1.1fr 1.4fr" not in STYLE_CSS
     assert "minmax(0, 1.1fr) minmax(0, 1.4fr)" not in STYLE_CSS
-    assert "#tests-card:not(.collapsed) { max-width:" in STYLE_CSS
+    # лимит ширины формы в 720px убран 20.10.2026 — форма на всю ширину колонки
+    assert "#tests-card:not(.collapsed) { max-width:" not in STYLE_CSS
     assert "#tests-card.collapsed > :not(#run-form-summary):not(#run-queue-notice) { display: none; }" in STYLE_CSS
     # баннер очереди в свёрнутом виде не упирается в кнопки сводки
     assert "#tests-card.collapsed #run-queue-notice { margin-top: 12px; margin-bottom: 0; }" in STYLE_CSS

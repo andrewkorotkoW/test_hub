@@ -155,6 +155,18 @@ async def test_decide_confirmed_comment_includes_auto_fields_from_allure(
     assert "tests/api/test_a.py::test_a" in sent_text  # Тест: <nodeid> в хвосте
 
 
+def test_step_line_does_not_double_number_already_numbered_allure_steps():
+    """@allure.step в auto_tests_vshgu уже пишут «1. Создать курс…» — в комментарии
+    выходило «1 - 1. Создать курс…» (замечание владельца 20.10.2026)."""
+    from app.routers.new_defects import _step_line
+
+    assert _step_line(0, "шаг раз") == "1 - шаг раз"
+    assert _step_line(3, "4. Дождаться обработки контекста") == "4. Дождаться обработки контекста"
+    assert _step_line(0, " 1) Открыть карточку ") == "1) Открыть карточку"
+    assert _step_line(1, "2 - Включить переключатель") == "2 - Включить переключатель"
+    assert _step_line(0, "10 минут ждать") == "1 - 10 минут ждать", "число без разделителя — не нумерация"
+
+
 async def test_decide_confirmed_comment_includes_message_severity_steps_trace(
     db_path, isolated_allure_dir, qa_client, youtrack_configured, monkeypatch
 ):

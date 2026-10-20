@@ -8,6 +8,7 @@ connected=false с кандидатами всё равно (список не �
 некуда. «Пропустить» (status=dismissed) работает всегда — это чисто локальное
 решение, в YouTrack ничего не уходит."""
 import asyncio
+import re
 import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -91,6 +92,17 @@ async def decide_new_defect(
 TRACE_MAX_LEN = 800
 
 
+_STEP_NUMBERED_RE = re.compile(r"^\s*\d+\s*[.)\-–]\s+")
+
+
+def _step_line(index: int, name: str) -> str:
+    """Строка шага в комментарии: «N - имя». Если имя allure-шага уже начинается с
+    номера («1. Создать курс…» — так пишут @allure.step в auto_tests_vshgu), второй
+    номер не добавляем, иначе выходило «1 - 1. Создать курс…»."""
+    name = name.strip()
+    return name if _STEP_NUMBERED_RE.match(name) else f"{index + 1} - {name}"
+
+
 def _build_comment(body: NewDefectDecision, candidate: dict | None) -> str:
     """Шаблон карточки бага (ровно тот, что обсуждали и проверяли вручную до
     кнопки, см. память vshgu_e2e_poll_cert_recon — Back/Front, Серьёзность,
@@ -109,7 +121,7 @@ def _build_comment(body: NewDefectDecision, candidate: dict | None) -> str:
     steps = (candidate or {}).get("steps") or []
     if steps:
         lines.append("\nШаги:")
-        lines.extend(f"{i + 1} - {s.get('name')}" for i, s in enumerate(steps) if s.get("name"))
+        lines.extend(_step_line(i, s["name"]) for i, s in enumerate(steps) if s.get("name"))
 
     if body.expected_result:
         lines.append(f"\nОР: {body.expected_result}")
