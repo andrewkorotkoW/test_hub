@@ -112,7 +112,9 @@
     const rows = created.map((entry) => {
       const result = DgLogic.cleanupStatusFor(detail.cleanup, entry);
       let cleanupCell;
-      if (result && result.status === "deleted") cleanupCell = `<span class="dg-ok">удалено</span>`;
+      if (result && result.status === "deleted") {
+        cleanupCell = `<span class="dg-ok">удалено</span>${result.note ? ` <span class="muted">(${escapeHtml(result.note)})</span>` : ""}`;
+      }
       else if (result && result.status === "failed") cleanupCell = `<span class="dg-error">не удалено: ${escapeHtml(result.note || "")}</span>`;
       else if (result && result.status === "skipped") cleanupCell = `<span class="muted">без DELETE-метода</span>`;
       else cleanupCell = `<span class="muted">${escapeHtml(entry.how_to_delete || "")}</span>`;

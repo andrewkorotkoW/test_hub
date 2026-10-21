@@ -327,9 +327,47 @@ async def test_delete_with_failed_entities_is_delete_failed_and_retryable(qa_cli
     assert result["status"] == "delete_failed"
     assert result["cleanup_summary"] == {"deleted": 2, "failed": 1, "skipped": 0}
     assert "не удалено сущностей: 1" in result["error"]
-    # delete_failed — можно попробовать ещё раз
+    # delete_failed — можно попробовать ещё раз: в CLI уходит манифест только с тем, что не
+    # удалилось (иначе повтор бьётся в уже удалённые сущности), итог объединяется с прошлым
     resp = await qa_client.delete(f"/api/projects/{PROJECT}/data/{batch_id}")
     assert resp.status_code == 202
+    retried = await _wait_status(qa_client, batch_id, ("deleted", "delete_failed"))
+    pending = json.loads(datagen.manifest_path(batch_id).read_text(encoding="utf-8"))
+    assert [e["entity"] for e in pending["created"]] == ["stubborn"], "в повтор ушла только неудалённая запись"
+    assert retried["status"] == "delete_failed"
+    assert retried["cleanup_summary"] == {"deleted": 2, "failed": 1, "skipped": 0}, "удалённые ранее не теряются"
+    assert sorted(r["entity"] for r in retried["cleanup"]["results"]) == ["program", "stubborn", "user"]
+    assert "program 555 deleted" not in retried["delete_log"].split("--cleanup", 2)[-1], "программа второй раз не удалялась"
+
+
+def test_pending_manifest_and_merge_cleanup_results():
+    manifest = {"env": "develop", "scenario": "x", "created": [
+        {"entity": "user", "id": 1, "how_to_delete": "u"},
+        {"entity": "stream", "id": [3, 4], "how_to_delete": "s"},
+        {"entity": "program", "id": 3, "how_to_delete": "p"},
+    ], "skipped": []}
+    previous = {"ok": False, "deleted": 1, "failed": 2, "skipped": 0, "results": [
+        {"entity": "program", "id": 3, "status": "failed", "note": "405"},
+        {"entity": "stream", "id": [3, 4], "status": "failed", "note": "422"},
+        {"entity": "user", "id": 1, "status": "deleted", "note": None},
+    ]}
+    pending = datagen.pending_manifest(manifest, previous)
+    assert [e["entity"] for e in pending["created"]] == ["stream", "program"]
+    assert datagen.pending_manifest(manifest, None) is manifest
+
+    current = {"ok": False, "deleted": 1, "failed": 1, "skipped": 0, "results": [
+        {"entity": "stream", "id": [3, 4], "status": "deleted", "note": None},
+        {"entity": "program", "id": 3, "status": "failed", "note": "405 again"},
+    ]}
+    merged = datagen.merge_cleanup_results(previous, current)
+    assert merged["deleted"] == 2 and merged["failed"] == 1 and merged["skipped"] == 0 and merged["ok"] is False
+    assert {r["entity"]: r["status"] for r in merged["results"]} == {"user": "deleted", "stream": "deleted", "program": "failed"}
+    # порядок — по первому появлению в прошлом итоге: program, stream, user
+    assert [r["entity"] for r in merged["results"]] == ["program", "stream", "user"]
+    assert merged["results"][0]["note"] == "405 again"
+    final = datagen.merge_cleanup_results(merged, {"ok": True, "deleted": 1, "failed": 0, "skipped": 0,
+                                                   "results": [{"entity": "program", "id": 3, "status": "deleted", "note": None}]})
+    assert final["ok"] is True and final["deleted"] == 3 and final["failed"] == 0
 
 
 async def test_delete_of_failed_batch_without_manifest_is_409(qa_client, tmp_path, isolated_workspace):

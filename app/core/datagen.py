@@ -141,6 +141,42 @@ def entity_counts(manifest: dict | None) -> list[dict]:
     return [{"entity": entity, "count": counts[entity]} for entity in order]
 
 
+def _entry_key(entry: dict) -> str:
+    return json.dumps([entry.get("entity"), entry.get("id")], ensure_ascii=False, sort_keys=True)
+
+
+def _deleted_keys(cleanup: dict | None) -> set[str]:
+    results = (cleanup or {}).get("results") if isinstance(cleanup, dict) else None
+    return {_entry_key(r) for r in (results or []) if isinstance(r, dict) and r.get("status") == "deleted"}
+
+
+def pending_manifest(manifest: dict, previous_cleanup: dict | None) -> dict:
+    """Манифест для повторного --cleanup: без записей, которые прошлый cleanup уже удалил."""
+    done = _deleted_keys(previous_cleanup)
+    if not done:
+        return manifest
+    created = [e for e in manifest.get("created", []) or [] if _entry_key(e) not in done]
+    return {**manifest, "created": created}
+
+
+def merge_cleanup_results(previous: dict, current: dict) -> dict:
+    """Итог повторного cleanup поверх прошлого: удалённые ранее записи остаются «deleted»,
+    записи этого прогона берутся из него; счётчики пересчитываются по объединённому списку."""
+    merged: dict[str, dict] = {}
+    for r in (previous.get("results") or []):
+        if isinstance(r, dict):
+            merged[_entry_key(r)] = r
+    for r in (current.get("results") or []):
+        if isinstance(r, dict):
+            merged[_entry_key(r)] = r
+    results = list(merged.values())
+    counts = {"deleted": 0, "failed": 0, "skipped": 0}
+    for r in results:
+        if r.get("status") in counts:
+            counts[r["status"]] += 1
+    return {**current, "results": results, **counts, "ok": counts["failed"] == 0 and bool(current.get("ok", True))}
+
+
 def row_to_dict(row: sqlite3.Row, details: bool = False) -> dict:
     manifest = _parse_json(row["manifest"])
     cleanup = _parse_json(row["cleanup_result"])
@@ -370,12 +406,16 @@ async def execute_delete(batch_id: int) -> None:
         _update(batch_id, status="delete_failed", error="проект больше не существует")
         return
     manifest = _parse_json(row["manifest"])
+    previous = _parse_json(row["cleanup_result"])
     path = manifest_path(batch_id)
     path.parent.mkdir(parents=True, exist_ok=True)
     if isinstance(manifest, dict):
         # Файл манифеста переписывается из БД: workspace могли почистить, а --cleanup
-        # читает именно файл.
-        path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+        # читает именно файл. При повторе после «удалено частично» в него попадают только
+        # записи, которые в прошлый раз не удалились — иначе CLI заново бьётся в уже
+        # удалённые сущности (404/422) и весь повтор выглядит провалом.
+        pending = pending_manifest(manifest, previous)
+        path.write_text(json.dumps(pending, ensure_ascii=False, indent=2), encoding="utf-8")
     elif not path.exists():
         _update(batch_id, status="delete_failed", error="у партии нет манифеста — удалять нечего")
         return
@@ -384,6 +424,8 @@ async def execute_delete(batch_id: int) -> None:
     args.extend(["--cleanup", str(path), "--json"])
     returncode, result = await _run_cli(batch_id, args, project["path"], env, "delete_log")
 
+    if isinstance(result, dict) and isinstance(previous, dict):
+        result = merge_cleanup_results(previous, result)
     ok = returncode == 0 and bool(result and result.get("ok"))
     error = None
     if not ok:
