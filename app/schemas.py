@@ -620,6 +620,7 @@ class DataBatch(BaseModel):
     finished_at: Optional[str] = None
     deleted_at: Optional[str] = None
     error: Optional[str] = None
+    run_id: Optional[int] = None
     created_total: int = 0
     skipped_total: int = 0
     entities: list[DataEntityCount] = Field(default_factory=list)

@@ -14,7 +14,9 @@
   const dataError = document.getElementById("data-error");
   const dataUnsupported = document.getElementById("data-unsupported");
   const dataForm = document.getElementById("data-form");
-  const dataScenarioSelect = document.getElementById("data-scenario-select");
+  const dataScenarioCombobox = document.getElementById("data-scenario-combobox");
+  const dataScenarioInput = document.getElementById("data-scenario-input");
+  const dataScenarioList = document.getElementById("data-scenario-list");
   const dataScenarioDesc = document.getElementById("data-scenario-desc");
   const dataStandSelect = document.getElementById("data-stand-select");
   const dataCountInput = document.getElementById("data-count-input");
@@ -30,6 +32,7 @@
   const DG_SHOW_DELETED_KEY = `datagen-show-deleted:${projectName}`;
 
   let dgScenarios = [];
+  let dgScenario = null;       // имя выбранного сценария (комбобокс)
   let dgBatches = [];
   let dgDetails = {};          // id -> DataBatchDetail (раскрытые строки)
   let dgPollTimer = null;
@@ -47,9 +50,47 @@
   // ---------------- форма ----------------
 
   function dgRenderScenarioInfo() {
-    const scenario = DgLogic.findScenario(dgScenarios, dataScenarioSelect.value);
+    const scenario = DgLogic.findScenario(dgScenarios, dgScenario);
     dataScenarioDesc.textContent = scenario ? `${scenario.name} — ${scenario.description}` : "";
     dataCountHint.textContent = scenario && scenario.count_help ? `N — ${scenario.count_help}` : "";
+  }
+
+  // ---------------- комбобокс сценариев ----------------
+  // Список — группы по категориям (DgLogic.groupScenarios), фильтр по вводу
+  // (DgLogic.filterScenarios по названию/имени/описанию), выбор мышью и клавиатурой.
+  // Тот же приём, что у «Раздела» на странице «Статистика» (ui/stats.js).
+
+  function dgSelectScenario(name) {
+    dgScenario = name;
+    const scenario = DgLogic.findScenario(dgScenarios, name);
+    dataScenarioInput.value = scenario ? (scenario.title || scenario.name) : "";
+    dgRenderScenarioInfo();
+  }
+
+  function dgCloseScenarioList() {
+    dataScenarioList.hidden = true;
+    dataScenarioList.innerHTML = "";
+  }
+
+  function dgRenderScenarioList(query) {
+    const groups = DgLogic.groupScenarios(DgLogic.filterScenarios(dgScenarios, query));
+    if (!groups.length) {
+      dataScenarioList.innerHTML = `<li class="dg-group dg-empty">ничего не найдено</li>`;
+      dataScenarioList.hidden = false;
+      return;
+    }
+    dataScenarioList.innerHTML = groups.map((group) => {
+      const head = group.category ? `<li class="dg-group">${escapeHtml(group.category)}</li>` : "";
+      const items = group.items.map((s) =>
+        `<li data-name="${escapeHtml(s.name)}" class="${s.name === dgScenario ? "selected" : ""}">${escapeHtml(s.title || s.name)}<span class="dg-opt-name">${escapeHtml(s.name)}</span></li>`
+      ).join("");
+      return head + items;
+    }).join("");
+    dataScenarioList.hidden = false;
+  }
+
+  function dgScenarioItems() {
+    return [...dataScenarioList.querySelectorAll("li[data-name]")];
   }
 
   async function dgLoadScenarios() {
@@ -58,16 +99,54 @@
     dgScenarios = resp.scenarios || [];
     dataUnsupported.hidden = dgSupported;
     dataForm.hidden = !dgSupported;
-    // Сценарии сгруппированы по категориям (optgroup), подпись — человеческое название
-    // из CLI (title), техническое имя — в описании под селектом.
-    dataScenarioSelect.innerHTML = DgLogic.groupScenarios(dgScenarios).map((group) => {
-      const options = group.items
-        .map((s) => `<option value="${escapeHtml(s.name)}">${escapeHtml(s.title || s.name)}</option>`)
-        .join("");
-      return group.category ? `<optgroup label="${escapeHtml(group.category)}">${options}</optgroup>` : options;
-    }).join("");
-    dgRenderScenarioInfo();
+    dgSelectScenario(dgScenarios.length ? dgScenarios[0].name : null);
   }
+
+  dataScenarioInput.addEventListener("focus", () => {
+    // По фокусу — весь список (не фильтр по уже подставленному названию), выбранный выделен.
+    dataScenarioInput.select();
+    dgRenderScenarioList("");
+  });
+  dataScenarioInput.addEventListener("input", () => dgRenderScenarioList(dataScenarioInput.value));
+  dataScenarioList.addEventListener("mousedown", (event) => {
+    // mousedown, а не click: blur поля сработал бы раньше click и закрыл список.
+    const li = event.target.closest("li[data-name]");
+    if (!li) { event.preventDefault(); return; }
+    event.preventDefault();
+    dgSelectScenario(li.dataset.name);
+    dgCloseScenarioList();
+    dataScenarioInput.blur();
+  });
+  dataScenarioInput.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") { dgCloseScenarioList(); dgSelectScenario(dgScenario); return; }
+    if (dataScenarioList.hidden && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+      dgRenderScenarioList("");
+      return;
+    }
+    const items = dgScenarioItems();
+    if (!items.length) return;
+    let index = items.findIndex((li) => li.classList.contains("active"));
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      index = event.key === "ArrowDown" ? Math.min(index + 1, items.length - 1) : Math.max(index - 1, 0);
+      items.forEach((li, i) => li.classList.toggle("active", i === index));
+      items[index].scrollIntoView({ block: "nearest" });
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      const target = index >= 0 ? items[index] : items[0];
+      dgSelectScenario(target.dataset.name);
+      dgCloseScenarioList();
+      dataScenarioInput.blur();
+    }
+  });
+  dataScenarioInput.addEventListener("blur", () => {
+    // Ушли с поля без выбора — возвращаем название выбранного сценария вместо недопечатанного фильтра.
+    dgSelectScenario(dgScenario);
+    dgCloseScenarioList();
+  });
+  document.addEventListener("mousedown", (event) => {
+    if (!event.composedPath().includes(dataScenarioCombobox)) dgCloseScenarioList();
+  });
 
   async function dgLoadStands() {
     const stands = await api(`/api/projects/${encodeURIComponent(projectName)}/stands`);
@@ -78,7 +157,7 @@
 
   async function dgCreate() {
     const form = {
-      scenario: dataScenarioSelect.value,
+      scenario: dgScenario,
       stand: dataStandSelect.value || null,
       count: Number(dataCountInput.value),
       prefix: dataPrefixInput.value.trim() || null,
@@ -125,7 +204,7 @@
       : "";
     const table = rows.length
       ? `<table class="dg-manifest"><thead><tr><th>Сущность</th><th>ID</th><th>Удаление</th></tr></thead><tbody>${rows.join("")}</tbody></table>`
-      : `<p class="muted dg-sub">Манифест пуст — сущности не создавались.</p>`;
+      : `<p class="muted dg-sub">${DgLogic.isCleanupBatch(detail) ? "Данных автотестов с начала прогона на стенде не найдено." : "Манифест пуст — сущности не создавались."}</p>`;
     return table + skippedHtml;
   }
 
@@ -167,6 +246,9 @@
     const error = batch.error ? `<div class="dg-error">${escapeHtml(batch.error)}</div>` : "";
     const skipped = batch.skipped_total ? ` <span class="muted" title="шагов сценария пропущено">+${batch.skipped_total}</span>` : "";
     const prefix = batch.prefix ? ` <span class="muted dg-sub" title="префикс имён">${escapeHtml(batch.prefix)}</span>` : "";
+    const scenarioCell = DgLogic.isCleanupBatch(batch)
+      ? `<span title="данные автотестов, созданные с начала прогона">${escapeHtml(DgLogic.scenarioLabel(batch))}</span>`
+      : `<code>${escapeHtml(batch.scenario)}</code>${prefix}`;
     const deleteBtn = DgLogic.canDelete(batch)
       ? `<button class="dg-delete-btn" data-id="${batch.id}" title="Удалить созданные данные на стенде по манифесту">Удалить данные</button>`
       : "";
@@ -177,9 +259,9 @@
     return `<tr class="dg-row${expanded ? " dg-row-open" : ""}" data-id="${batch.id}">
       <td class="dg-num">#${batch.id}</td>
       <td><span class="status-pill status-pill-sm ${DgLogic.statusPill(batch.status)}">${escapeHtml(DgLogic.statusLabel(batch.status))}</span></td>
-      <td class="dg-scenario"><code>${escapeHtml(batch.scenario)}</code>${prefix}</td>
+      <td class="dg-scenario">${scenarioCell}</td>
       <td>${batch.stand ? escapeHtml(batch.stand) : `<span class="muted">—</span>`}</td>
-      <td class="dg-num">${batch.count}</td>
+      <td class="dg-num">${DgLogic.isCleanupBatch(batch) ? `<span class="muted">—</span>` : batch.count}</td>
       <td class="dg-num">${batch.created_total}${skipped}</td>
       <td class="dg-summary">${summary}${cleanup}${error}</td>
       <td class="dg-who">${escapeHtml(batch.created_by || "—")} <span class="muted">· ${when}</span></td>
@@ -260,6 +342,34 @@
     }
   }
 
+  // ---------------- «Удалить данные прогона» ----------------
+  // Кнопка в окне прогона (#cleanup-run-data-btn) и в строке вкладки «Прогоны»
+  // (.hist-cleanup-btn): POST …/runs/{id}/cleanup-data заводит партию «очистка после
+  // прогона» (CLI --cleanup-autotests --since <старт прогона>) и открывает вкладку «Данные».
+  async function dgCleanupRun(runId) {
+    const text = `Удалить данные автотестов, созданные на стенде с начала прогона #${runId}?\n\n` +
+      "Будут найдены и удалены сущности с именами Автотест_* / API-test_* / E2E_* и пользователи " +
+      "auto_test_*, созданные не раньше старта прогона. Если в это же время на стенде шёл другой " +
+      "прогон или генерация, их данные тоже попадут под очистку.";
+    if (!window.confirm(text)) return;
+    try {
+      const batch = await api(`/api/projects/${encodeURIComponent(projectName)}/runs/${runId}/cleanup-data`, { method: "POST" });
+      dgShowError("");
+      if (window.location.hash !== "#data") window.location.hash = "data";
+      await dgLoadBatches();
+      dataCard.scrollIntoView({ behavior: "smooth", block: "start" });
+      return batch;
+    } catch (err) {
+      showPageError(`Не удалось запустить очистку после прогона #${runId}: ${err.message}`);
+      return null;
+    }
+  }
+
+  cleanupRunDataBtn.addEventListener("click", () => {
+    const runId = Number(runIdLabel.textContent);
+    if (runId) dgCleanupRun(runId);
+  });
+
   dataRows.addEventListener("click", (event) => {
     const detailsBtn = event.target.closest(".dg-details-btn");
     if (detailsBtn) {
@@ -276,7 +386,6 @@
     const key = `${spoiler.dataset.id}:${spoiler.dataset.log}`;
     if (spoiler.open) dgOpenLogs.add(key); else dgOpenLogs.delete(key);
   }, true);
-  dataScenarioSelect.addEventListener("change", dgRenderScenarioInfo);
   dataCreateBtn.addEventListener("click", dgCreate);
   dataShowDeleted.addEventListener("change", () => {
     try { localStorage.setItem(DG_SHOW_DELETED_KEY, dataShowDeleted.checked ? "1" : "0"); } catch (_err) { /* приватный режим */ }

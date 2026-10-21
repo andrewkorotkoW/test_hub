@@ -33,6 +33,12 @@ ACTIVE_STATUSES = ("queued", "running", "deleting")
 DELETABLE_STATUSES = ("done", "failed", "delete_failed")
 LIST_TIMEOUT_SEC = 90
 MAX_COUNT = 50
+# Партия «очистка после прогона»: не сценарий генератора, а режим CLI --cleanup-autotests
+# --since <runs.started> — найти на стенде данные автотестов, созданные с начала прогона,
+# и удалить. Манифест найденного хранится как у обычной партии, статус сразу
+# deleted/delete_failed, повтор (DELETE …/data/{id}) — обычный --cleanup по манифесту.
+CLEANUP_SCENARIO = "cleanup_after_run"
+RUN_FINISHED_STATUSES = ("passed", "failed", "cancelled")
 
 _scenarios_cache: dict[str, tuple[tuple, list[dict]]] = {}
 _tasks: set[asyncio.Task] = set()
@@ -195,6 +201,7 @@ def row_to_dict(row: sqlite3.Row, details: bool = False) -> dict:
         "finished_at": row["finished_at"],
         "deleted_at": row["deleted_at"],
         "error": row["error"],
+        "run_id": row["run_id"],
         "created_total": len(created),
         "skipped_total": len(skipped),
         "entities": entity_counts(manifest),
@@ -238,12 +245,12 @@ def _now() -> str:
 
 def insert_batch(
     conn: sqlite3.Connection, project: str, stand: str | None, scenario: str, count: int,
-    prefix: str | None, created_by: str | None,
+    prefix: str | None, created_by: str | None, run_id: int | None = None,
 ) -> sqlite3.Row:
     cur = conn.execute(
-        "INSERT INTO data_batches (project, stand, scenario, count, prefix, status, created_at, created_by) "
-        "VALUES (?, ?, ?, ?, ?, 'queued', ?, ?)",
-        (project, stand, scenario, count, prefix, _now(), created_by),
+        "INSERT INTO data_batches (project, stand, scenario, count, prefix, status, created_at, created_by, run_id) "
+        "VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?)",
+        (project, stand, scenario, count, prefix, _now(), created_by, run_id),
     )
     conn.commit()
     return get_batch(conn, project, cur.lastrowid)
@@ -361,9 +368,63 @@ async def _run_cli(batch_id: int, args: list[str], cwd: str, env: dict, log_colu
     return proc.returncode, result
 
 
+def _run_started(run_id: int | None) -> str | None:
+    if run_id is None:
+        return None
+    conn = get_connection()
+    try:
+        row = conn.execute("SELECT started FROM runs WHERE id = ?", (run_id,)).fetchone()
+        return row["started"] if row else None
+    finally:
+        conn.close()
+
+
+async def execute_cleanup_after_run(batch_id: int) -> None:
+    """Партия CLEANUP_SCENARIO: generate.py --cleanup-autotests --since <старт прогона>.
+    Итог CLI — манифест найденного + результаты удаления; партия сразу переходит в
+    deleted / delete_failed (лог — в delete_log, как у обычного удаления)."""
+    row, project, stand = _load(batch_id)
+    if row is None:
+        return
+    since = _run_started(row["run_id"])
+    if project is None or not since:
+        _update(batch_id, status="delete_failed", finished_at=_now(),
+                error="проект больше не существует" if project is None else f"прогон #{row['run_id']} не найден")
+        return
+    _update(batch_id, status="running")
+    path = manifest_path(batch_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    args, env = _base_command(project, stand, row["stand"])
+    args.extend(["--cleanup-autotests", "--since", since, "--json", "--manifest-out", str(path)])
+    returncode, result = await _run_cli(batch_id, args, project["path"], env, "delete_log")
+
+    manifest = result.get("manifest") if isinstance(result, dict) else None
+    ok = returncode == 0 and bool(result and result.get("ok"))
+    error = None
+    if not ok:
+        error = (result or {}).get("error") if isinstance(result, dict) else None
+        if not error and isinstance(result, dict) and result.get("failed"):
+            error = f"не удалено сущностей: {result.get('failed')}"
+        error = error or (
+            "generate.py не запустился" if returncode is None else f"cleanup завершился с кодом {returncode}"
+        )
+    _update(
+        batch_id,
+        status="deleted" if ok else "delete_failed",
+        finished_at=_now(),
+        deleted_at=_now() if ok else None,
+        manifest=json.dumps(manifest, ensure_ascii=False) if isinstance(manifest, dict) else None,
+        cleanup_result=json.dumps(result, ensure_ascii=False) if isinstance(result, dict) else None,
+        error=error,
+    )
+
+
 async def execute_create(batch_id: int) -> None:
     row, project, stand = _load(batch_id)
     if row is None:
+        return
+    if row["scenario"] == CLEANUP_SCENARIO:
+        await execute_cleanup_after_run(batch_id)
         return
     if project is None:
         _update(batch_id, status="failed", error="проект больше не существует", finished_at=_now())

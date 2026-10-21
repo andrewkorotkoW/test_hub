@@ -159,6 +159,7 @@
   const runDeviceBadge = document.getElementById("run-device-badge");
   const pill = document.getElementById("run-status-pill");
   const shareBtn = document.getElementById("share-run-btn");
+  const cleanupRunDataBtn = document.getElementById("cleanup-run-data-btn");
   const cancelBtn = document.getElementById("cancel-run-btn");
   const logBox = document.getElementById("run-log");
   const runViewToggle = document.getElementById("run-view-toggle");

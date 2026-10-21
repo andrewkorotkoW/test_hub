@@ -45,6 +45,21 @@ if "--list" in args:
     ], ensure_ascii=False))
     sys.exit(0)
 
+if "--cleanup-autotests" in args:
+    since = opt("--since")
+    found = [{"entity": "user", "id": 777, "how_to_delete": "users.delete(user_id)"},
+             {"entity": "test", "id": 888, "how_to_delete": "tests.mass_delete([id])"}]
+    if since and since.startswith("2000"):
+        found = []
+    manifest = {"env": opt("--env", "develop"), "scenario": "cleanup_after_run", "created": found, "skipped": []}
+    Path(opt("--manifest-out")).write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+    results = [{"entity": e["entity"], "id": e["id"], "status": "deleted", "note": None} for e in reversed(found)]
+    print(f"Очистка данных автотестов с {since}: найдено {len(found)}")
+    print(MARKER + " " + json.dumps({"ok": True, "dry_run": False, "since": since, "manifest": manifest,
+                                     "manifest_path": opt("--manifest-out"), "deleted": len(results), "failed": 0,
+                                     "skipped": 0, "results": results}, ensure_ascii=False))
+    sys.exit(0)
+
 if "--cleanup" in args:
     manifest = json.loads(Path(opt("--cleanup")).read_text(encoding="utf-8"))
     results, failed = [], 0
@@ -387,6 +402,89 @@ async def test_delete_of_failed_batch_without_manifest_is_409(qa_client, tmp_pat
     assert resp.status_code == 409
     resp = await qa_client.delete(f"/api/projects/{PROJECT}/data/999")
     assert resp.status_code == 404
+
+
+# ------------------------------------------------------------------ очистка после прогона
+
+def _insert_run(status="passed", started="2026-10-21T15:00:00", stand=STAND):
+    from app.db import get_connection
+
+    conn = get_connection()
+    try:
+        cur = conn.execute(
+            "INSERT INTO runs (project, stand, target, status, started, requested_by, counts) VALUES (?, ?, 'all', ?, ?, 'qa', '{}')",
+            (PROJECT, stand, status, started),
+        )
+        conn.commit()
+        return cur.lastrowid
+    finally:
+        conn.close()
+
+
+async def test_cleanup_after_run_creates_deleted_batch_with_found_manifest(qa_client, tmp_path, isolated_workspace):
+    proj = await _setup(qa_client, tmp_path)
+    run_id = _insert_run()
+    resp = await qa_client.post(f"/api/projects/{PROJECT}/runs/{run_id}/cleanup-data")
+    assert resp.status_code == 201, resp.text
+    created = resp.json()
+    assert created["scenario"] == "cleanup_after_run" and created["run_id"] == run_id
+    assert created["stand"] == STAND and created["status"] == "queued" and created["count"] == 0
+    batch_id = created["id"]
+
+    done = await _wait_status(qa_client, batch_id, ("deleted", "delete_failed", "failed"))
+    assert done["status"] == "deleted", done
+    assert done["deleted_at"] and done["error"] is None
+    assert done["created_total"] == 2
+    assert done["entities"] == [{"entity": "user", "count": 1}, {"entity": "test", "count": 1}]
+    assert done["cleanup_summary"] == {"deleted": 2, "failed": 0, "skipped": 0}
+    assert "найдено 2" in done["delete_log"] and done["log"] == ""
+
+    call = _calls(proj)[-1]
+    argv = call["argv"]
+    assert argv[:2] == ["--env", STAND]
+    assert "--cleanup-autotests" in argv
+    assert argv[argv.index("--since") + 1] == "2026-10-21T15:00:00"
+    assert argv[argv.index("--manifest-out") + 1] == str(datagen.manifest_path(batch_id))
+    assert call["STAND_URL"] == "https://portal-dev.example"
+
+    # ничего не найдено — тоже «удалено», манифест пустой
+    run2 = _insert_run(started="2000-01-01T00:00:00")
+    resp = await qa_client.post(f"/api/projects/{PROJECT}/runs/{run2}/cleanup-data")
+    assert resp.status_code == 201, resp.text
+    empty = await _wait_status(qa_client, resp.json()["id"], ("deleted", "delete_failed", "failed"))
+    assert empty["status"] == "deleted" and empty["created_total"] == 0
+
+
+async def test_cleanup_after_run_validation(qa_client, tmp_path, isolated_workspace):
+    await _setup(qa_client, tmp_path)
+    running = _insert_run(status="running")
+    resp = await qa_client.post(f"/api/projects/{PROJECT}/runs/{running}/cleanup-data")
+    assert resp.status_code == 409 and "не завершён" in resp.json()["detail"]
+    resp = await qa_client.post(f"/api/projects/{PROJECT}/runs/999/cleanup-data")
+    assert resp.status_code == 404
+    other = await _login_other("manager", "manager")
+    try:
+        assert (await other.post(f"/api/projects/{PROJECT}/runs/{running}/cleanup-data")).status_code == 403
+    finally:
+        await other.aclose()
+
+
+async def test_cleanup_after_run_unsupported_project_is_422(qa_client, tmp_path, isolated_workspace):
+    await _setup(qa_client, tmp_path, with_generator=False)
+    run_id = _insert_run()
+    resp = await qa_client.post(f"/api/projects/{PROJECT}/runs/{run_id}/cleanup-data")
+    assert resp.status_code == 422
+
+
+async def _login_other(login_, password):
+    from httpx import ASGITransport, AsyncClient
+
+    from app.main import app as fastapi_app
+
+    client = AsyncClient(transport=ASGITransport(app=fastapi_app), base_url="http://testserver")
+    resp = await client.post("/api/login", json={"login": login_, "password": password})
+    assert resp.status_code == 200
+    return client
 
 
 # ------------------------------------------------------------------ роли и восстановление

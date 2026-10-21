@@ -690,6 +690,9 @@
         <td>${histResultHtml(r)}</td>
         <td class="hist-duration">${RunReportLogic.fmtRunDuration(r.duration)}</td>
         <td>${escapeHtml(r.requested_by || "—")}</td>
+        <td class="hist-actions">${canManageData && ["passed", "failed", "cancelled"].includes(r.status)
+          ? `<button type="button" class="hist-cleanup-btn dg-delete-btn" data-run-id="${r.id}" title="Удалить данные автотестов, созданные на стенде с начала этого прогона">Очистить</button>`
+          : ""}</td>
       </tr>
     `;
   }
@@ -744,6 +747,12 @@
   }
 
   historyRows.addEventListener("click", (ev) => {
+    const cleanupBtn = ev.target.closest(".hist-cleanup-btn");
+    if (cleanupBtn) {
+      // не открывать окно прогона кликом по кнопке в строке
+      dgCleanupRun(Number(cleanupBtn.dataset.runId));
+      return;
+    }
     const tr = ev.target.closest("tr[data-run-id]");
     if (!tr) return;
     openRun(Number(tr.dataset.runId));

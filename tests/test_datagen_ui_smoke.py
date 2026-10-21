@@ -27,7 +27,8 @@ def test_tab_link_is_hidden_by_default_and_panel_has_form_and_table():
     assert '<a href="#data" data-tab="data" hidden>Данные</a>' in PROJECT_HTML
     panel = _data_panel()
     assert 'id="data-card" hidden' in panel
-    for needle in ('id="data-scenario-select"', 'id="data-stand-select"', 'id="data-count-input"',
+    for needle in ('id="data-scenario-combobox"', 'id="data-scenario-input"', 'id="data-scenario-list"',
+                   'class="section-combobox-list datagen-combobox-list"', 'id="data-stand-select"', 'id="data-count-input"',
                    'id="data-prefix-input"', 'id="data-create-btn"', 'id="data-rows"', 'id="data-show-deleted"',
                    'id="data-unsupported"', 'id="data-error"'):
         assert needle in panel, needle
@@ -52,9 +53,11 @@ def test_data_js_uses_logic_and_api_contract():
     assert "const DgLogic = window.DatagenLogic;" in PROJECT_DATA_JS
     for needle in (
         "DgLogic.validateForm(form)",
-        "DgLogic.groupScenarios(dgScenarios)",
-        '<optgroup label="${escapeHtml(group.category)}">',
-        "${escapeHtml(s.title || s.name)}</option>",
+        "DgLogic.groupScenarios(DgLogic.filterScenarios(dgScenarios, query))",
+        '<li class="dg-group">${escapeHtml(group.category)}</li>',
+        'dataScenarioList.addEventListener("mousedown"',
+        'dataScenarioInput.addEventListener("keydown"',
+        "scenario: dgScenario,",
         "DgLogic.summaryText(batch.entities, 3)",
         "RunsHistoryLogic.fmtStarted(batch.created_at, now)",
         'class="dg-summary-text" title="${escapeHtml(summaryFull)}"',
@@ -86,9 +89,27 @@ def test_open_log_spoilers_survive_rerender():
     assert "dgScrollOpenLogs();" in PROJECT_DATA_JS
 
 
+def test_cleanup_after_run_buttons():
+    """«Удалить данные прогона»: кнопка в окне прогона (только завершённый, qa) и в строке
+    вкладки «Прогоны»; обе зовут dgCleanupRun → POST …/runs/{id}/cleanup-data и открывают «Данные»."""
+    assert 'id="cleanup-run-data-btn" class="dg-delete-btn" hidden' in PROJECT_HTML
+    assert PROJECT_HTML.index('id="cleanup-run-data-btn"') < PROJECT_HTML.index('id="cancel-run-btn"')
+    assert "<th>Кем запущен</th><th></th></tr>" in PROJECT_HTML
+    assert 'const cleanupRunDataBtn = document.getElementById("cleanup-run-data-btn");' in PROJECT_SETUP_JS
+    run_window = (UI_DIR / "project-run-window.js").read_text()
+    assert "cleanupRunDataBtn.hidden = !(canManageData && FINISHED_STATUSES.includes(payload.status));" in run_window
+    dashboard = (UI_DIR / "project-dashboard.js").read_text()
+    assert 'class="hist-cleanup-btn dg-delete-btn" data-run-id="${r.id}"' in dashboard
+    assert 'ev.target.closest(".hist-cleanup-btn")' in dashboard
+    assert "dgCleanupRun(Number(cleanupBtn.dataset.runId));" in dashboard
+    for needle in ("async function dgCleanupRun(runId)", "/runs/${runId}/cleanup-data`, { method: \"POST\" }",
+                   'window.location.hash = "data"', "DgLogic.isCleanupBatch(batch)", "DgLogic.scenarioLabel(batch)"):
+        assert needle in PROJECT_DATA_JS, needle
+
+
 def test_style_css_rules():
     for needle in (".project-tabs a[hidden] { display: none; }", ".datagen-form {", ".datagen-form-row {",
                    ".dg-delete-btn {", ".dg-detail-row td {", ".dg-log {", ".dg-manifest {",
-                   ".datagen-table { font-size: 12.5px; }", ".dg-summary-text { display: block; overflow: hidden; text-overflow: ellipsis;",
+                   ".datagen-table { font-size: 12.5px; }", ".datagen-combobox-list li.dg-group {", ".dg-summary-text { display: block; overflow: hidden; text-overflow: ellipsis;",
                    ".dg-actions button { padding: 3px 9px; font-size: 12px;"):
         assert needle in STYLE_CSS, needle

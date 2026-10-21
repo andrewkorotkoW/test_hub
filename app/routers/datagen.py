@@ -111,6 +111,42 @@ async def create_batch(
     return DataBatch(**datagen.row_to_dict(row))
 
 
+@router.post("/{name}/runs/{run_id}/cleanup-data", status_code=status.HTTP_201_CREATED)
+async def cleanup_run_data(
+    name: str,
+    run_id: int,
+    conn: sqlite3.Connection = Depends(get_db),
+    user: sqlite3.Row = Depends(require_roles("qa")),
+) -> DataBatch:
+    """«Удалить данные прогона»: партия CLEANUP_SCENARIO — generate.py --cleanup-autotests
+    --since <старт прогона> на стенде прогона. Только для завершённых прогонов."""
+    project = _get_project_or_404(conn, name)
+    if not datagen.supports(project["path"]):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="В проекте нет test_data_generation/generate.py — очистка данных недоступна",
+        )
+    run = conn.execute("SELECT * FROM runs WHERE id = ? AND project = ?", (run_id, name)).fetchone()
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+    if run["status"] not in datagen.RUN_FINISHED_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Прогон #{run_id} ещё не завершён ({run['status']}) — дождитесь окончания",
+        )
+    if not run["started"]:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"У прогона #{run_id} нет времени старта")
+    active = datagen.active_batch(conn, name)
+    if active is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Партия #{active['id']} ещё выполняется ({active['status']}) — дождитесь её завершения",
+        )
+    row = datagen.insert_batch(conn, name, run["stand"], datagen.CLEANUP_SCENARIO, 0, None, user["login"], run_id=run_id)
+    datagen.schedule_create(row["id"])
+    return DataBatch(**datagen.row_to_dict(row))
+
+
 @router.get("/{name}/data/{batch_id}")
 def get_batch(
     name: str,

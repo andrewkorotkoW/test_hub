@@ -75,6 +75,20 @@
     mif_access: "доступ MIF",
   };
 
+  // Партия «очистка после прогона» (app/core/datagen.py::CLEANUP_SCENARIO) — не сценарий
+  // генератора: CLI --cleanup-autotests --since <старт прогона>.
+  var CLEANUP_SCENARIO = "cleanup_after_run";
+
+  function isCleanupBatch(batch) {
+    return Boolean(batch) && batch.scenario === CLEANUP_SCENARIO;
+  }
+
+  function scenarioLabel(batch) {
+    if (!batch) return "";
+    if (isCleanupBatch(batch)) return "очистка после прогона" + (batch.run_id ? " #" + batch.run_id : "");
+    return batch.scenario || "";
+  }
+
   function statusLabel(status) {
     return STATUS_LABELS[status] || status || "—";
   }
@@ -171,6 +185,19 @@
     return groups.filter(function (g) { return g.category; }).concat(groups.filter(function (g) { return !g.category; }));
   }
 
+  // Фильтр комбобокса: подстрока (без учёта регистра) в названии, имени или описании;
+  // пустой запрос — все сценарии.
+  function filterScenarios(scenarios, query) {
+    var q = String(query || "").trim().toLowerCase();
+    var list = scenarios || [];
+    if (!q) return list.slice();
+    return list.filter(function (s) {
+      return [s.title, s.name, s.description, s.category].some(function (v) {
+        return String(v || "").toLowerCase().indexOf(q) !== -1;
+      });
+    });
+  }
+
   function findScenario(scenarios, name) {
     var list = scenarios || [];
     for (var i = 0; i < list.length; i++) {
@@ -184,6 +211,9 @@
     ENTITY_TITLES: ENTITY_TITLES,
     COUNT_MIN: COUNT_MIN,
     COUNT_MAX: COUNT_MAX,
+    CLEANUP_SCENARIO: CLEANUP_SCENARIO,
+    isCleanupBatch: isCleanupBatch,
+    scenarioLabel: scenarioLabel,
     statusLabel: statusLabel,
     statusPill: statusPill,
     entityTitle: entityTitle,
@@ -197,6 +227,7 @@
     validateForm: validateForm,
     visibleBatches: visibleBatches,
     groupScenarios: groupScenarios,
+    filterScenarios: filterScenarios,
     findScenario: findScenario,
   };
 

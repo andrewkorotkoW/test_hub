@@ -672,6 +672,8 @@
       currentRunMobile = Boolean(payload.mobile);
       setPill(payload.status);
       cancelBtn.hidden = user.role === "customer" || !["queued", "running"].includes(payload.status);
+      // «Удалить данные прогона» — qa, только завершённый прогон (см. ui/project-data.js::dgCleanupRun).
+      cleanupRunDataBtn.hidden = !(canManageData && FINISHED_STATUSES.includes(payload.status));
       runLabelBadge.hidden = !payload.label;
       if (payload.label) runLabelBadge.textContent = `сборка: ${payload.label}`;
       runDeviceBadge.hidden = !payload.mobile;

@@ -224,6 +224,10 @@
             <input type="checkbox" id="run-follow-checkbox" checked> Следить за прогоном
           </label>
           <button id="share-run-btn" hidden>Поделиться</button>
+          <!-- «Удалить данные прогона» (qa, завершённый прогон): партия «очистка после прогона»
+               на вкладке «Данные» — generate.py --cleanup-autotests --since <старт прогона>,
+               см. ui/project-data.js::dgCleanupRun и app/routers/datagen.py. -->
+          <button id="cleanup-run-data-btn" class="dg-delete-btn" hidden title="Удалить данные автотестов, созданные на стенде с начала этого прогона">Удалить данные прогона</button>
           <button id="cancel-run-btn" class="danger" hidden>Отменить</button>
         </div>
 
@@ -435,7 +439,7 @@
       <div class="table-wrap table-sticky-head">
         <table class="hist-table">
           <thead>
-            <tr><th>ID</th><th>Статус</th><th>Стенд</th><th>Цель</th><th>Начат</th><th>Результат · Δ</th><th>Длительность</th><th>Кем запущен</th></tr>
+            <tr><th>ID</th><th>Статус</th><th>Стенд</th><th>Цель</th><th>Начат</th><th>Результат · Δ</th><th>Длительность</th><th>Кем запущен</th><th></th></tr>
           </thead>
           <tbody id="history-rows"></tbody>
         </table>
@@ -526,9 +530,17 @@
       <p id="data-unsupported" class="muted" hidden>В проекте нет <code>test_data_generation/generate.py</code> — генерация данных для него недоступна.</p>
 
       <div class="datagen-form" id="data-form" hidden>
-        <div class="field">
-          <label for="data-scenario-select">Сценарий</label>
-          <select id="data-scenario-select"></select>
+        <!-- Свой комбобокс вместо <select> (как «Раздел» на странице «Статистика»): нативный
+             список из ~20 пунктов с группами ОС рисует во весь экран и не в стиле приложения.
+             Список — группы по категориям, фильтр по вводу, клавиатура; см. project-data.js. -->
+        <div class="field section-combobox datagen-combobox" id="data-scenario-combobox">
+          <label for="data-scenario-input">Сценарий</label>
+          <div class="section-combobox-input-wrap datagen-combobox-wrap">
+            <input type="text" id="data-scenario-input" placeholder="Выберите сценарий…" autocomplete="off">
+            <span class="section-combobox-arrow" aria-hidden="true">▾</span>
+            <!-- список внутри wrap (position: relative) — открывается вплотную под полем, а не под описанием -->
+            <ul id="data-scenario-list" class="section-combobox-list datagen-combobox-list" hidden></ul>
+          </div>
           <p class="muted datagen-hint" id="data-scenario-desc"></p>
         </div>
         <div class="datagen-form-row">

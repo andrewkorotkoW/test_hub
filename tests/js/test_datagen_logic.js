@@ -125,6 +125,31 @@ test("groupScenarios: группы по категориям в порядке �
   assert.deepStrictEqual(Logic.groupScenarios(null), []);
 });
 
+test("filterScenarios: подстрока в названии/имени/описании/категории без учёта регистра", function () {
+  var scenarios = [
+    { name: "users", title: "Пользователи по ролям", description: "N пользователей", category: "Пользователи и программы" },
+    { name: "aos", title: "Анкеты обратной связи (АОС)", description: "программа -> поток", category: "Активности" },
+    { name: "scorm", title: "Курсы SCORM", description: "N курсов SCORM 2004", category: "Активности" },
+  ];
+  assert.deepStrictEqual(Logic.filterScenarios(scenarios, "").map(function (s) { return s.name; }), ["users", "aos", "scorm"]);
+  assert.deepStrictEqual(Logic.filterScenarios(scenarios, "аос").map(function (s) { return s.name; }), ["aos"]);
+  assert.deepStrictEqual(Logic.filterScenarios(scenarios, "SCORM").map(function (s) { return s.name; }), ["scorm"]);
+  assert.deepStrictEqual(Logic.filterScenarios(scenarios, "активн").map(function (s) { return s.name; }), ["aos", "scorm"]);
+  assert.deepStrictEqual(Logic.filterScenarios(scenarios, "nope"), []);
+  assert.deepStrictEqual(Logic.filterScenarios(null, "x"), []);
+});
+
+test("isCleanupBatch/scenarioLabel: партия «очистка после прогона #N» vs обычный сценарий", function () {
+  var cleanup = batch({ scenario: "cleanup_after_run", run_id: 96 });
+  assert.ok(Logic.isCleanupBatch(cleanup));
+  assert.strictEqual(Logic.scenarioLabel(cleanup), "очистка после прогона #96");
+  assert.strictEqual(Logic.scenarioLabel(batch({ scenario: "cleanup_after_run", run_id: null })), "очистка после прогона");
+  assert.ok(!Logic.isCleanupBatch(batch()));
+  assert.strictEqual(Logic.scenarioLabel(batch()), "users");
+  assert.ok(!Logic.isCleanupBatch(null));
+  assert.strictEqual(Logic.scenarioLabel(null), "");
+});
+
 test("findScenario: по имени, иначе null", function () {
   var scenarios = [{ name: "users", description: "d", count_help: "h" }];
   assert.strictEqual(Logic.findScenario(scenarios, "users").count_help, "h");
