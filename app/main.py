@@ -9,11 +9,14 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from .config import BASE_DIR, settings
+# core.datagen — под псевдонимом: ниже из .routers импортируется одноимённый модуль-роутер,
+# и без псевдонима он затенил бы ядро (lifespan звал бы recover_stale у роутера).
+from .core import datagen as datagen_core
 from .core import demo_video, live, runner, schedule
 from .db import init_db
 from .routers import (
-    admin, auth, coverage, flaky, new_defects, product_map, projects, runs, schedules, sections, sentry, share,
-    stats, test_cases, users, xfail, youtrack_tasks,
+    admin, auth, coverage, datagen, flaky, new_defects, product_map, projects, runs, schedules, sections, sentry,
+    share, stats, test_cases, users, xfail, youtrack_tasks,
 )
 
 logger = logging.getLogger(__name__)
@@ -64,6 +67,11 @@ async def lifespan(app: FastAPI):
 
     runner.register_finalize_hook(schedule.on_run_finished)
     runner.register_finalize_hook(demo_video.on_run_finished)
+    # Партии тестовых данных (app/core/datagen.py), не доведённые прошлым процессом до
+    # done/deleted, завершить уже некому — помечаем сбоем, манифест сохраняем для удаления.
+    stale = datagen_core.recover_stale()
+    if stale:
+        logger.warning("datagen: %d незавершённых партий помечены как failed после рестарта", stale)
     scheduler_task = asyncio.create_task(schedule.scheduler_loop())
     app.state.schedule_task = scheduler_task
 
@@ -131,6 +139,7 @@ app.include_router(test_cases.router)
 app.include_router(sentry.router)
 app.include_router(product_map.router)
 app.include_router(youtrack_tasks.router)
+app.include_router(datagen.router)
 
 class NoCacheStaticFiles(StaticFiles):
     """Без Cache-Control браузер мог отдавать ui/*.js и ui/*.css из памяти вообще

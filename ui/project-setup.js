@@ -29,7 +29,7 @@
   // любой код, которому нужно синхронно (не из функции/колбэка) прочитать их значение
   // ПОСЛЕ этого файла, сам оборачивается в userReady.then(...) на своей стороне.
   let user;
-  let canShare, canSeeSentry, canManageSchedules;
+  let canShare, canSeeSentry, canManageSchedules, canManageData;
   const userReady = initPage().then((u) => {
     user = u;
     canShare = ["qa", "manager", "superadmin"].includes(user.role);
@@ -49,6 +49,11 @@
     // кнопки, которые всё равно ответят 403.
     canManageSchedules = ["qa", "superadmin"].includes(user.role);
     schedulesCard.hidden = !canManageSchedules;
+    // Роутер app/routers/datagen.py (вкладка «Данные», генерация тестовых данных на
+    // стенде) — тоже только qa: остальным ролям прячем и пункт вкладки, и карточку
+    // (саму карточку показывает project-data.js после загрузки сценариев).
+    canManageData = ["qa", "superadmin"].includes(user.role);
+    projectTabsNav.querySelector('a[data-tab="data"]').hidden = !canManageData;
     return user;
   });
 

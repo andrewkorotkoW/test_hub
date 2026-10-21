@@ -581,6 +581,65 @@ class ScheduleRunNowResult(BaseModel):
     run_id: int
 
 
+# ---------------- генерация тестовых данных (app/routers/datagen.py) ----------------
+
+class DataScenario(BaseModel):
+    name: str
+    title: str = ""
+    category: str = ""
+    description: str = ""
+    count_help: str = ""
+
+
+class DataScenariosResponse(BaseModel):
+    supported: bool
+    scenarios: list[DataScenario] = Field(default_factory=list)
+
+
+class DataEntityCount(BaseModel):
+    entity: str
+    count: int
+
+
+class DataCleanupSummary(BaseModel):
+    deleted: int = 0
+    failed: int = 0
+    skipped: int = 0
+
+
+class DataBatch(BaseModel):
+    id: int
+    project: str
+    stand: Optional[str] = None
+    scenario: str
+    count: int
+    prefix: Optional[str] = None
+    status: str
+    created_at: str
+    created_by: Optional[str] = None
+    finished_at: Optional[str] = None
+    deleted_at: Optional[str] = None
+    error: Optional[str] = None
+    created_total: int = 0
+    skipped_total: int = 0
+    entities: list[DataEntityCount] = Field(default_factory=list)
+    cleanup_summary: Optional[DataCleanupSummary] = None
+
+
+class DataBatchDetail(DataBatch):
+    manifest: Optional[dict] = None
+    cleanup: Optional[dict] = None
+    log: str = ""
+    delete_log: str = ""
+
+
+class DataBatchCreate(BaseModel):
+    scenario: str
+    stand: Optional[str] = None
+    count: int = 1
+    prefix: Optional[str] = None
+
+
 class SectionFile(BaseModel):
     name: str
     target: str

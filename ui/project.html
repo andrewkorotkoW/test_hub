@@ -43,6 +43,7 @@
       <a href="#history" data-tab="history">Прогоны</a>
       <a href="#flaky" data-tab="flaky">Флаки</a>
       <a href="#testcases" data-tab="testcases">Тест-кейсы</a>
+      <a href="#data" data-tab="data" hidden>Данные</a>
     </nav>
 
     <div class="tab-panel" data-tab-panel="dashboard">
@@ -512,6 +513,64 @@
       </div>
     </div>
     </div>
+  <!-- Вкладка «Данные» (только qa): генерация тестовых данных на стенде через CLI
+       проекта тестов test_data_generation/generate.py и удаление партий по манифесту
+       (app/routers/datagen.py, ui/project-data.js, чистая логика ui/datagen-logic.js). -->
+  <div class="tab-panel" data-tab-panel="data" hidden>
+    <div class="card" id="data-card" hidden>
+      <h2>Тестовые данные на стенде</h2>
+      <p class="muted datagen-intro">Сценарии — из CLI проекта тестов (<code>test_data_generation/generate.py</code>):
+        выберите сценарий, стенд и количество. Всё созданное попадает в манифест партии — по нему
+        данные удаляются одной кнопкой в том же порядке, в каком создавались (в обратном).</p>
+      <div id="data-error" class="error-box" hidden></div>
+      <p id="data-unsupported" class="muted" hidden>В проекте нет <code>test_data_generation/generate.py</code> — генерация данных для него недоступна.</p>
+
+      <div class="datagen-form" id="data-form" hidden>
+        <div class="field">
+          <label for="data-scenario-select">Сценарий</label>
+          <select id="data-scenario-select"></select>
+          <p class="muted datagen-hint" id="data-scenario-desc"></p>
+        </div>
+        <div class="datagen-form-row">
+          <div class="field">
+            <label for="data-stand-select">Стенд</label>
+            <select id="data-stand-select"><option value="">— окружение CLI по умолчанию (develop) —</option></select>
+          </div>
+          <div class="field">
+            <label for="data-count-input">Количество</label>
+            <input type="number" id="data-count-input" min="1" max="50" value="1">
+            <p class="muted datagen-hint" id="data-count-hint"></p>
+          </div>
+          <div class="field">
+            <label for="data-prefix-input">Префикс имён</label>
+            <input id="data-prefix-input" placeholder="например VSHGU2-2412" maxlength="40">
+            <p class="muted datagen-hint">Имена сущностей: Автотест_&lt;префикс&gt;_&lt;ts&gt;_…</p>
+          </div>
+        </div>
+        <div class="run-buttons">
+          <button id="data-create-btn" class="primary">Создать данные</button>
+          <span class="muted" id="data-form-note"></span>
+        </div>
+      </div>
+
+      <h3>Партии данных</h3>
+      <div class="datagen-list-head">
+        <label class="datagen-check"><input type="checkbox" id="data-show-deleted"> показывать удалённые</label>
+        <span class="muted" id="data-count-line"></span>
+      </div>
+      <div class="table-wrap table-sticky-head">
+        <table class="datagen-table">
+          <thead>
+            <tr>
+              <th>#</th><th>Статус</th><th>Сценарий</th><th>Стенд</th><th>N</th>
+              <th>Создано</th><th>Содержимое</th><th>Кем · когда</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="data-rows"><tr><td colspan="9" class="muted">Загрузка…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
   </main>
     </div>
   </div>
@@ -614,6 +673,7 @@
   <script src="run-report-logic.js"></script>
   <script src="runs-history-logic.js"></script>
   <script src="run-compare-logic.js"></script>
+  <script src="datagen-logic.js"></script>
   <!-- project-setup.js и project-*.js делят один lexical scope с project.js
        (классические <script>, без type="module") — см. шапку project-setup.js. -->
   <script src="project-setup.js"></script>
@@ -626,6 +686,7 @@
   <script src="project-run-compare.js"></script>
   <script src="project-dashboard.js"></script>
   <script src="project-testcases.js"></script>
+  <script src="project-data.js"></script>
   <script src="project.js"></script>
 </body>
 </html>

@@ -17,4 +17,5 @@ workspace/product_map/
 workspace/avatars/
 workspace/frames/
 workspace/testcases/
+workspace/datagen/
 demo/.state/

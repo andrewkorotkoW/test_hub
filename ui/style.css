@@ -2342,3 +2342,48 @@ a.sentry-row:hover { background: var(--surface-hover); }
   padding-top: 12px; margin-top: 4px; border-top: 1px solid var(--border);
 }
 .nd-actions { display: flex; gap: 8px; }
+
+/* ---------- вкладка «Данные» проекта (ui/project-data.js, ui/datagen-logic.js) ---------- */
+/* Пункт вкладки прячется для не-qa атрибутом hidden — .project-tabs a задаёт display,
+   поэтому [hidden] нужен явно (та же причина, что у .status-pill[hidden]). */
+.project-tabs a[hidden] { display: none; }
+.datagen-intro { max-width: 760px; }
+.datagen-form { display: flex; flex-direction: column; gap: 12px; max-width: 760px; margin-bottom: 20px; }
+.datagen-form-row { display: grid; grid-template-columns: 1fr 140px 1fr; gap: 12px; align-items: start; }
+.datagen-hint { font-size: 12px; margin: 0; }
+.datagen-list-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 6px 0 8px; }
+.datagen-check { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: normal; text-transform: none; }
+/* Компактная таблица партий: мелкий шрифт, узкие отступы, одна строка на партию
+   (сводка с многоточием, дата «сегодня 15:01»), маленькие кнопки. */
+.datagen-table { font-size: 12.5px; }
+.datagen-table td, .datagen-table th { padding: 5px 8px; vertical-align: middle; line-height: 1.3; }
+.datagen-table .dg-num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dg-scenario { white-space: nowrap; }
+.dg-scenario code { font-size: 12px; }
+.dg-sub { font-size: 11.5px; }
+/* max-width: 0 + width в процентах — единственный способ заставить ячейку auto-таблицы
+   резать содержимое многоточием, а не растягивать таблицу шире карточки. */
+.datagen-table { width: 100%; }
+.dg-summary { width: 30%; max-width: 0; }
+.dg-summary-text { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dg-who { white-space: nowrap; }
+.dg-error { color: var(--failed); font-size: 11.5px; margin-top: 2px; white-space: normal; }
+.dg-ok { color: var(--passed); }
+.dg-actions { white-space: nowrap; text-align: right; }
+.dg-actions button { padding: 3px 9px; font-size: 12px; margin-left: 6px; }
+.dg-delete-btn { border-color: var(--failed); color: var(--failed); background: transparent; }
+.dg-delete-btn:hover { background: color-mix(in srgb, var(--failed) 12%, transparent); }
+.dg-row-open td { border-bottom: none; }
+.dg-detail-row td { background: var(--surface-hover); padding: 6px 10px 8px; }
+.dg-manifest { width: auto; min-width: 60%; font-size: 12px; margin: 2px 0 6px; }
+.dg-manifest td, .dg-manifest th { padding: 3px 10px 3px 0; line-height: 1.3; }
+.dg-manifest th { font-size: 10.5px; text-transform: uppercase; color: var(--text-muted); }
+.dg-log-spoiler { margin-top: 6px; }
+.dg-log-spoiler summary { cursor: pointer; font-size: 12.5px; color: var(--text-muted); }
+.dg-log {
+  max-height: 320px; overflow: auto; font-size: 11.5px; white-space: pre-wrap; word-break: break-word;
+  background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; margin: 6px 0 0;
+}
+@media (max-width: 720px) {
+  .datagen-form-row { grid-template-columns: 1fr; }
+}

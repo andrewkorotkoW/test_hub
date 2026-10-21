@@ -195,6 +195,29 @@ CREATE TABLE IF NOT EXISTS user_projects (
     project TEXT NOT NULL REFERENCES projects(name) ON DELETE CASCADE,
     PRIMARY KEY (user_login, project)
 );
+
+-- Партии тестовых данных, созданных на стенде CLI проекта тестов
+-- (test_data_generation/generate.py, см. app/core/datagen.py): manifest — JSON созданных
+-- сущностей для последующего --cleanup, log/delete_log — объединённый stdout/stderr
+-- subprocess создания/удаления, cleanup_result — JSON-итог удаления.
+CREATE TABLE IF NOT EXISTS data_batches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project TEXT NOT NULL REFERENCES projects(name) ON DELETE CASCADE,
+    stand TEXT,
+    scenario TEXT NOT NULL,
+    count INTEGER NOT NULL DEFAULT 1,
+    prefix TEXT,
+    status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'done', 'failed', 'deleting', 'deleted', 'delete_failed')),
+    created_at TEXT NOT NULL,
+    created_by TEXT,
+    finished_at TEXT,
+    deleted_at TEXT,
+    manifest TEXT,
+    cleanup_result TEXT,
+    log TEXT NOT NULL DEFAULT '',
+    delete_log TEXT NOT NULL DEFAULT '',
+    error TEXT
+);
 """
 
 SEED_USERS = [
