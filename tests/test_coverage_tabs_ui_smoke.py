@@ -85,6 +85,10 @@ def test_style_css_sticky_toolbar_and_accordion_rules():
         ".coverage-toolbar-card { position: sticky;",
         ".coverage-toolbar-card { position: sticky; top: 94px;",
         "#coverage-detail-card { position: sticky; top: 178px;",
+        # «Связи» вровень с верхом «Карты маршрутов» (у .card свой margin-top) и
+        # фиксированная колонка имени области, чтобы полосы стояли в одну линию (21.10)
+        "overflow: auto; margin-top: 0; }",
+        "flex: 0 0 210px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;",
         ".route-area-head {",
         ".route-area-grid[hidden] { display: none; }",
         ".route-area-selected {",

@@ -56,7 +56,7 @@
       <div class="route-area${selected ? " route-area-selected" : ""}${filtersActive && !stats.visible ? " route-area-empty" : ""}" data-area="${escapeHtml(area.area)}">
         <button type="button" class="route-area-head" data-area-toggle="${escapeHtml(area.area)}" aria-expanded="${expanded}">
           <span class="ab-caret">${expanded ? "▾" : "▸"}</span>
-          <span class="route-area-name">${escapeHtml(area.area)}</span>
+          <span class="route-area-name" title="${escapeHtml(area.area)}">${escapeHtml(area.area)}</span>
           <span class="route-area-bar" title="покрыто тестами ${stats.covered} из ${stats.total}"><span style="width:${pct.toFixed(1)}%"></span></span>
           <span class="route-area-n">${stats.covered}/${stats.total}</span>
           ${stats.failed ? `<span class="route-area-failed" title="маршрутов с падением на стенде">✗ ${stats.failed}</span>` : ""}
