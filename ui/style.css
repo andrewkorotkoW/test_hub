@@ -1872,7 +1872,10 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 /* Карточка целиком открывает отчёт (project-dashboard.js::runsFeedItemHtml) — подсветка
    и курсор как у кликабельных строк таблиц; «Поделиться» справа — своя область. */
 .runs-feed-item.clickable { cursor: pointer; transition: border-color .12s, background .12s; }
-.runs-feed-item.clickable:hover, .runs-feed-item.clickable:focus-visible { border-color: var(--accent); background: var(--surface-hover); outline: none; }
+/* без акцентной (жёлтой у VSHGU) рамки при наведении — замечание владельца 21.10:
+   только фон, как у кликабельных строк таблиц; рамка остаётся для фокуса с клавиатуры */
+.runs-feed-item.clickable:hover { background: var(--surface-hover); }
+.runs-feed-item.clickable:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .runs-feed-actions { border-left: 1px solid var(--border); padding-left: 10px; }
 .runs-feed-meta { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--text-muted); }
 .runs-feed-id { font-weight: 600; color: var(--text); }

@@ -1,29 +1,77 @@
 // Публичная страница отчёта прогона (без логина, только чтение) — app/routers/share.py.
 // Не использует initPage()/requireAuth() из common.js: ссылка должна открываться без сессии.
+//
+// Состав и порядок блоков — как у окна прогона на странице проекта
+// (ui/project-run-window.js: renderRunStats / renderReportCharts / renderReportRows),
+// на той же чистой логике (RunReportLogic, RunWindowSplitLogic, RunCompareLogic,
+// DashboardChartsLogic) и тех же CSS-классах, только данные берутся из
+// /share/<token>/data.json (причины, тренд и видео уже внутри) и нет «Сплита»/лога/
+// сравнения — на публичной странице нечего открывать и нечего сравнивать.
 (function () {
   const parts = window.location.pathname.split("/").filter(Boolean); // ["share", "<token>"]
   const token = parts[1];
 
   const runCard = document.getElementById("run-card");
   const runTitle = document.getElementById("run-title");
-  const runMeta = document.getElementById("run-meta");
-  const reportChart = document.getElementById("report-chart");
+  const runLabelBadge = document.getElementById("run-label-badge");
+  const runDeviceBadge = document.getElementById("run-device-badge");
+  const runStatusPill = document.getElementById("run-status-pill");
+  const runStats = document.getElementById("run-stats");
+  const runStatStand = document.getElementById("run-stat-stand");
+  const runStatStarted = document.getElementById("run-stat-started");
+  const runStatDuration = document.getElementById("run-stat-duration");
+  const runStatPassRate = document.getElementById("run-stat-pass-rate");
+  const runStatCauses = document.getElementById("run-stat-causes");
   const badgesBox = document.getElementById("summary-badges");
+  const reportCharts = document.getElementById("report-charts");
+  const reportDonutCanvas = document.getElementById("report-donut-chart");
+  const reportDonutCenter = document.getElementById("report-donut-center");
+  const reportDonutLegend = document.getElementById("report-donut-legend");
+  const reportTrendCanvas = document.getElementById("report-trend-chart");
+  const reportLongestTests = document.getElementById("report-longest-tests");
+  const reportSection = document.getElementById("report-section");
+  const reportCauseFilter = document.getElementById("report-cause-filter");
   const reportRows = document.getElementById("report-rows");
   const statusFilter = document.getElementById("report-status-filter");
+  const nameFilter = document.getElementById("report-name-filter");
   const allureLink = document.getElementById("allure-link");
   const liveFrameArea = document.getElementById("live-frame-area");
+  const themeToggle = document.getElementById("share-theme-toggle");
 
+  let currentData = null;
   let currentTests = [];
+  let activeReportCause = "all";
   let liveTimer = null;
   let liveObjectUrl = null;
   let liveFrameImg = null;
+  let reportDonutChart = null;
+  let reportTrendChart = null;
   // run.mobile (docs/missions/2026-10-06_mobile_frame.md, п.3) — рамка Pixel 7 вокруг
   // кадра эфира/видео, тот же приём, что в ui/project.js::maybePhoneFrame, только здесь
   // у статус-бара нет ts кадра (контракт /share/<token>/live.jpg отдаёт бинарный jpeg,
   // не JSON, и его менять нельзя) — показываем время получения кадра на клиенте.
   let runMobile = false;
 
+  // ---------------- тема ----------------
+  // У share-страницы нет сайдбара с переключателем (common.js::renderHeader) — своя кнопка в
+  // шапке; тема общая с основным приложением (тот же ключ localStorage в applyTheme).
+  function renderThemeToggle() {
+    const theme = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+    themeToggle.textContent = theme === "dark" ? "Тёмная тема" : "Светлая тема";
+    themeToggle.setAttribute("aria-pressed", theme === "light" ? "true" : "false");
+  }
+  themeToggle.addEventListener("click", () => {
+    const next = document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light";
+    applyTheme(next);
+    renderThemeToggle();
+  });
+  renderThemeToggle();
+  // Chart.js читает цвета темы один раз при создании — перерисовываем графики при смене.
+  new MutationObserver(() => {
+    if (currentData && !reportCharts.hidden) renderReportCharts(currentData);
+  }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+  // ---------------- рамка телефона и эфир ----------------
   const PHONE_FRAME_OFF_KEY = "th_phone_frame_off";
   function isPhoneFrameOff() {
     try { return localStorage.getItem(PHONE_FRAME_OFF_KEY) === "1"; } catch { return false; }
@@ -108,20 +156,141 @@
     liveTimer = setInterval(tick, 2000);
   }
 
-  function renderRows() {
-    const status = statusFilter.value;
-    const rows = currentTests.filter((t) => !status || t.status === status);
-    if (!rows.length) {
-      reportRows.innerHTML = `<tr><td colspan="3" class="muted">Нет тестов, соответствующих фильтру.</td></tr>`;
+  // ---------------- шапка и KPI ----------------
+  function setPill(status) {
+    runStatusPill.className = `status-pill ${status}`;
+    runStatusPill.dataset.status = status;
+    runStatusPill.textContent = status;
+  }
+
+  function renderRunStats(data) {
+    const run = data.run || {};
+    const counts = data.counts || {};
+    runStatStand.textContent = run.stand || "—";
+    runStatStarted.textContent = fmtDate(run.started);
+    runStatDuration.textContent = RunReportLogic.fmtRunDuration(run.duration);
+    const rate = RunReportLogic.passRate(counts);
+    runStatPassRate.textContent = rate == null ? "—" : `${rate} %`;
+    runStatPassRate.classList.toggle("bad", rate != null && rate < 50);
+    badgesBox.innerHTML = ["passed", "failed", "broken", "skipped"]
+      .map((s) => `<span class="badge ${s}">${s}: ${counts[s] || 0}</span>`)
+      .join("");
+    const chips = RunReportLogic.causeChips(data.causes).filter((c) => c.cause !== "all");
+    runStatCauses.hidden = !chips.length;
+    runStatCauses.innerHTML = chips.length
+      ? `<span>Причины:</span>${chips.map((c) =>
+          `<span class="cmp-tag ${c.cause === "code" ? "code" : "stand"}">${escapeHtml(c.label)} · ${c.count}</span>`
+        ).join("")}`
+      : "";
+    runStats.hidden = false;
+  }
+
+  // ---------------- графики (в цветах текущей темы, как в окне прогона) ----------------
+  function destroyReportCharts() {
+    if (reportDonutChart) { reportDonutChart.destroy(); reportDonutChart = null; }
+    if (reportTrendChart) { reportTrendChart.destroy(); reportTrendChart = null; }
+  }
+
+  function renderReportCharts(data) {
+    destroyReportCharts();
+    const counts = data.counts || {};
+    const segments = RunReportLogic.donutSegments(counts);
+    const rate = RunReportLogic.passRate(counts);
+    reportDonutCenter.innerHTML = segments.length
+      ? `<span class="value">${rate == null ? "—" : rate + "%"}</span><span class="label">passed</span>`
+      : `<span class="label">нет данных</span>`;
+    reportDonutLegend.innerHTML = segments.map((s) =>
+      `<span class="chart-legend-item"><span class="chart-legend-dot" style="background:var(${s.colorVar})"></span>${escapeHtml(s.status)} ${s.count}</span>`
+    ).join("");
+    if (segments.length && window.Chart) {
+      applyChartFontDefaults();
+      reportDonutChart = new Chart(reportDonutCanvas, {
+        type: "doughnut",
+        data: {
+          labels: segments.map((s) => s.status),
+          datasets: [{ data: segments.map((s) => s.count), backgroundColor: segments.map((s) => cssVar(s.colorVar)), borderWidth: 0 }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false, cutout: "72%",
+          animation: { duration: 500, easing: "easeOutQuart" },
+          plugins: { legend: { display: false }, tooltip: tooltipStyle() },
+        },
+      });
+    }
+    const trend = RunReportLogic.trendRuns(data.trend || [], data.run, 10);
+    if (trend.length && window.Chart) {
+      reportTrendChart = buildBarChart(reportTrendCanvas, {
+        labels: trend.map(RunReportLogic.trendLabel),
+        datasets: [
+          { label: "passed", data: trend.map((r) => Number((r.counts || {}).passed || 0)), backgroundColor: cssVar("--passed"), borderRadius: 4, maxBarThickness: 22 },
+          { label: "failed", data: trend.map((r) => Number((r.counts || {}).failed || 0)), backgroundColor: cssVar("--failed"), borderRadius: 4, maxBarThickness: 22 },
+        ],
+      });
+    }
+    const bars = DashboardChartsLogic.longestTestsBarsHtml(data.tests || [], { top: 10 });
+    reportLongestTests.innerHTML = bars || `<p class="muted">Нет данных о длительности тестов.</p>`;
+    reportCharts.hidden = false;
+  }
+
+  // ---------------- «Итог прогона» ----------------
+  function renderCauseFilter(data) {
+    const chips = RunReportLogic.causeChips(data.causes);
+    if (!(data.causes && data.causes.total)) {
+      reportCauseFilter.innerHTML = "";
+      activeReportCause = "all";
       return;
     }
-    reportRows.innerHTML = rows.map((t, i) => `
+    reportCauseFilter.innerHTML = chips.map((c) => `
+      <button type="button" class="cause-chip" data-cause="${escapeHtml(c.cause)}" aria-current="${String(c.cause === activeReportCause)}">
+        ${escapeHtml(c.label)} <span class="n">${c.count}</span>
+      </button>`).join("");
+  }
+
+  reportCauseFilter.addEventListener("click", (ev) => {
+    const btn = ev.target.closest(".cause-chip");
+    if (!btn) return;
+    activeReportCause = btn.dataset.cause;
+    reportCauseFilter.querySelectorAll(".cause-chip").forEach((b) => {
+      b.setAttribute("aria-current", String(b.dataset.cause === activeReportCause));
+    });
+    renderRows();
+  });
+
+  function reportRowHtml(t, i) {
+    const status = RunWindowSplitLogic.normalizeTestStatus(t.status);
+    const nodeid = t.nodeid || t.name;
+    const parts = nodeid.includes("::")
+      ? { path: nodeid.slice(0, nodeid.indexOf("::")), short: nodeid.slice(nodeid.indexOf("::") + 2) }
+      : { path: "", short: nodeid };
+    const isFailure = status === "failed" || status === "broken";
+    const tag = isFailure ? RunCompareLogic.causeTag(t) : null;
+    const reasonHtml = isFailure
+      ? `<span class="msg" title="${escapeHtml(t.short_reason || "")}">${escapeHtml(t.short_reason || "—")}</span>`
+        + (t.cause ? `<span class="cmp-tag ${tag.cls}">${escapeHtml(tag.cls === "code" ? RunReportLogic.CAUSE_LABELS.code : tag.text)}</span>` : "")
+      : `<span class="muted">—</span>`;
+    return `
       <tr class="clickable" data-idx="${i}">
-        <td>${escapeHtml(t.name)}</td>
-        <td class="status-text ${escapeHtml(t.status)}">${escapeHtml(t.status)}</td>
+        <td class="report-name">${parts.path ? `<small>${escapeHtml(parts.path)}::</small>` : ""}${escapeHtml(parts.short)}${t.has_video ? ` <span class="muted" title="есть видео теста">▶</span>` : ""}</td>
+        <td class="status-text ${escapeHtml(status)}">${escapeHtml(status)}</td>
+        <td class="report-reason">${reasonHtml}</td>
         <td>${fmtDuration(t.duration)}</td>
-      </tr>
-    `).join("");
+      </tr>`;
+  }
+
+  function renderRows() {
+    const status = statusFilter.value;
+    const name = nameFilter.value.trim().toLowerCase();
+    const sorted = RunReportLogic.sortForReport(currentTests, RunWindowSplitLogic.normalizeTestStatus);
+    const rows = RunReportLogic.filterByCause(sorted, activeReportCause).filter((t) => {
+      if (status && t.status !== status) return false;
+      if (name && !(t.nodeid || t.name).toLowerCase().includes(name)) return false;
+      return true;
+    });
+    if (!rows.length) {
+      reportRows.innerHTML = `<tr><td colspan="4" class="muted">Нет тестов, соответствующих фильтру.</td></tr>`;
+      return;
+    }
+    reportRows.innerHTML = rows.map(reportRowHtml).join("");
     reportRows.dataset.rows = JSON.stringify(rows);
   }
 
@@ -155,11 +324,42 @@
           ""
         )
       : "";
-    detail.innerHTML = `<td colspan="3">${videoHtml}<pre class="trace-pre">${escapeHtml(test.message || "Подробностей нет.")}</pre></td>`;
+    detail.innerHTML = `<td colspan="4">${videoHtml}<pre class="trace-pre">${escapeHtml(test.message || "Подробностей нет.")}</pre></td>`;
     tr.after(detail);
   }
 
   statusFilter.addEventListener("change", renderRows);
+  nameFilter.addEventListener("input", renderRows);
+
+  // ---------------- загрузка ----------------
+  function render(data) {
+    currentData = data;
+    const run = data.run || {};
+    runMobile = Boolean(run.mobile);
+    renderLiveFrameArea();
+    runTitle.childNodes[0].textContent = `${run.project || "?"} — прогон #${run.id ?? "?"}`;
+    runLabelBadge.hidden = !run.label;
+    if (run.label) runLabelBadge.textContent = `сборка: ${run.label}`;
+    runDeviceBadge.hidden = !run.mobile;
+    setPill(run.status || "queued");
+    document.title = `Test Hub — ${run.project || ""} прогон #${run.id ?? ""}`;
+
+    if (data.allure_url) {
+      allureLink.href = data.allure_url;
+      allureLink.hidden = false;
+    }
+
+    currentTests = (data.tests || []).map((t) => ({
+      ...t,
+      video_url: `/share/${encodeURIComponent(token)}/tests/${encodeURIComponent(t.nodeid)}/video`,
+    }));
+    renderRunStats(data);
+    renderCauseFilter(data);
+    renderReportCharts(data);
+    reportSection.hidden = false;
+    renderRows();
+    runCard.hidden = false;
+  }
 
   (async function load() {
     if (!token) {
@@ -177,37 +377,7 @@
       );
       return;
     }
-
-    runCard.hidden = false;
-    const run = data.run || {};
-    runMobile = Boolean(run.mobile);
-    renderLiveFrameArea();
-    runTitle.textContent = `${run.project || "?"} — прогон #${run.id ?? "?"}`;
-    runMeta.textContent = [
-      run.stand ? `стенд: ${run.stand}` : "без стенда",
-      `начат: ${fmtDate(run.started)}`,
-      `длительность: ${fmtDuration(run.duration)}`,
-    ].join(" · ");
-
-    reportChart.src = data.report_png_url || `/share/${encodeURIComponent(token)}/report.png`;
-    reportChart.hidden = false;
-
-    const counts = data.counts || {};
-    badgesBox.innerHTML = ["passed", "failed", "broken", "skipped"]
-      .map((s) => `<span class="badge ${s}">${s}: ${counts[s] || 0}</span>`)
-      .join("");
-
-    if (data.allure_url) {
-      allureLink.href = data.allure_url;
-      allureLink.hidden = false;
-    }
-
-    currentTests = (data.tests || []).map((t) => ({
-      ...t,
-      video_url: `/share/${encodeURIComponent(token)}/tests/${encodeURIComponent(t.nodeid)}/video`,
-    }));
-    renderRows();
-
+    render(data);
     if (data.live_frame_url) startLivePolling(data.live_frame_url);
   })();
 })();

@@ -26,6 +26,8 @@ def test_feed_card_is_clickable_and_opens_run():
 
 def test_feed_card_styles_and_tour_anchor():
     assert ".runs-feed-item.clickable { cursor: pointer;" in STYLE_CSS
-    assert ".runs-feed-item.clickable:hover, .runs-feed-item.clickable:focus-visible {" in STYLE_CSS
+    # при наведении — только фон, без акцентной рамки (замечание владельца 21.10)
+    assert ".runs-feed-item.clickable:hover { background: var(--surface-hover); }" in STYLE_CSS
+    assert ".runs-feed-item.clickable:focus-visible { outline: 2px solid var(--accent);" in STYLE_CSS
     assert ".runs-feed-actions { border-left: 1px solid var(--border);" in STYLE_CSS
     assert "runs-feed-report-btn" not in TOUR_JS, "тур должен указывать на карточку, а не на убранную кнопку"

@@ -221,7 +221,19 @@ async def test_public_share_data_json_scoped_to_own_run(qa_client, isolated_allu
     for test in data["tests"]:
         assert set(test.keys()) == {
             "name", "status", "duration", "message", "nodeid", "has_video", "video_duration_ms",
+            # причина падения и короткое сообщение — как в GET /api/runs/{id}/report, для
+            # колонки «Причина» и чипов фильтра на share-странице (21.10.2026)
+            "cause", "short_reason",
+            # params/stop_ts — выбор последней попытки для топ-10 долгих (lastAttempts)
+            "params", "stop_ts",
         }
+        if test["status"] == "failed":
+            assert test["short_reason"], "у упавшего теста есть короткая причина"
+    # сводка причин и тренд по стенду — те же блоки, что в окне прогона
+    assert set(data["causes"]) >= {"code", "total"} and data["causes"]["total"] >= 0
+    assert [r["id"] for r in data["trend"]] == [run_a], "тренд — только прогоны того же проекта и стенда"
+    assert set(data["trend"][0].keys()) == {"id", "started", "stand", "counts"}
+    assert data["run"]["label"] is None
     # прогон уже завершён (_run_fixture_project ждёт этого) — эфира быть не может.
     assert data["live_frame_url"] is None
 
@@ -459,6 +471,34 @@ def test_public_page_assets_are_root_relative(client_qa_and_run=None):
     html = Path(__file__).resolve().parents[1].joinpath("ui", "share.html").read_text(encoding="utf-8")
     assert 'href="/style.css"' in html and 'src="/share.js"' in html and 'src="/common.js"' in html
     assert 'href="style.css"' not in html and 'src="share.js"' not in html
+    # чистая логика отчёта — та же, что у окна прогона, тоже абсолютными путями
+    for asset in ("/run-report-logic.js", "/run-window-split-logic.js", "/run-compare-logic.js", "/dashboard-charts-logic.js"):
+        assert f'src="{asset}"' in html, asset
+
+
+def test_public_page_mirrors_run_window_blocks():
+    """share.html повторяет состав окна прогона (21.10.2026): статус-пилюля, строка KPI,
+    графики в цветах темы (кольцо/тренд/топ-10), «Итог прогона» с чипами причин, фильтром
+    по статусу и имени и колонкой «Причина»; серверный PNG-график больше не встраивается;
+    своя кнопка темы в шапке."""
+    from pathlib import Path
+    ui = Path(__file__).resolve().parents[1] / "ui"
+    html = (ui / "share.html").read_text(encoding="utf-8")
+    js = (ui / "share.js").read_text(encoding="utf-8")
+    for needle in ('id="run-status-pill"', 'id="run-stats"', 'id="run-stat-pass-rate"', 'id="run-stat-causes"',
+                   'id="report-charts"', 'id="report-donut-chart"', 'id="report-trend-chart"', 'id="report-longest-tests"',
+                   'id="report-cause-filter"', 'id="report-name-filter"', "<th>Причина</th>", 'id="share-theme-toggle"',
+                   "chart.umd.min.js"):
+        assert needle in html, needle
+    assert 'id="report-chart"' not in html, "PNG-график остаётся только для Telegram"
+    for needle in ("RunReportLogic.fmtRunDuration(run.duration)", "RunReportLogic.donutSegments(counts)",
+                   "RunReportLogic.trendRuns(data.trend || [], data.run, 10)",
+                   "DashboardChartsLogic.longestTestsBarsHtml(data.tests || [], { top: 10 })",
+                   "RunReportLogic.sortForReport(currentTests, RunWindowSplitLogic.normalizeTestStatus)",
+                   "RunReportLogic.filterByCause(sorted, activeReportCause)", "RunCompareLogic.causeTag(t)",
+                   "applyTheme(next)", 'attributeFilter: ["data-theme"]'):
+        assert needle in js, needle
+    assert "report_png_url" not in js
 
 
 # ------------------------------------------------------------------ share без авторизации: видео и живой кадр

@@ -20,7 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import FileResponse, HTMLResponse, Response
 
 from ..config import settings
-from ..core import allure_report, charts, live, runner
+from ..core import allure_report, charts, failure_causes, live, runner
 from ..deps import get_db, require_roles
 from ..schemas import ShareLink, ShareLinkCreate
 
@@ -151,6 +151,7 @@ def _public_run_payload(row: sqlite3.Row) -> dict:
         "started": row["started"],
         "finished": row["finished"],
         "duration": row["duration"],
+        "label": row["label"],
         "live": bool(row["live"]),
         "mobile": bool(row["mobile"]),
     }
@@ -221,6 +222,35 @@ async def public_share_data(token: str, conn: sqlite3.Connection = Depends(get_d
         json.loads(run["counts"]) if run["counts"] and run["counts"] != "{}" else allure_report.counts_from_tests(tests)
     )
 
+    # Причины падений — как в авторизованном GET /api/runs/{id}/report (app/routers/runs.py):
+    # share-страница показывает тот же «Итог прогона» с чипами причин и колонкой «Причина».
+    await failure_causes.ensure_run_results(run["id"])
+    cause_by_full_name = {
+        r["full_name"]: r["cause"]
+        for r in conn.execute("SELECT full_name, cause FROM run_test_results WHERE run_id = ?", (run["id"],)).fetchall()
+    }
+    causes = {cause: 0 for cause in failure_causes.ALL_CAUSES}
+    for t in tests:
+        t["cause"] = cause_by_full_name.get(t["name"])
+        if t["cause"] in causes:
+            causes[t["cause"]] += 1
+    causes["total"] = sum(causes[c] for c in failure_causes.ALL_CAUSES)
+
+    # Тренд passed/failed на том же стенде — последние 10 завершённых прогонов проекта
+    # (только id, дата старта, стенд и счётчики — ничего лишнего наружу).
+    trend_rows = conn.execute(
+        "SELECT id, started, stand, counts FROM runs WHERE project = ? AND stand IS ? "
+        "AND status IN ('passed', 'failed', 'cancelled') ORDER BY id DESC LIMIT 10",
+        (run["project"], run["stand"]),
+    ).fetchall()
+    trend = [
+        {
+            "id": r["id"], "started": r["started"], "stand": r["stand"],
+            "counts": json.loads(r["counts"]) if r["counts"] and r["counts"] != "{}" else {},
+        }
+        for r in trend_rows
+    ]
+
     # nodeid каждого теста — видео (п.3 контракта) и живой кадр адресуются по nodeid,
     # allure отдаёт только fullName (та же развязка, что в app.routers.runs::list_run_tests).
     project = conn.execute("SELECT path, venv FROM projects WHERE name = ?", (run["project"],)).fetchone()
@@ -244,6 +274,13 @@ async def public_share_data(token: str, conn: sqlite3.Connection = Depends(get_d
             "status": t["status"],
             "duration": t["duration"],
             "message": (t["message"][:1500] if t["message"] else None),
+            "cause": t.get("cause"),
+            "short_reason": failure_causes.short_reason(t.get("message")),
+            # params/stop_ts — по ним DashboardChartsLogic.lastAttempts выбирает последнюю попытку
+            # теста для топ-10 долгих (без stop_ts брался бы последний по порядку файлов allure,
+            # и топ-10 на share-странице расходился с окном прогона).
+            "params": t.get("params"),
+            "stop_ts": t.get("stop_ts"),
             "has_video": nodeid in video_duration_by_nodeid,
             "video_duration_ms": video_duration_by_nodeid.get(nodeid),
         })
@@ -252,6 +289,8 @@ async def public_share_data(token: str, conn: sqlite3.Connection = Depends(get_d
     return {
         "run": _public_run_payload(run),
         "counts": counts,
+        "causes": causes,
+        "trend": trend,
         "tests": public_tests,
         "allure_available": allure_ready,
         "report_png_url": f"/share/{token}/report.png",

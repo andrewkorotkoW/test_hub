@@ -7,9 +7,18 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+  <!-- Страница лежит на вложенном пути /share/<token> — все ссылки на свои ассеты
+       абсолютные (см. tests/test_share.py::test_public_page_assets_are_root_relative). -->
   <link rel="stylesheet" href="/style.css">
   <script src="/common.js"></script>
   <script src="/run-live-logic.js"></script>
+  <!-- Та же чистая логика отчёта, что в окне прогона (ui/project-run-window.js):
+       сортировка/причины/кольцо/тренд, нормализация статусов, тег причины, топ-10 долгих. -->
+  <script src="/run-report-logic.js"></script>
+  <script src="/run-window-split-logic.js"></script>
+  <script src="/run-compare-logic.js"></script>
+  <script src="/dashboard-charts-logic.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 </head>
 <body>
   <header class="site-header">
@@ -17,37 +26,76 @@
       <span class="brand">Test Hub</span>
       <span class="muted">публичный отчёт — только чтение</span>
     </div>
+    <div class="header-right">
+      <button type="button" id="share-theme-toggle" class="theme-toggle" aria-pressed="false">Светлая тема</button>
+    </div>
   </header>
   <main class="page">
     <div id="page-error" class="error-box" hidden></div>
 
+    <!-- Отчёт в том же составе и порядке, что окно прогона на странице проекта
+         (ui/project.html #run-card): шапка со статусом, строка KPI, эфир/рамка телефона,
+         графики в цветах темы, «Итог прогона» с причинами. Серверный PNG больше не
+         показывается — он остаётся для Telegram. -->
     <div class="card" id="run-card" hidden>
       <div class="page-head">
-        <h1 id="run-title">Прогон</h1>
-        <a id="allure-link" class="coverage-link" href="#" target="_blank" rel="noopener" hidden>Allure-отчёт</a>
+        <h1 id="run-title">Прогон<span id="run-label-badge" class="badge-manual" hidden></span><span id="run-device-badge" class="badge-manual" hidden>Устройство: Pixel 7</span></h1>
+        <div class="page-head-actions">
+          <span id="run-status-pill" class="status-pill queued" data-status="queued">queued</span>
+          <a id="allure-link" class="nav-button" href="#" target="_blank" rel="noopener" hidden>Allure-отчёт</a>
+        </div>
       </div>
-      <p class="muted" id="run-meta"></p>
+
+      <div id="run-stats" class="run-stats" hidden>
+        <div class="run-stat"><span class="k">Стенд</span><b id="run-stat-stand">—</b></div>
+        <div class="run-stat"><span class="k">Начало</span><b id="run-stat-started">—</b></div>
+        <div class="run-stat"><span class="k">Длительность</span><b id="run-stat-duration">—</b></div>
+        <div class="run-stat"><span class="k">Pass rate</span><b id="run-stat-pass-rate">—</b></div>
+        <div id="summary-badges" class="summary-badges"></div>
+        <div id="run-stat-causes" class="run-stat-causes" hidden></div>
+      </div>
 
       <div id="live-frame-area"></div>
 
-      <img id="report-chart" class="report-chart" alt="График отчёта прогона" hidden>
-
-      <div id="summary-badges" class="summary-badges"></div>
-      <div class="report-filters">
-        <select id="report-status-filter">
-          <option value="">Все статусы</option>
-          <option value="passed">passed</option>
-          <option value="failed">failed</option>
-          <option value="broken">broken</option>
-          <option value="skipped">skipped</option>
-          <option value="unknown">unknown</option>
-        </select>
+      <div id="report-charts" class="report-charts" hidden>
+        <div class="chart-box">
+          <h3>Результаты</h3>
+          <div class="chart-donut-wrap">
+            <canvas id="report-donut-chart"></canvas>
+            <div class="chart-donut-center" id="report-donut-center"></div>
+          </div>
+          <div class="chart-legend" id="report-donut-legend"></div>
+        </div>
+        <div class="chart-box">
+          <h3>Тренд <span class="h3-hint">passed / failed на этом стенде, последние 10 прогонов</span></h3>
+          <div class="chart-canvas-wrap"><canvas id="report-trend-chart"></canvas></div>
+        </div>
+        <div class="chart-box chart-box-wide">
+          <h3>Топ-10 самых долгих тестов</h3>
+          <div id="report-longest-tests"></div>
+        </div>
       </div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Тест</th><th>Статус</th><th>Длительность</th></tr></thead>
-          <tbody id="report-rows"></tbody>
-        </table>
+
+      <div id="report-section" hidden>
+        <h3>Итог прогона <span class="h3-hint">упавшие и broken — первыми</span></h3>
+        <div class="report-filters">
+          <div id="report-cause-filter" class="report-cause-filter"></div>
+          <select id="report-status-filter">
+            <option value="">Все статусы</option>
+            <option value="passed">passed</option>
+            <option value="failed">failed</option>
+            <option value="broken">broken</option>
+            <option value="skipped">skipped</option>
+            <option value="unknown">unknown</option>
+          </select>
+          <input id="report-name-filter" placeholder="Фильтр по имени теста">
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Тест</th><th>Статус</th><th>Причина</th><th>Длительность</th></tr></thead>
+            <tbody id="report-rows"></tbody>
+          </table>
+        </div>
       </div>
     </div>
   </main>
