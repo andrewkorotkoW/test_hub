@@ -877,19 +877,55 @@
     }
   }
 
+  // Живые ссылки — «Копировать»/«Отозвать»; отозванные и просроченные — «Удалить»
+  // (DELETE …?purge=true, запись исчезает из списка) и общая «Удалить неактивные (N)»:
+  // раньше отозванные копились в модалке и список уезжал за край (замечание владельца 21.10).
   function renderShareLinks(runId, links) {
     if (!links.length) {
       shareLinksList.innerHTML = `<p class="muted">Ссылок ещё нет.</p>`;
       return;
     }
-    shareLinksList.innerHTML = links.map((l) => `
-      <div class="share-link-row ${l.revoked ? "revoked" : ""}" data-token="${escapeHtml(l.token)}">
+    const inactive = links.filter((l) => l.revoked || l.expired);
+    const head = `
+      <div class="share-links-head">
+        <span class="muted">${links.length} ${pluralRu(links.length, "ссылка", "ссылки", "ссылок")}${inactive.length ? `, неактивных ${inactive.length}` : ""}</span>
+        ${inactive.length ? `<button type="button" class="share-purge-all-btn">Удалить неактивные (${inactive.length})</button>` : ""}
+      </div>`;
+    shareLinksList.innerHTML = head + links.map((l) => {
+      const dead = l.revoked || l.expired;
+      const state = l.revoked ? "отозвана" : l.expired ? `истекла ${fmtDate(l.expires_at)}` : (l.expires_at ? `до ${fmtDate(l.expires_at)}` : "бессрочно");
+      const actions = dead
+        ? `<button class="share-purge-btn" title="Убрать из списка">Удалить</button>`
+        : `<button class="share-copy-btn">Копировать</button><button class="share-revoke-btn danger">Отозвать</button>`;
+      return `
+      <div class="share-link-row ${dead ? "revoked" : ""}" data-token="${escapeHtml(l.token)}">
         <span class="share-link-url">${escapeHtml(l.url)}</span>
-        <button class="share-copy-btn" ${l.revoked ? "disabled" : ""}>Копировать</button>
-        <button class="share-revoke-btn danger" ${l.revoked ? "disabled" : ""}>Отозвать</button>
-        <span class="share-link-meta">${l.revoked ? "отозвана" : (l.expires_at ? `до ${fmtDate(l.expires_at)}` : "бессрочно")} · создал ${escapeHtml(l.created_by)}</span>
-      </div>
-    `).join("");
+        ${actions}
+        <span class="share-link-meta">${escapeHtml(state)} · создал ${escapeHtml(l.created_by)}</span>
+      </div>`;
+    }).join("");
+
+    async function purge(tokens) {
+      for (const token of tokens) {
+        await api(`/api/runs/${runId}/share/${token}?purge=true`, { method: "DELETE" });
+      }
+      await loadShareLinks(runId);
+    }
+    shareLinksList.querySelectorAll(".share-purge-btn").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        btn.disabled = true;
+        try { await purge([btn.closest(".share-link-row").dataset.token]); }
+        catch (err) { alert(`Не удалось удалить ссылку: ${err.message}`); btn.disabled = false; }
+      });
+    });
+    const purgeAll = shareLinksList.querySelector(".share-purge-all-btn");
+    if (purgeAll) {
+      purgeAll.addEventListener("click", async () => {
+        purgeAll.disabled = true;
+        try { await purge(inactive.map((l) => l.token)); }
+        catch (err) { alert(`Не удалось удалить ссылки: ${err.message}`); purgeAll.disabled = false; }
+      });
+    }
 
     shareLinksList.querySelectorAll(".share-copy-btn").forEach((btn) => {
       btn.addEventListener("click", async () => {
@@ -920,6 +956,20 @@
     });
   }
 
+  // Срок действия — сегментированный переключатель (#share-expires, кнопки с data-expires),
+  // значение — у кнопки с aria-current="true"; по умолчанию 30 дней.
+  function shareExpiresValue() {
+    const active = shareExpiresGroup.querySelector('button[aria-current="true"]');
+    return active ? active.dataset.expires : "30d";
+  }
+  shareExpiresGroup.addEventListener("click", (ev) => {
+    const btn = ev.target.closest("button[data-expires]");
+    if (!btn) return;
+    shareExpiresGroup.querySelectorAll("button[data-expires]").forEach((b) => {
+      b.setAttribute("aria-current", String(b === btn));
+    });
+  });
+
   function openShareModal(runId) {
     shareOverlay.hidden = false;
     shareOverlay.dataset.runId = runId;
@@ -932,7 +982,7 @@
     const runId = Number(shareOverlay.dataset.runId);
     shareCreateBtn.disabled = true;
     try {
-      await api(`/api/runs/${runId}/share`, { method: "POST", json: { expires: shareExpiresSelect.value } });
+      await api(`/api/runs/${runId}/share`, { method: "POST", json: { expires: shareExpiresValue() } });
       await loadShareLinks(runId);
     } catch (err) {
       alert(`Не удалось создать ссылку: ${err.message}`);

@@ -105,6 +105,7 @@ class ShareLink(BaseModel):
     created_at: str
     expires_at: Optional[str] = None
     revoked: bool
+    expired: bool = False
 
 
 class UserCreate(BaseModel):

@@ -209,7 +209,7 @@
   const nameFilter = document.getElementById("report-name-filter");
   const historyRows = document.getElementById("history-rows");
   const shareOverlay = document.getElementById("share-modal-overlay");
-  const shareExpiresSelect = document.getElementById("share-expires-select");
+  const shareExpiresGroup = document.getElementById("share-expires");
   const shareCreateBtn = document.getElementById("share-create-btn");
   const shareLinksList = document.getElementById("share-links-list");
   const shareCloseBtn = document.getElementById("share-close-btn");

@@ -187,6 +187,61 @@ async def test_qa_can_revoke_share_link(qa_client, isolated_allure_dir, runnable
     assert row["revoked"] is True
 
 
+async def test_purge_removes_share_link_record(qa_client, isolated_allure_dir, runnable_project_dir):
+    """DELETE …/share/{token}?purge=true удаляет запись совсем (кнопка «Удалить» у отозванных/
+    просроченных в модалке, 21.10.2026): ссылки больше нет в списке и публично она 404."""
+    run_id, _ = await _run_fixture_project(qa_client, "share_purge_proj", runnable_project_dir)
+    token = (await qa_client.post(f"/api/runs/{run_id}/share", json={"expires": "7d"})).json()["token"]
+    keep = (await qa_client.post(f"/api/runs/{run_id}/share", json={"expires": "never"})).json()["token"]
+    listing = (await qa_client.get(f"/api/runs/{run_id}/share")).json()
+    assert {r["token"] for r in listing} == {token, keep}
+    assert all(r["expired"] is False for r in listing)
+
+    assert (await qa_client.delete(f"/api/runs/{run_id}/share/{token}?purge=true")).status_code == 204
+    listing = (await qa_client.get(f"/api/runs/{run_id}/share")).json()
+    assert [r["token"] for r in listing] == [keep]
+    async with _anon_client() as anon:
+        assert (await anon.get(f"/share/{token}/data.json")).status_code == 404
+        assert (await anon.get(f"/share/{keep}/data.json")).status_code == 200
+    assert (await qa_client.delete(f"/api/runs/{run_id}/share/{token}?purge=true")).status_code == 404
+
+
+async def test_share_link_expired_flag(qa_client, isolated_allure_dir, runnable_project_dir):
+    run_id, _ = await _run_fixture_project(qa_client, "share_expired_flag_proj", runnable_project_dir)
+    token = (await qa_client.post(f"/api/runs/{run_id}/share", json={"expires": "7d"})).json()["token"]
+    from app.db import get_connection
+
+    conn = get_connection()
+    try:
+        conn.execute("UPDATE share_links SET expires_at = '2000-01-01T00:00:00' WHERE token = ?", (token,))
+        conn.commit()
+    finally:
+        conn.close()
+    row = next(r for r in (await qa_client.get(f"/api/runs/{run_id}/share")).json() if r["token"] == token)
+    assert row["expired"] is True and row["revoked"] is False
+
+
+def test_share_modal_purge_controls_and_scrollable_list():
+    """Модалка «Поделиться»: у неактивных ссылок «Удалить», общая «Удалить неактивные (N)»,
+    список прокручивается внутри модалки, модалка не выше окна (21.10.2026)."""
+    from pathlib import Path
+    ui = Path(__file__).resolve().parents[1] / "ui"
+    js = (ui / "project-run-window.js").read_text(encoding="utf-8")
+    css = (ui / "style.css").read_text(encoding="utf-8")
+    for needle in ('class="share-purge-btn"', 'class="share-purge-all-btn"', "?purge=true", "l.revoked || l.expired",
+                   "Удалить неактивные (${inactive.length})"):
+        assert needle in js, needle
+    assert ".share-links-list { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto;" in css
+    # срок действия — сегментированный переключатель вместо нативного <select>
+    html = (ui / "project.html").read_text(encoding="utf-8")
+    assert 'id="share-expires" role="group"' in html and 'id="share-expires-select"' not in html
+    assert 'data-expires="30d" aria-current="true"' in html
+    assert "function shareExpiresValue()" in js and "expires: shareExpiresValue()" in js
+    assert '.share-expires button[aria-current="true"] {' in css
+    box = css[css.index(".modal-box {"):css.index(".modal-box h2")]
+    assert "max-height: 90vh;" in box and "flex-direction: column;" in box
+
+
 async def test_revoke_unknown_token_is_404(qa_client, isolated_allure_dir, runnable_project_dir):
     run_id, _ = await _run_fixture_project(qa_client, "share_revoke_unknown_proj", runnable_project_dir)
     resp = await qa_client.delete(f"/api/runs/{run_id}/share/does-not-exist")

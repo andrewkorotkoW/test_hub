@@ -79,6 +79,8 @@ def _share_payload(row: sqlite3.Row) -> dict:
         "created_at": row["created_at"],
         "expires_at": row["expires_at"],
         "revoked": bool(row["revoked"]),
+        # просроченная ссылка тоже «неживая» — в модалке у неё кнопка «Удалить», а не «Отозвать»
+        "expired": bool(row["expires_at"] and row["expires_at"] < _now_iso()),
     }
 
 
@@ -121,15 +123,22 @@ def list_share_links(
 def revoke_share_link(
     run_id: int,
     token: str,
+    purge: bool = False,
     conn: sqlite3.Connection = Depends(get_db),
     _user: sqlite3.Row = Depends(require_roles("qa", "manager")),
 ) -> None:
+    """Отзыв ссылки (revoked=1, запись остаётся в списке) или, с ?purge=true, удаление
+    записи совсем — чтобы отозванные/просроченные ссылки не копились в модалке
+    (замечание владельца 21.10.2026). Удалённый токен тоже отвечает 404 публично."""
     row = conn.execute(
         "SELECT 1 FROM share_links WHERE token = ? AND run_id = ?", (token, run_id)
     ).fetchone()
     if not row:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Share link not found")
-    conn.execute("UPDATE share_links SET revoked = 1 WHERE token = ?", (token,))
+    if purge:
+        conn.execute("DELETE FROM share_links WHERE token = ?", (token,))
+    else:
+        conn.execute("UPDATE share_links SET revoked = 1 WHERE token = ?", (token,))
     conn.commit()
 
 

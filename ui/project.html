@@ -642,13 +642,15 @@
       <h2>Поделиться отчётом</h2>
       <p class="muted">Ссылка открывается без входа в систему и доступна только на чтение.</p>
       <p class="muted">Allure-отчёт по ссылке появится, только если на сервере настроен allure CLI (см. TH_ALLURE_BIN в README) — иначе покажется страница с пояснением.</p>
+      <!-- Срок действия — сегментированный переключатель, а не <select>: нативный список
+           ОС выпадал поверх модалки не в стиле приложения (замечание владельца 21.10). -->
       <div class="field">
-        <label for="share-expires-select">Срок действия</label>
-        <select id="share-expires-select">
-          <option value="7d">7 дней</option>
-          <option value="30d" selected>30 дней</option>
-          <option value="never">Бессрочно</option>
-        </select>
+        <label>Срок действия</label>
+        <div class="share-expires" id="share-expires" role="group" aria-label="Срок действия ссылки">
+          <button type="button" data-expires="7d" aria-current="false">7 дней</button>
+          <button type="button" data-expires="30d" aria-current="true">30 дней</button>
+          <button type="button" data-expires="never" aria-current="false">Бессрочно</button>
+        </div>
       </div>
       <button id="share-create-btn" class="primary">Создать ссылку</button>
       <div id="share-links-list" class="share-links-list"></div>

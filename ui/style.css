@@ -1117,6 +1117,12 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
   padding: 24px;
   max-width: 420px;
   width: 100%;
+  /* не выше окна: длинное содержимое (список ссылок шаринга) прокручивается внутри,
+     а заголовок и форма не уезжают за верхний край (замечание владельца 21.10) */
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 .modal-box h2 { margin-bottom: 4px; }
 .modal-box .field { margin-bottom: 12px; }
@@ -1169,7 +1175,14 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 .tour-tooltip-actions { display: flex; justify-content: space-between; gap: 10px; }
 
 /* ---------- шаринг отчёта ---------- */
-.share-links-list { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; }
+.share-links-list { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; min-height: 0; flex: 0 1 auto; padding-right: 2px; }
+.share-links-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; }
+/* срок действия ссылки — как переключатель периода Sentry (.sentry-period), на всю ширину поля */
+.share-expires { display: flex; gap: 2px; background: var(--surface-hover); border-radius: var(--radius); padding: 3px; }
+.share-expires button { flex: 1 1 0; border: 0; background: transparent; color: var(--text-muted); font: inherit; font-size: 13px; font-weight: 600; padding: 6px 10px; border-radius: 6px; cursor: pointer; }
+.share-expires button:hover { color: var(--text); }
+.share-expires button[aria-current="true"] { background: var(--action-accent); color: var(--action-accent-text); }
+.share-links-head button { padding: 3px 9px; font-size: 12px; }
 .share-link-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; font-size: 12px; }
 .share-link-row.revoked { opacity: .55; }
 .share-link-url { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); }
