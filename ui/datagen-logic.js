@@ -48,6 +48,7 @@
     module: "модуль",
     schedule_item: "элемент расписания",
     stream_assignment: "назначение в поток",
+    individual_assignment: "назначение на инд. трек",
     test: "тест",
     poll: "опрос",
     aos: "АОС",
