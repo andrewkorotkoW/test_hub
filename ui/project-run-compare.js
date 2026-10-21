@@ -81,7 +81,7 @@
       const targetText = r.target === "all" ? "всё" : "выборочно";
       const suffix = opt.isDefault ? " (предыдущий на том же стенде)" : "";
       return `<option value="${r.id}" ${opt.isDefault ? "selected" : ""}>`
-        + `#${r.id} · ${escapeHtml(r.stand || "без стенда")} · ${targetText} · ${fmtDate(r.started)} · ${fmtDuration(r.duration)}${suffix}`
+        + `#${r.id} · ${escapeHtml(r.stand || "без стенда")} · ${targetText} · ${fmtDate(r.started)} · ${RunReportLogic.fmtRunDuration(r.duration)}${suffix}`
         + `</option>`;
     }).join("");
   }
@@ -282,7 +282,7 @@
       projectName,
       run: payload,
       counts: payload.counts || {},
-      durationText: fmtDuration(payload.duration),
+      durationText: RunReportLogic.fmtRunDuration(payload.duration),
       summary: data.summary,
       waves: data.waves,
       codeTests,

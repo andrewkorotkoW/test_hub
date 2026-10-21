@@ -87,11 +87,13 @@
     setRunsFeed.innerHTML = items.map(runsFeedItemHtml).join("");
   }
 
+  // Та же разметка, что у ленты на дашборде (runsFeedItemHtml): карточка целиком
+  // открывает отчёт, «Поделиться» — отдельная область.
   setRunsFeed.addEventListener("click", (ev) => {
-    const reportBtn = ev.target.closest(".runs-feed-report-btn");
-    if (reportBtn) { openRun(Number(reportBtn.dataset.runId)); return; }
     const shareBtn2 = ev.target.closest(".runs-feed-share-btn");
-    if (shareBtn2) openShareModal(Number(shareBtn2.dataset.runId));
+    if (shareBtn2) { openShareModal(Number(shareBtn2.dataset.runId)); return; }
+    const item = ev.target.closest(".runs-feed-item[data-run-id]");
+    if (item) openRun(Number(item.dataset.runId));
   });
 
   async function loadBuildRuns() {

@@ -153,7 +153,7 @@
       { label: "Всего тестов", valueText: String(latest.total), values: chronoMetrics.map((m) => m.total), color: "var(--accent)", higherIsBetter: true },
       { label: "% passed", valueText: latest.percent === null ? "—" : `${latest.percent}%`, values: chronoMetrics.map((m) => m.percent ?? 0), color: "var(--passed)", higherIsBetter: true },
       { label: "Упало", valueText: String(latest.failed), values: chronoMetrics.map((m) => m.failed), color: "var(--failed)", higherIsBetter: false },
-      { label: "Длительность", valueText: fmtDuration(latest.duration), values: chronoMetrics.map((m) => m.duration ?? 0), color: "var(--gradient-end)", higherIsBetter: false },
+      { label: "Длительность", valueText: RunReportLogic.fmtRunDuration(latest.duration), values: chronoMetrics.map((m) => m.duration ?? 0), color: "var(--gradient-end)", higherIsBetter: false },
       { label: "Флаки-тесты", valueText: String(activeFlaky.length), values: flakyInstabilitySpark(activeFlaky), color: "var(--flaky)", higherIsBetter: false },
       { label: "Xfail", valueText: String(activeXfail.length), values: xfailHitsSpark(activeXfail, chronoRuns), color: "var(--xfail)", higherIsBetter: false },
     ];
@@ -363,15 +363,18 @@
   // карточки «Прогоны этой сборки» на странице сборки (setRunsFeed, последние 10,
   // см. initBuildMode/loadBuildRuns ниже): бейдж label показывает, от какой сборки
   // запущен прогон (пусто у обычных прогонов без label).
+  // Вся карточка — ссылка на отчёт (клик/Enter открывают окно прогона, кнопка «Отчёт»
+  // убрана как дублирующая); «Поделиться» — отдельная область справа, клик по ней
+  // окно не открывает (замечание владельца 21.10: «клик по карточке ничего не делает»).
   function runsFeedItemHtml(r) {
     return `
-      <div class="runs-feed-item">
+      <div class="runs-feed-item clickable" role="button" tabindex="0" data-run-id="${r.id}" title="Открыть отчёт прогона #${r.id}">
         <span class="status-pill ${escapeHtml(r.status)}" data-status="${escapeHtml(r.status)}">${escapeHtml(r.status)}</span>
         <div class="runs-feed-meta">
           <span class="runs-feed-id">#${r.id}</span>
           <span>${escapeHtml(r.stand || "без стенда")}${isManualStandRun(r.stand) ? `<span class="badge-manual">ручной</span>` : ""}</span>
           <span>${fmtDate(r.started)}</span>
-          <span>${fmtDuration(r.duration)}</span>
+          <span>${RunReportLogic.fmtRunDuration(r.duration)}</span>
           <span>${escapeHtml(r.requested_by || "—")}</span>
           ${(r.label || r.live || r.mobile) ? `
             <div class="runs-feed-tags">
@@ -382,10 +385,7 @@
           ` : ""}
         </div>
         ${runsFeedBarHtml(r)}
-        <div class="runs-feed-actions">
-          <button type="button" class="runs-feed-report-btn" data-run-id="${r.id}">Отчёт</button>
-          ${canShare ? `<button type="button" class="runs-feed-share-btn" data-run-id="${r.id}">Поделиться</button>` : ""}
-        </div>
+        ${canShare ? `<div class="runs-feed-actions"><button type="button" class="runs-feed-share-btn" data-run-id="${r.id}" title="Публичная ссылка на отчёт">Поделиться</button></div>` : ""}
       </div>
     `;
   }
@@ -400,10 +400,17 @@
   }
 
   runsFeedBox.addEventListener("click", (ev) => {
-    const reportBtn = ev.target.closest(".runs-feed-report-btn");
-    if (reportBtn) { openRun(Number(reportBtn.dataset.runId)); return; }
     const shareBtn = ev.target.closest(".runs-feed-share-btn");
-    if (shareBtn) openShareModal(Number(shareBtn.dataset.runId));
+    if (shareBtn) { openShareModal(Number(shareBtn.dataset.runId)); return; }
+    const item = ev.target.closest(".runs-feed-item[data-run-id]");
+    if (item) openRun(Number(item.dataset.runId));
+  });
+  runsFeedBox.addEventListener("keydown", (ev) => {
+    if (ev.key !== "Enter" && ev.key !== " ") return;
+    const item = ev.target.closest(".runs-feed-item[data-run-id]");
+    if (!item || ev.target !== item) return;
+    ev.preventDefault();
+    openRun(Number(item.dataset.runId));
   });
 
   // ---------------- известные дефекты (xfail) по областям ----------------

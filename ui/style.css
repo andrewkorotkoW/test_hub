@@ -1861,6 +1861,11 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 
 .runs-feed { display: flex; flex-direction: column; gap: 8px; }
 .runs-feed-item { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; }
+/* Карточка целиком открывает отчёт (project-dashboard.js::runsFeedItemHtml) — подсветка
+   и курсор как у кликабельных строк таблиц; «Поделиться» справа — своя область. */
+.runs-feed-item.clickable { cursor: pointer; transition: border-color .12s, background .12s; }
+.runs-feed-item.clickable:hover, .runs-feed-item.clickable:focus-visible { border-color: var(--accent); background: var(--surface-hover); outline: none; }
+.runs-feed-actions { border-left: 1px solid var(--border); padding-left: 10px; }
 .runs-feed-meta { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--text-muted); }
 .runs-feed-id { font-weight: 600; color: var(--text); }
 /* сборка/эфир/мобильный — отдельный флекс-блок внутри .runs-feed-meta, не вперемешку

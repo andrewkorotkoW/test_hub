@@ -65,8 +65,8 @@ const TOUR_STEPS = [
     hash: "dashboard",
     needsProject: true,
     title: "Лента прогонов",
-    text: "Ход и итог прогона видны здесь сразу — кнопка «Отчёт» открывает полный отчёт Allure.",
-    resolve: () => document.querySelector(".runs-feed-report-btn") || document.getElementById("runs-feed-card"),
+    text: "Ход и итог прогона видны здесь сразу — клик по карточке открывает полный отчёт, «Поделиться» даёт публичную ссылку.",
+    resolve: () => document.querySelector(".runs-feed-item") || document.getElementById("runs-feed-card"),
   },
   {
     page: "coverage.html",

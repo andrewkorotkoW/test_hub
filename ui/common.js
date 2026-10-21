@@ -29,10 +29,20 @@ function escapeHtml(value) {
   }[ch]));
 }
 
+// Длительность одного теста: «840 мс», «53.5 с», «4:37», «1:00:12» — от минуты в м:сс,
+// как fmtDur в топ-10 самых долгих тестов (раньше «1753.6 с» в «Итоге прогона» рядом с
+// «4:37» — замечание владельца 21.10.2026). Длительность целого прогона — не здесь,
+// а RunReportLogic.fmtRunDuration («23 мин 2 с»), как во вкладке «Прогоны».
 function fmtDuration(seconds) {
-  if (seconds === null || seconds === undefined) return "—";
+  if (seconds === null || seconds === undefined || Number.isNaN(Number(seconds))) return "—";
   if (seconds < 1) return `${Math.round(seconds * 1000)} мс`;
-  return `${seconds.toFixed(1)} с`;
+  if (seconds < 60) return `${seconds.toFixed(1)} с`;
+  const total = Math.round(seconds);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const ss = String(s).padStart(2, "0");
+  return h ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`;
 }
 
 function fmtDate(value) {
