@@ -7,7 +7,17 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from .callbacks import build_callback
-from .formatting import MARKER_BUTTONS, _short_test_label, _stand_label
+from .formatting import (
+    DATA_BATCHES_N,
+    DATA_DELETABLE_STATUSES,
+    MARKER_BUTTONS,
+    RUNS_LIST_N,
+    _short_test_label,
+    _stand_label,
+    data_status_label,
+    run_button_label,
+    scenario_title,
+)
 from .tree import _breadcrumb, _sorted_children
 
 MAX_FAILED_BUTTONS = 10
@@ -24,6 +34,23 @@ def build_projects_keyboard(projects: list[dict]) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
+def build_project_keyboard(project: str) -> InlineKeyboardMarkup:
+    """Карточка проекта (22.10.2026) — вместо списка стендов с двумя кнопками внизу:
+    всё, что есть у проекта в вебе — запуск, прогоны, данные, флаки, дефекты,
+    статистика, расписания."""
+    builder = InlineKeyboardBuilder()
+    builder.button(text="▶️ Запуск", callback_data=build_callback("launch", project=project))
+    builder.button(text="📋 Прогоны", callback_data=build_callback("runs", project=project))
+    builder.button(text="🧪 Данные", callback_data=build_callback("data", project=project))
+    builder.button(text="🔁 Флаки", callback_data=build_callback("flaky", project=project))
+    builder.button(text="🐞 Дефекты", callback_data=build_callback("xfail", project=project))
+    builder.button(text="📊 Статистика", callback_data=build_callback("stats", project=project))
+    builder.button(text="⏰ Расписания", callback_data=build_callback("schedules", project=project))
+    builder.button(text="« К проектам", callback_data="menu")
+    builder.adjust(2, 2, 2, 1, 1)
+    return builder.as_markup()
+
+
 def build_stands_keyboard(project: str, stands: list[dict]) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     if stands:
@@ -34,9 +61,16 @@ def build_stands_keyboard(project: str, stands: list[dict]) -> InlineKeyboardMar
             )
     else:
         builder.button(text="Без стенда", callback_data=build_callback("stand", project=project, stand=None))
-    builder.button(text="Флаки", callback_data=build_callback("flaky", project=project))
-    builder.button(text="Дефекты", callback_data=build_callback("xfail", project=project))
-    builder.button(text="« К проектам", callback_data="menu")
+    builder.button(text="« К проекту", callback_data=build_callback("project", project=project))
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def build_runs_keyboard(project: str, runs: list[dict]) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for run in runs[:RUNS_LIST_N]:
+        builder.button(text=run_button_label(run), callback_data=build_callback("run_status", run_id=str(run["id"])))
+    builder.button(text="« К проекту", callback_data=build_callback("project", project=project))
     builder.adjust(1)
     return builder.as_markup()
 
@@ -49,7 +83,77 @@ def build_schedules_keyboard(project: str, items: list[dict]) -> InlineKeyboardM
             text=f"{mark} #{item['id']}",
             callback_data=build_callback("sched_toggle", project=project, id=str(item["id"])),
         )
-    builder.button(text="« К проектам", callback_data="menu")
+    builder.button(text="« К проекту", callback_data=build_callback("project", project=project))
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+# ------------------------------------------------------------------ «Данные»
+def build_data_keyboard(project: str, supported: bool, batches: list[dict], scenarios: list[dict] | None = None) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    if supported:
+        builder.row(
+            InlineKeyboardButton(text="➕ Создать данные", callback_data=build_callback("data_new", project=project)),
+            InlineKeyboardButton(text="🔄 Обновить", callback_data=build_callback("data_refresh", project=project)),
+        )
+        for batch in batches[:DATA_BATCHES_N]:
+            text = f"#{batch['id']} {data_status_label(batch.get('status'))} · {scenario_title(batch.get('scenario') or '', scenarios)}"
+            builder.row(InlineKeyboardButton(
+                text=text[:60], callback_data=build_callback("data_batch", project=project, id=str(batch["id"]))
+            ))
+    builder.row(InlineKeyboardButton(text="« К проекту", callback_data=build_callback("project", project=project)))
+    return builder.as_markup()
+
+
+def build_scenarios_keyboard(project: str, scenarios: list[dict]) -> InlineKeyboardMarkup:
+    """Сценарии генератора по одному в строке, в порядке категорий из generate.py
+    --list (там они уже сгруппированы); категория — префиксом подписи."""
+    builder = InlineKeyboardBuilder()
+    for scenario in scenarios:
+        title = scenario.get("title") or scenario["name"]
+        category = scenario.get("category")
+        text = f"{category} · {title}" if category else title
+        builder.row(InlineKeyboardButton(
+            text=text[:60], callback_data=build_callback("data_sc", project=project, scenario=scenario["name"])
+        ))
+    builder.row(InlineKeyboardButton(text="« К данным", callback_data=build_callback("data", project=project)))
+    return builder.as_markup()
+
+
+def build_data_stand_keyboard(project: str, scenario: str, stands: list[dict]) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    if stands:
+        for stand in stands:
+            builder.button(
+                text=stand["name"],
+                callback_data=build_callback("data_st", project=project, scenario=scenario, stand=stand["name"]),
+            )
+    else:
+        builder.button(
+            text="Без стенда", callback_data=build_callback("data_st", project=project, scenario=scenario, stand=None)
+        )
+    builder.button(text="« К сценариям", callback_data=build_callback("data_new", project=project))
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def build_data_confirm_keyboard(project: str, scenario: str, stand: str | None) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text="Создать", callback_data=build_callback("data_confirm", project=project, scenario=scenario, stand=stand)
+    )
+    builder.button(text="Отмена", callback_data=build_callback("data", project=project))
+    builder.adjust(2)
+    return builder.as_markup()
+
+
+def build_batch_keyboard(project: str, batch: dict) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    batch_id = str(batch["id"])
+    builder.button(text="🔄 Обновить", callback_data=build_callback("data_batch", project=project, id=batch_id))
+    if batch.get("status") in DATA_DELETABLE_STATUSES and (batch.get("created_total") or 0) > 0:
+        builder.button(text="🗑 Удалить данные", callback_data=build_callback("data_del", project=project, id=batch_id))
+    builder.button(text="« К данным", callback_data=build_callback("data", project=project))
     builder.adjust(1)
     return builder.as_markup()
 
@@ -60,13 +164,18 @@ def build_back_keyboard(callback_data: str, label: str = "« Назад") -> Inl
     return builder.as_markup()
 
 
-def build_marker_keyboard(project: str, stand: str | None) -> InlineKeyboardMarkup:
+def build_marker_keyboard(project: str, stand: str | None, markers: list[dict] | None = None) -> InlineKeyboardMarkup:
+    """markers — реальные маркеры проекта (GET /api/projects/{name}/markers, из
+    pytest.ini); без них (нет конфига/ошибка API) — прежние Smoke/API/UI."""
     builder = InlineKeyboardBuilder()
-    for label, marker in MARKER_BUTTONS:
+    items = [(m["name"], m["name"]) for m in markers] if markers else [(l, m) for l, m in MARKER_BUTTONS if m]
+    for label, marker in items:
         builder.button(text=label, callback_data=build_callback("marker", project=project, stand=stand, marker=marker))
+    builder.button(text="Все", callback_data=build_callback("marker", project=project, stand=stand, marker=None))
     builder.button(text="Выбрать тесты", callback_data=build_callback("tests", project=project, stand=stand))
-    builder.button(text="« К стендам", callback_data=build_callback("project", project=project))
-    builder.adjust(2, 2, 1, 1)
+    builder.button(text="« К стендам", callback_data=build_callback("launch", project=project))
+    total = len(items) + 1
+    builder.adjust(*([2] * (total // 2) + ([1] if total % 2 else [])), 1, 1)
     return builder.as_markup()
 
 
@@ -86,7 +195,7 @@ def build_preset_keyboard(project: str, stand: str | None, presets: list[dict]) 
             callback_data=build_callback("preset", project=project, stand=stand, id=str(preset["id"])),
         )
     builder.button(text="Выбрать тесты", callback_data=build_callback("tests", project=project, stand=stand))
-    builder.button(text="« К стендам", callback_data=build_callback("project", project=project))
+    builder.button(text="« К стендам", callback_data=build_callback("launch", project=project))
     builder.adjust(1)
     return builder.as_markup()
 
@@ -104,14 +213,24 @@ def build_manual_confirm_keyboard(yes_callback: str, cancel_callback: str = "men
     return builder.as_markup()
 
 
-def build_run_keyboard(run_id: int) -> InlineKeyboardMarkup:
+def build_run_keyboard(run_id: int, project: str | None = None) -> InlineKeyboardMarkup:
+    """project — для кнопки «К проекту» (из отчёта прогона); там, где проект
+    неизвестен (клавиатура после запуска), её нет."""
     builder = InlineKeyboardBuilder()
-    builder.button(text="Статус", callback_data=build_callback("run_status", run_id=str(run_id)))
-    builder.button(text="Отчёт", callback_data=build_callback("run_report", run_id=str(run_id)))
-    builder.button(text="Отменить", callback_data=build_callback("run_cancel", run_id=str(run_id)))
-    builder.button(text="Тренд", callback_data=build_callback("run_trend", run_id=str(run_id)))
-    builder.button(text="Поделиться", callback_data=build_callback("run_share", run_id=str(run_id)))
-    builder.adjust(2, 2, 1)
+    rid = str(run_id)
+    builder.button(text="Статус", callback_data=build_callback("run_status", run_id=rid))
+    builder.button(text="Отчёт", callback_data=build_callback("run_report", run_id=rid))
+    builder.button(text="Причины", callback_data=build_callback("run_causes", run_id=rid))
+    builder.button(text="Сравнить", callback_data=build_callback("run_compare", run_id=rid))
+    builder.button(text="Тренд", callback_data=build_callback("run_trend", run_id=rid))
+    builder.button(text="Поделиться", callback_data=build_callback("run_share", run_id=rid))
+    builder.button(text="🗑 Удалить данные прогона", callback_data=build_callback("run_cleanup", run_id=rid))
+    builder.button(text="Отменить", callback_data=build_callback("run_cancel", run_id=rid))
+    sizes = [2, 2, 2, 1, 1]
+    if project:
+        builder.button(text="« К проекту", callback_data=build_callback("project", project=project))
+        sizes.append(1)
+    builder.adjust(*sizes)
     return builder.as_markup()
 
 

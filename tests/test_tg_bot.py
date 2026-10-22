@@ -40,6 +40,7 @@ from app.tg_bot import (
     build_manual_confirm_keyboard,
     build_marker_keyboard,
     build_preset_keyboard,
+    build_project_keyboard,
     build_run_args,
     build_run_keyboard,
     build_schedules_keyboard,
@@ -607,6 +608,30 @@ def test_build_marker_keyboard_covers_all_four_options():
     assert "marker:bike_fit:stage:_" in data  # "Все" -> marker=None
 
 
+def test_build_marker_keyboard_uses_project_markers_from_pytest_ini():
+    """22.10.2026: кнопки набора — реальные маркеры проекта (GET /markers), «Все»
+    и «Выбрать тесты» остаются, «К стендам» ведёт на шаг «Запуск» (launch)."""
+    markers = [{"name": "smoke", "description": "Smoke tests"}, {"name": "buk", "description": ""}, {"name": "regression", "description": ""}]
+    markup = build_marker_keyboard("vshgu", "develop", markers)
+    buttons = {btn.text: btn.callback_data for row in markup.inline_keyboard for btn in row}
+    assert buttons["smoke"] == "marker:vshgu:develop:smoke"
+    assert buttons["buk"] == "marker:vshgu:develop:buk"
+    assert buttons["regression"] == "marker:vshgu:develop:regression"
+    assert buttons["Все"] == "marker:vshgu:develop:_"
+    assert "API" not in buttons and "UI" not in buttons
+    assert buttons["Выбрать тесты"] == "tests:vshgu:develop"
+    assert buttons["« К стендам"] == "launch:vshgu"
+
+
+def test_build_project_keyboard_lists_all_sections():
+    markup = build_project_keyboard("vshgu")
+    data = [btn.callback_data for row in markup.inline_keyboard for btn in row]
+    assert data == [
+        "launch:vshgu", "runs:vshgu", "data:vshgu", "flaky:vshgu", "xfail:vshgu", "stats:vshgu",
+        "schedules:vshgu", "menu",
+    ]
+
+
 def test_build_confirm_keyboard_has_yes_and_cancel():
     markup = build_confirm_keyboard("bike_fit", "stage", "smoke")
     data = [btn.callback_data for row in markup.inline_keyboard for btn in row]
@@ -621,7 +646,7 @@ def test_build_preset_keyboard_lists_presets_and_tests_and_back_buttons():
     assert buttons["Smoke"] == "preset:bike_fit:stage:1"
     assert buttons["БУК"] == "preset:bike_fit:stage:2"
     assert buttons["Выбрать тесты"] == "tests:bike_fit:stage"
-    assert buttons["« К стендам"] == "project:bike_fit"
+    assert buttons["« К стендам"] == "launch:bike_fit"
 
 
 def test_build_manual_confirm_keyboard_has_yes_and_cancel():
@@ -635,10 +660,15 @@ def test_manual_confirm_text_matches_expected_wording():
     assert _manual_confirm_text("stage", "Smoke") == "⚠️ Запуск на stage: Smoke. Подтвердить?"
 
 
-def test_build_run_keyboard_has_status_report_cancel_trend_share():
+def test_build_run_keyboard_has_status_report_causes_compare_trend_share_cleanup_cancel():
     markup = build_run_keyboard(7)
     data = [btn.callback_data for row in markup.inline_keyboard for btn in row]
-    assert data == ["run_status:7", "run_report:7", "run_cancel:7", "run_trend:7", "run_share:7"]
+    assert data == [
+        "run_status:7", "run_report:7", "run_causes:7", "run_compare:7", "run_trend:7", "run_share:7",
+        "run_cleanup:7", "run_cancel:7",
+    ]
+    with_project = build_run_keyboard(7, "vshgu")
+    assert with_project.inline_keyboard[-1][0].callback_data == "project:vshgu"
 
 
 # ------------------------------------------------------------------ lifespan: без токена бот не создаётся
@@ -775,6 +805,10 @@ async def test_button_flow_edits_single_message_and_submits_expected_run(monkeyp
             )
         if request.method == "GET" and request.url.path == "/api/projects/bike_fit/stands":
             return httpx.Response(200, json=[{"name": "stage"}])
+        if request.method == "GET" and request.url.path == "/api/projects/bike_fit/runs":
+            return httpx.Response(200, json=[])  # карточка проекта: последних прогонов нет
+        if request.method == "GET" and request.url.path == "/api/projects/bike_fit/markers":
+            return httpx.Response(200, json={"markers": []})  # нет pytest.ini -> вшитые Smoke/API/UI
         if request.method == "POST" and request.url.path == "/api/projects/bike_fit/runs":
             submitted_runs.append(json.loads(request.content))
             return httpx.Response(200, json={"id": 42, "status": "queued"})
@@ -839,7 +873,10 @@ async def test_button_flow_edits_single_message_and_submits_expected_run(monkeyp
     final_message = edited[-1]
     assert "Прогон #42 поставлен в очередь." in final_message.text
     callback_datas = [btn.callback_data for row in final_message.reply_markup.inline_keyboard for btn in row]
-    assert callback_datas == ["run_status:42", "run_report:42", "run_cancel:42", "run_trend:42", "run_share:42"]
+    assert callback_datas == [
+        "run_status:42", "run_report:42", "run_causes:42", "run_compare:42", "run_trend:42", "run_share:42",
+        "run_cleanup:42", "run_cancel:42",
+    ]
 
 
 async def test_button_flow_without_env_flag_omits_env_in_confirm_hint(monkeypatch):
@@ -970,7 +1007,10 @@ async def test_button_flow_preset_confirm_submits_with_confirm_manual_true(monke
     assert len(edited) == 1
     assert "Прогон #99 поставлен в очередь." in edited[0].text
     callback_datas = [btn.callback_data for row in edited[0].reply_markup.inline_keyboard for btn in row]
-    assert callback_datas == ["run_status:99", "run_report:99", "run_cancel:99", "run_trend:99", "run_share:99"]
+    assert callback_datas == [
+        "run_status:99", "run_report:99", "run_causes:99", "run_compare:99", "run_trend:99", "run_share:99",
+        "run_cleanup:99", "run_cancel:99",
+    ]
 
 
 @pytest.mark.parametrize(
@@ -1483,7 +1523,7 @@ def test_build_schedules_keyboard_toggle_buttons_encode_project_and_id():
     items = [{"id": 5, "enabled": True}, {"id": 6, "enabled": False}]
     markup = build_schedules_keyboard("bike_fit", items)
     data = [btn.callback_data for row in markup.inline_keyboard for btn in row]
-    assert data == ["sched_toggle:bike_fit:5", "sched_toggle:bike_fit:6", "menu"]
+    assert data == ["sched_toggle:bike_fit:5", "sched_toggle:bike_fit:6", "project:bike_fit"]
     labels = [btn.text for row in markup.inline_keyboard for btn in row]
     assert labels[0].startswith("✅")
     assert labels[1].startswith("▫️")
@@ -1570,7 +1610,7 @@ async def test_cmd_schedules_sends_list_with_toggle_keyboard(monkeypatch):
     assert "Расписания «bike_fit»" in sent.text
     assert [btn.callback_data for row in sent.reply_markup.inline_keyboard for btn in row] == [
         "sched_toggle:bike_fit:5",
-        "menu",
+        "project:bike_fit",
     ]
 
 
@@ -1594,7 +1634,7 @@ async def test_cb_sched_toggle_flips_enabled_state_and_edits_keyboard(monkeypatc
     assert "выключено" in edited.text
     assert [btn.callback_data for row in edited.reply_markup.inline_keyboard for btn in row] == [
         "sched_toggle:bike_fit:5",
-        "menu",
+        "project:bike_fit",
     ]
 
 

@@ -30,6 +30,19 @@ def parse_callback(data: str) -> dict:
         return {"action": "menu"}
     if action == "project" and len(rest) == 1:
         return {"action": "project", "project": rest[0]}
+    # карточка проекта (22.10.2026): Запуск / Прогоны / Статистика / Расписания / Данные
+    if action in ("launch", "runs", "stats", "schedules", "data", "data_new", "data_refresh") and len(rest) == 1:
+        return {"action": action, "project": rest[0]}
+    if action in ("data_batch", "data_del") and len(rest) == 2:
+        try:
+            batch_id = int(rest[1])
+        except ValueError:
+            return {"action": "invalid", "raw": data}
+        return {"action": action, "project": rest[0], "batch_id": batch_id}
+    if action == "data_sc" and len(rest) == 2:
+        return {"action": "data_sc", "project": rest[0], "scenario": rest[1]}
+    if action in ("data_st", "data_confirm") and len(rest) == 3:
+        return {"action": action, "project": rest[0], "scenario": rest[1], "stand": _decode_token(rest[2])}
     if action == "stand" and len(rest) == 2:
         return {"action": "stand", "project": rest[0], "stand": _decode_token(rest[1])}
     if action == "marker" and len(rest) == 3:
@@ -48,7 +61,10 @@ def parse_callback(data: str) -> dict:
         }
     if action == "run_section_confirm" and len(rest) == 2:
         return {"action": "run_section_confirm", "project": rest[0], "section": rest[1]}
-    if action in ("run_status", "run_report", "run_cancel", "run_trend", "run_share") and len(rest) == 1:
+    if action in (
+        "run_status", "run_report", "run_cancel", "run_trend", "run_share",
+        "run_causes", "run_compare", "run_cleanup",
+    ) and len(rest) == 1:
         try:
             run_id = int(rest[0])
         except ValueError:

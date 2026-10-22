@@ -3,6 +3,7 @@ import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from ..core import markers
 from ..deps import get_current_user, get_db, require_roles
 from ..schemas import (
     PROJECT_COLOR_PALETTE,
@@ -158,6 +159,17 @@ def list_stands(
 ) -> list[dict]:
     _get_project_or_404(conn, name)
     return _stands_for(conn, name)
+
+
+@router.get("/{name}/markers")
+def list_markers(
+    name: str, conn: sqlite3.Connection = Depends(get_db), _user: sqlite3.Row = Depends(get_current_user)
+) -> dict:
+    """Маркеры pytest из конфигурации проекта (app.core.markers) — для клавиатуры
+    «набор тестов» в Telegram-боте и формы запуска. Параметризованные маркеры
+    (env(name)) не отдаются: через -m их не запустить."""
+    row = _get_project_or_404(conn, name)
+    return {"markers": markers.read_markers(row["path"])}
 
 
 @router.post("/{name}/stands", status_code=status.HTTP_201_CREATED)

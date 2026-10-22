@@ -33,15 +33,23 @@ from ..config import settings
 from .callbacks import build_callback, parse_callback
 from .client import HubClient
 from .formatting import (
+    DATA_ACTIVE_STATUSES,
     STATUS_RU,
     _bad_tests,
     _confirm_text,
     _error_text,
     _manual_confirm_text,
     _stand_label,
+    format_causes,
+    format_compare,
+    format_data_batch,
+    format_data_batches,
+    format_data_confirm,
     format_flaky,
+    format_project_card,
     format_projects,
     format_report,
+    format_runs_list,
     format_schedules,
     format_stats,
     format_status,
@@ -49,14 +57,21 @@ from .formatting import (
 )
 from .keyboards import (
     build_back_keyboard,
+    build_batch_keyboard,
     build_confirm_keyboard,
+    build_data_confirm_keyboard,
+    build_data_keyboard,
+    build_data_stand_keyboard,
     build_fail_detail_keyboard,
     build_manual_confirm_keyboard,
     build_marker_keyboard,
     build_preset_keyboard,
+    build_project_keyboard,
     build_projects_keyboard,
     build_report_keyboard,
     build_run_keyboard,
+    build_runs_keyboard,
+    build_scenarios_keyboard,
     build_schedules_keyboard,
     build_stands_keyboard,
     build_tree_keyboard,
@@ -138,6 +153,18 @@ async def _reply_http_error(message: Message, exc: httpx.HTTPError, action: str,
     await message.answer(f"Не удалось {action}.")
 
 
+def _http_detail(exc: httpx.HTTPError) -> str | None:
+    """detail из JSON-ответа test_hub (409 «партия ещё выполняется», 422 «нет
+    генератора», 403 по роли) — он уже на русском и понятен пользователю бота."""
+    if not isinstance(exc, httpx.HTTPStatusError):
+        return None
+    try:
+        detail = exc.response.json().get("detail")
+    except (ValueError, AttributeError):
+        return None
+    return str(detail) if detail else None
+
+
 async def _send_report_png(
     send_photo,
     send_text,
@@ -179,6 +206,52 @@ async def _stand_manual_only(client: HubClient, project: str, stand: str | None)
         return False
     row = next((s for s in stands if s.get("name") == stand), None)
     return bool(row and row.get("manual_only"))
+
+
+async def _project_markers(client: HubClient, project: str) -> list[dict] | None:
+    """Маркеры из pytest.ini проекта (GET /api/projects/{name}/markers); пустой
+    список или ошибка API → None, и build_marker_keyboard берёт вшитые Smoke/API/UI."""
+    try:
+        markers = await client.list_markers(project)
+    except httpx.HTTPError as exc:
+        logger.warning("tg_bot: не удалось получить маркеры проекта %s: %s", project, exc)
+        return None
+    return markers or None
+
+
+async def _data_scenarios(client: HubClient, project: str) -> tuple[bool, list[dict]]:
+    """(supported, scenarios) из GET /api/projects/{name}/data/scenarios; при ошибке —
+    (False, []) — вызывающий код сам решает, что показать (см. cb_data)."""
+    data = await client.list_data_scenarios(project)
+    return bool(data.get("supported")), list(data.get("scenarios") or [])
+
+
+async def _scenarios_or_empty(client: HubClient, project: str) -> list[dict]:
+    try:
+        _supported, scenarios = await _data_scenarios(client, project)
+    except httpx.HTTPError:
+        return []
+    return scenarios
+
+
+BATCH_POLL_INTERVAL_SECONDS = 3.0
+
+
+async def _watch_batch(bot: Bot, client: HubClient, chat_id: int, project: str, batch_id: int) -> None:
+    """Фоновый опрос партии данных (создание/удаление/очистка после прогона) — как
+    _watch_run для прогонов: по завершении присылает карточку партии в чат."""
+    while True:
+        await asyncio.sleep(BATCH_POLL_INTERVAL_SECONDS)
+        try:
+            batch = await client.get_data_batch(project, batch_id)
+        except httpx.HTTPError as exc:
+            logger.warning("tg_bot: не удалось опросить партию данных #%s: %s", batch_id, exc)
+            continue
+        if batch.get("status") in DATA_ACTIVE_STATUSES:
+            continue
+        scenarios = await _scenarios_or_empty(client, project)
+        await bot.send_message(chat_id, format_data_batch(batch, scenarios), reply_markup=build_batch_keyboard(project, batch))
+        return
 
 
 async def _load_tree(
@@ -319,6 +392,24 @@ async def cb_menu(query: CallbackQuery, client: HubClient) -> None:
 
 @router.callback_query(F.data.startswith("project:"))
 async def cb_project(query: CallbackQuery, client: HubClient) -> None:
+    """Карточка проекта: стенды, три последних прогона и кнопки разделов
+    (build_project_keyboard). Запуск — отдельной кнопкой «Запуск» (cb_launch)."""
+    await query.answer()
+    if query.message is None:
+        return
+    project = parse_callback(query.data)["project"]
+    try:
+        stands = await client.list_stands(project)
+        runs = await client.list_runs(project)
+    except httpx.HTTPError as exc:
+        logger.warning("tg_bot: не удалось получить данные проекта %s: %s", project, exc)
+        await _safe_edit(query.message, f"Не удалось получить данные проекта «{project}».", build_back_keyboard("menu", "« К проектам"))
+        return
+    await _safe_edit(query.message, format_project_card(project, stands, runs), build_project_keyboard(project))
+
+
+@router.callback_query(F.data.startswith("launch:"))
+async def cb_launch(query: CallbackQuery, client: HubClient) -> None:
     await query.answer()
     if query.message is None:
         return
@@ -331,6 +422,192 @@ async def cb_project(query: CallbackQuery, client: HubClient) -> None:
         return
     text = f"Проект: {project}\nВыберите стенд:"
     await _safe_edit(query.message, text, build_stands_keyboard(project, stands))
+
+
+@router.callback_query(F.data.startswith("runs:"))
+async def cb_runs(query: CallbackQuery, client: HubClient) -> None:
+    await query.answer()
+    if query.message is None:
+        return
+    project = parse_callback(query.data)["project"]
+    try:
+        runs = await client.list_runs(project)
+    except httpx.HTTPError as exc:
+        logger.warning("tg_bot: не удалось получить прогоны проекта %s: %s", project, exc)
+        await _safe_edit(query.message, f"Не удалось получить прогоны проекта «{project}».", build_project_keyboard(project))
+        return
+    await _safe_edit(query.message, format_runs_list(project, runs), build_runs_keyboard(project, runs))
+
+
+@router.callback_query(F.data.startswith("stats:"))
+async def cb_stats(query: CallbackQuery, client: HubClient) -> None:
+    await query.answer()
+    if query.message is None:
+        return
+    project = parse_callback(query.data)["project"]
+    try:
+        data = await client.get_stats(project)
+    except httpx.HTTPError as exc:
+        logger.warning("tg_bot: не удалось получить статистику проекта %s: %s", project, exc)
+        await _safe_edit(query.message, f"Не удалось получить статистику проекта «{project}».", build_project_keyboard(project))
+        return
+    text = format_stats(project, data.get("stand"), data)
+    await _safe_edit(query.message, text, build_back_keyboard(build_callback("project", project=project), "« К проекту"))
+
+
+@router.callback_query(F.data.startswith("schedules:"))
+async def cb_schedules(query: CallbackQuery, client: HubClient) -> None:
+    await query.answer()
+    if query.message is None:
+        return
+    project = parse_callback(query.data)["project"]
+    try:
+        items = await client.list_schedules(project)
+    except httpx.HTTPError as exc:
+        logger.warning("tg_bot: не удалось получить расписания проекта %s: %s", project, exc)
+        await _safe_edit(query.message, f"Не удалось получить расписания проекта «{project}».", build_project_keyboard(project))
+        return
+    await _safe_edit(query.message, format_schedules(project, items), build_schedules_keyboard(project, items))
+
+
+# ------------------------------------------------------------------ «Данные»
+async def _show_data(message: Message, client: HubClient, project: str) -> None:
+    try:
+        supported, scenarios = await _data_scenarios(client, project)
+        batches = await client.list_data_batches(project) if supported else []
+    except httpx.HTTPError as exc:
+        logger.warning("tg_bot: не удалось получить данные проекта %s: %s", project, exc)
+        detail = _http_detail(exc) or f"Не удалось получить раздел «Данные» проекта «{project}»."
+        await _safe_edit(message, detail, build_project_keyboard(project))
+        return
+    await _safe_edit(
+        message,
+        format_data_batches(project, supported, batches, scenarios),
+        build_data_keyboard(project, supported, batches, scenarios),
+    )
+
+
+@router.callback_query(F.data.startswith("data:"))
+async def cb_data(query: CallbackQuery, client: HubClient) -> None:
+    await query.answer()
+    if query.message is None:
+        return
+    await _show_data(query.message, client, parse_callback(query.data)["project"])
+
+
+@router.callback_query(F.data.startswith("data_refresh:"))
+async def cb_data_refresh(query: CallbackQuery, client: HubClient) -> None:
+    await query.answer("Обновлено")
+    if query.message is None:
+        return
+    await _show_data(query.message, client, parse_callback(query.data)["project"])
+
+
+@router.callback_query(F.data.startswith("data_new:"))
+async def cb_data_new(query: CallbackQuery, client: HubClient) -> None:
+    await query.answer()
+    if query.message is None:
+        return
+    project = parse_callback(query.data)["project"]
+    try:
+        supported, scenarios = await _data_scenarios(client, project)
+    except httpx.HTTPError as exc:
+        logger.warning("tg_bot: не удалось получить сценарии проекта %s: %s", project, exc)
+        await _safe_edit(query.message, _http_detail(exc) or "Не удалось получить список сценариев.", build_project_keyboard(project))
+        return
+    if not supported or not scenarios:
+        await _safe_edit(query.message, format_data_batches(project, False, []), build_project_keyboard(project))
+        return
+    await _safe_edit(query.message, f"Данные «{project}»\nВыберите, что создать:", build_scenarios_keyboard(project, scenarios))
+
+
+@router.callback_query(F.data.startswith("data_sc:"))
+async def cb_data_scenario(query: CallbackQuery, client: HubClient) -> None:
+    await query.answer()
+    if query.message is None:
+        return
+    parsed = parse_callback(query.data)
+    project, scenario = parsed["project"], parsed["scenario"]
+    try:
+        stands = await client.list_stands(project)
+    except httpx.HTTPError as exc:
+        logger.warning("tg_bot: не удалось получить стенды проекта %s: %s", project, exc)
+        await _safe_edit(query.message, f"Не удалось получить стенды проекта «{project}».", build_project_keyboard(project))
+        return
+    scenarios = await _scenarios_or_empty(client, project)
+    title = next((s.get("title") or s["name"] for s in scenarios if s.get("name") == scenario), scenario)
+    text = f"Данные «{project}» · {title}\nНа каком стенде создать?"
+    await _safe_edit(query.message, text, build_data_stand_keyboard(project, scenario, stands))
+
+
+@router.callback_query(F.data.startswith("data_st:"))
+async def cb_data_stand(query: CallbackQuery, client: HubClient) -> None:
+    await query.answer()
+    if query.message is None:
+        return
+    parsed = parse_callback(query.data)
+    project, scenario, stand = parsed["project"], parsed["scenario"], parsed["stand"]
+    scenarios = await _scenarios_or_empty(client, project)
+    info = next((s for s in scenarios if s.get("name") == scenario), scenario)
+    await _safe_edit(query.message, format_data_confirm(project, info, stand), build_data_confirm_keyboard(project, scenario, stand))
+
+
+@router.callback_query(F.data.startswith("data_confirm:"))
+async def cb_data_confirm(query: CallbackQuery, client: HubClient, bot: Bot) -> None:
+    if query.message is None:
+        await query.answer()
+        return
+    parsed = parse_callback(query.data)
+    project, scenario, stand = parsed["project"], parsed["scenario"], parsed["stand"]
+    try:
+        batch = await client.create_data_batch(project, scenario, stand)
+    except httpx.HTTPError as exc:
+        logger.warning("tg_bot: не удалось создать партию данных %s/%s: %s", project, scenario, exc)
+        await query.answer()
+        await _safe_edit(query.message, _http_detail(exc) or "Не удалось запустить создание данных.", build_project_keyboard(project))
+        return
+    await query.answer()
+    scenarios = await _scenarios_or_empty(client, project)
+    text = f"Партия #{batch['id']} поставлена в очередь. Сообщу, когда данные будут созданы.\n\n{format_data_batch(batch, scenarios)}"
+    await _safe_edit(query.message, text, build_batch_keyboard(project, batch))
+    asyncio.create_task(_watch_batch(bot, client, query.message.chat.id, project, batch["id"]))
+
+
+@router.callback_query(F.data.startswith("data_batch:"))
+async def cb_data_batch(query: CallbackQuery, client: HubClient) -> None:
+    await query.answer()
+    if query.message is None:
+        return
+    parsed = parse_callback(query.data)
+    project, batch_id = parsed["project"], parsed["batch_id"]
+    try:
+        batch = await client.get_data_batch(project, batch_id)
+    except httpx.HTTPError as exc:
+        logger.warning("tg_bot: не удалось получить партию данных #%s: %s", batch_id, exc)
+        await _safe_edit(query.message, f"Не удалось получить партию #{batch_id}.", build_back_keyboard(build_callback("data", project=project), "« К данным"))
+        return
+    scenarios = await _scenarios_or_empty(client, project)
+    await _safe_edit(query.message, format_data_batch(batch, scenarios), build_batch_keyboard(project, batch))
+
+
+@router.callback_query(F.data.startswith("data_del:"))
+async def cb_data_delete(query: CallbackQuery, client: HubClient, bot: Bot) -> None:
+    if query.message is None:
+        await query.answer()
+        return
+    parsed = parse_callback(query.data)
+    project, batch_id = parsed["project"], parsed["batch_id"]
+    try:
+        batch = await client.delete_data_batch(project, batch_id)
+    except httpx.HTTPError as exc:
+        logger.warning("tg_bot: не удалось удалить данные партии #%s: %s", batch_id, exc)
+        await query.answer(_http_detail(exc) or f"Не удалось удалить данные партии #{batch_id}.", show_alert=True)
+        return
+    await query.answer()
+    scenarios = await _scenarios_or_empty(client, project)
+    text = f"Удаление данных партии #{batch_id} запущено. Сообщу, когда закончится.\n\n{format_data_batch(batch, scenarios)}"
+    await _safe_edit(query.message, text, build_batch_keyboard(project, batch))
+    asyncio.create_task(_watch_batch(bot, client, query.message.chat.id, project, batch_id))
 
 
 @router.callback_query(F.data.startswith("flaky:"))
@@ -420,7 +697,8 @@ async def cb_stand(query: CallbackQuery, client: HubClient) -> None:
         await _safe_edit(query.message, text, build_preset_keyboard(project, stand, presets))
         return
     text = f"Проект: {project}\nСтенд: {_stand_label(stand)}\nВыберите набор тестов:"
-    await _safe_edit(query.message, text, build_marker_keyboard(project, stand))
+    markers = await _project_markers(client, project)
+    await _safe_edit(query.message, text, build_marker_keyboard(project, stand, markers))
 
 
 @router.callback_query(F.data.startswith("marker:"))
@@ -882,7 +1160,7 @@ async def cb_run_status(query: CallbackQuery, client: HubClient) -> None:
         logger.warning("tg_bot: не удалось получить статус прогона #%s: %s", run_id, exc)
         await _safe_edit(query.message, f"Не удалось получить статус прогона #{run_id}.", build_run_keyboard(run_id))
         return
-    await _safe_edit(query.message, format_status(report), build_run_keyboard(run_id))
+    await _safe_edit(query.message, format_status(report), build_run_keyboard(run_id, report.get("project")))
 
 
 @router.callback_query(F.data.startswith("run_report:"))
@@ -972,6 +1250,78 @@ async def cb_run_share(query: CallbackQuery, client: HubClient) -> None:
         await _reply_http_error(query.message, exc, "создать ссылку", not_found=f"Прогон #{run_id} не найден.")
         return
     await query.message.answer(f"Ссылка на отчёт прогона #{run_id} (30 дней): {share['url']}")
+
+
+@router.callback_query(F.data.startswith("run_causes:"))
+async def cb_run_causes(query: CallbackQuery, client: HubClient) -> None:
+    """Экран «Причины» — отдельным сообщением: исходное может быть фото отчёта,
+    которое edit_text не правит."""
+    await query.answer()
+    if query.message is None:
+        return
+    run_id = parse_callback(query.data)["run_id"]
+    try:
+        causes = await client.get_run_causes(run_id)
+    except httpx.HTTPError as exc:
+        logger.warning("tg_bot: не удалось получить причины падений прогона #%s: %s", run_id, exc)
+        await _reply_http_error(query.message, exc, "получить причины падений", not_found=f"Прогон #{run_id} не найден.")
+        return
+    await query.message.answer(
+        format_causes(run_id, causes),
+        reply_markup=build_back_keyboard(build_callback("run_status", run_id=str(run_id)), "« К прогону"),
+    )
+
+
+@router.callback_query(F.data.startswith("run_compare:"))
+async def cb_run_compare(query: CallbackQuery, client: HubClient) -> None:
+    await query.answer()
+    if query.message is None:
+        return
+    run_id = parse_callback(query.data)["run_id"]
+    try:
+        compare = await client.get_run_compare(run_id)
+    except httpx.HTTPError as exc:
+        if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 404:
+            await query.message.answer(f"Прогон #{run_id}: нет базового прогона для сравнения.")
+            return
+        logger.warning("tg_bot: не удалось получить сравнение прогона #%s: %s", run_id, exc)
+        await _reply_http_error(query.message, exc, "получить сравнение")
+        return
+    await query.message.answer(
+        format_compare(run_id, compare),
+        reply_markup=build_back_keyboard(build_callback("run_status", run_id=str(run_id)), "« К прогону"),
+    )
+
+
+@router.callback_query(F.data.startswith("run_cleanup:"))
+async def cb_run_cleanup(query: CallbackQuery, client: HubClient, bot: Bot) -> None:
+    """«Удалить данные прогона» — POST /api/projects/{name}/runs/{id}/cleanup-data
+    (партия cleanup_after_run), проект берём из отчёта прогона."""
+    if query.message is None:
+        await query.answer()
+        return
+    run_id = parse_callback(query.data)["run_id"]
+    try:
+        report = await client.get_report(run_id)
+    except httpx.HTTPError as exc:
+        await query.answer()
+        await _reply_http_error(query.message, exc, "получить прогон", not_found=f"Прогон #{run_id} не найден.")
+        return
+    project = report.get("project")
+    try:
+        batch = await client.cleanup_run_data(project, run_id)
+    except httpx.HTTPError as exc:
+        logger.warning("tg_bot: не удалось запустить очистку данных прогона #%s: %s", run_id, exc)
+        await query.answer()
+        await query.message.answer(_http_detail(exc) or f"Не удалось запустить очистку данных прогона #{run_id}.")
+        return
+    await query.answer()
+    await query.message.answer(
+        f"Очистка данных прогона #{run_id} запущена: партия #{batch['id']} на {_stand_label(batch.get('stand'))}. "
+        "Сообщу, когда закончится.",
+        reply_markup=build_batch_keyboard(project, batch),
+    )
+    asyncio.create_task(_watch_batch(bot, client, query.message.chat.id, project, batch["id"]))
 
 
 async def _restart_tests(

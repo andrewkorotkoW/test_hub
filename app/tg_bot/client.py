@@ -126,6 +126,37 @@ class HubClient:
         resp = await self._request("GET", f"/api/projects/{project}/stats", params=params)
         return resp.json()
 
+    async def list_markers(self, project: str) -> list[dict]:
+        resp = await self._request("GET", f"/api/projects/{project}/markers")
+        return resp.json()["markers"]
+
+    # ---- «Данные» (app/routers/datagen.py, роль qa)
+    async def list_data_scenarios(self, project: str) -> dict:
+        resp = await self._request("GET", f"/api/projects/{project}/data/scenarios")
+        return resp.json()
+
+    async def list_data_batches(self, project: str) -> list[dict]:
+        resp = await self._request("GET", f"/api/projects/{project}/data")
+        return resp.json()
+
+    async def get_data_batch(self, project: str, batch_id: int) -> dict:
+        resp = await self._request("GET", f"/api/projects/{project}/data/{batch_id}")
+        return resp.json()
+
+    async def create_data_batch(self, project: str, scenario: str, stand: str | None, count: int = 1) -> dict:
+        resp = await self._request(
+            "POST", f"/api/projects/{project}/data", json={"scenario": scenario, "stand": stand, "count": count}
+        )
+        return resp.json()
+
+    async def delete_data_batch(self, project: str, batch_id: int) -> dict:
+        resp = await self._request("DELETE", f"/api/projects/{project}/data/{batch_id}")
+        return resp.json()
+
+    async def cleanup_run_data(self, project: str, run_id: int) -> dict:
+        resp = await self._request("POST", f"/api/projects/{project}/runs/{run_id}/cleanup-data")
+        return resp.json()
+
     async def list_schedules(self, project: str) -> list[dict]:
         resp = await self._request("GET", f"/api/projects/{project}/schedules")
         return resp.json()
