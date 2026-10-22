@@ -159,9 +159,36 @@ def test_format_report_includes_duration_and_link():
     }
     text = format_report(report)
     assert "пройден" in text
-    assert "Длительность: 12.3с" in text
-    assert f"http://127.0.0.1:{settings.TH_PORT}/project.html?name=bike_fit&run=9" in text
+    assert "Длительность: 12 с" in text
+    assert "pass rate 100 %" in text
+    assert f"{settings.TH_PUBLIC_URL}/project.html?name=bike_fit&run=9" in text
     assert "Упавшие тесты" not in text
+
+
+def test_format_report_duration_in_minutes_stand_in_title_and_short_test_names():
+    """Формат как в окне прогона (22.10.2026): «23 мин 2 с» вместо «1382.0с», стенд в
+    заголовке, упавшие — короткое «file::test» по nodeid (или по allure fullName),
+    реран (failed → passed) не считается упавшим."""
+    report = {
+        "id": 96,
+        "project": "vshgu",
+        "stand": "develop",
+        "status": "failed",
+        "duration": 1382.0,
+        "counts": {"passed": 4, "failed": 1, "broken": 0, "skipped": 0},
+        "tests": [
+            {"name": "tests.api.test_cas#test_sync", "nodeid": "tests/api/test_cas.py::TestCas::test_sync",
+             "status": "failed", "stop_ts": "2026-10-19T22:01:00"},
+            {"name": "tests.ui.test_login#test_ok", "status": "failed", "stop_ts": "2026-10-19T22:02:00"},
+            {"name": "tests.ui.test_login#test_ok", "status": "passed", "stop_ts": "2026-10-19T22:05:00"},
+        ],
+    }
+    text = format_report(report)
+    assert "Прогон #96 (vshgu, develop) — провален" in text
+    assert "Длительность: 23 мин 2 с" in text
+    assert "pass rate 80 %" in text
+    assert "  - test_cas::test_sync" in text
+    assert "test_login" not in text
 
 
 def test_format_report_lists_up_to_15_failed_tests_and_counts_rest():
@@ -342,7 +369,7 @@ def test_tg_bot_service_user_seeded(db_path):
     finally:
         conn.close()
     assert row is not None
-    assert row["role"] == "customer"
+    assert row["role"] == "qa"  # с 22.10.2026: «Поделиться»/«Данные»/очистка требуют qa
     assert verify_password(settings.TH_TG_SERVICE_PASSWORD, row["password_hash"])
 
 
@@ -1702,7 +1729,7 @@ def test_format_stats_lists_sections_with_percent_duration_and_extras():
     text = format_stats("bike_fit", "stage", _STATS_DATA)
     lines = text.splitlines()
     assert lines[0] == "Статистика «bike_fit» / stage:"
-    assert lines[1] == "• api/notifications: 5 тестов, 80.0% passed, 1.2с (флаки 2, xfail 1)"
+    assert lines[1] == "• api/notifications: 5 тестов, 80.0% passed, 1.2 с (флаки 2, xfail 1)"
     assert lines[2] == "• ui/buk: 3 тестов, — passed, —"
     assert lines[3] == "Без единого теста: api/empty"
 

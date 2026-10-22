@@ -148,9 +148,8 @@ async def test_customer_forbidden_on_project_create(customer_client, tmp_path):
 
 async def test_tg_bot_service_account_still_sees_all_projects(client, qa_client, tmp_path):
     # Регрессия на конфликт, найденный при анализе кода: сервисная учётка бота
-    # (app/db.py::_seed_tg_bot_user) заведена с ролью 'customer' и project=NULL
-    # исключительно ради отсутствия CRUD, а не ради ограничения её одним
-    # проектом — бот должен сохранить обзор всех проектов.
+    # (app/db.py::_seed_tg_bot_user) заведена с project=NULL не ради ограничения её
+    # одним проектом — бот должен сохранить обзор всех проектов (роль с 22.10.2026 qa).
     await register_project(qa_client, "bot_visible_proj", tmp_path)
 
     all_names = await _project_names(qa_client)
@@ -158,6 +157,6 @@ async def test_tg_bot_service_account_still_sees_all_projects(client, qa_client,
 
     resp = await login(client, settings.TH_TG_SERVICE_LOGIN, settings.TH_TG_SERVICE_PASSWORD)
     assert resp.status_code == 200
-    assert resp.json()["role"] == "customer"
+    assert resp.json()["role"] == "qa"
 
     assert await _project_names(client) == all_names

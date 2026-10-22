@@ -488,25 +488,64 @@ def _seed_superadmin(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+TG_BOT_ROLE = "qa"
+
+
 def _seed_tg_bot_user(conn: sqlite3.Connection) -> None:
-    """Сервисная учётка Telegram-бота (app/tg_bot.py): роль 'customer' — ровно те
-    права, что нужны боту (смотреть проекты/стенды/дерево, запускать прогоны,
-    смотреть отчёты, без CRUD и без отмены). Идемпотентно, как _seed_superadmin:
-    если логин уже есть (в т.ч. с паролем, изменённым вручную), не трогаем."""
-    exists = conn.execute(
-        "SELECT 1 FROM users WHERE login = ?", (settings.TH_TG_SERVICE_LOGIN,)
+    """Сервисная учётка Telegram-бота (app/tg_bot): роль 'qa' — с 22.10.2026 боту нужны
+    не только запуск и отчёты, но и «Поделиться» (qa/manager), «Данные» и очистка
+    после прогона (qa). Запуск на manual_only-стенде (stage) для служебной учётки
+    по-прежнему запрещён в runner.submit_run независимо от роли. Идемпотентно, как
+    _seed_superadmin: существующую учётку с ролью customer (старый посев) повышаем до
+    qa один раз, пароль и остальное не трогаем."""
+    row = conn.execute(
+        "SELECT role FROM users WHERE login = ?", (settings.TH_TG_SERVICE_LOGIN,)
     ).fetchone()
-    if exists:
+    if row:
+        if row["role"] == "customer":
+            conn.execute(
+                "UPDATE users SET role = ? WHERE login = ?", (TG_BOT_ROLE, settings.TH_TG_SERVICE_LOGIN)
+            )
+            conn.commit()
         return
     conn.execute(
         "INSERT INTO users (login, password_hash, role, onboarded) VALUES (?, ?, ?, ?)",
         (
             settings.TH_TG_SERVICE_LOGIN,
             hash_password(settings.TH_TG_SERVICE_PASSWORD),
-            "customer",
+            TG_BOT_ROLE,
             1,
         ),
     )
+    conn.commit()
+
+
+RECOUNT_FINAL_ATTEMPTS_VERSION = 1
+
+
+def _recount_run_counts_once(conn: sqlite3.Connection) -> None:
+    """Однократный пересчёт runs.counts по финальным попыткам (22.10.2026,
+    allure_report.final_attempts): до этого счётчики завершённых прогонов считали
+    каждый реран отдельным тестом (прогон #96: 7 на 5 тестов, pass rate 57 % вместо
+    80 %), и тренд/лента/уведомления брали их из БД как есть. Маркер выполнения —
+    PRAGMA user_version (в схеме других версионных отметок нет); прогоны без
+    каталога allure-результатов на диске не трогаем."""
+    version = conn.execute("PRAGMA user_version").fetchone()[0]
+    if version >= RECOUNT_FINAL_ATTEMPTS_VERSION:
+        return
+    from .core import allure_report  # ленивый импорт: core.* импортируют db
+
+    rows = conn.execute(
+        "SELECT id, repeat FROM runs WHERE status IN ('passed', 'failed', 'cancelled')"
+    ).fetchall()
+    for row in rows:
+        results_dir = settings.ALLURE_RESULTS_DIR / str(row["id"])
+        tests = allure_report.parse_results(results_dir)
+        if not tests:
+            continue
+        counts = allure_report.counts_from_tests(tests, row["repeat"])
+        conn.execute("UPDATE runs SET counts = ? WHERE id = ?", (json.dumps(counts), row["id"]))
+    conn.execute(f"PRAGMA user_version = {RECOUNT_FINAL_ATTEMPTS_VERSION}")
     conn.commit()
 
 
@@ -551,6 +590,7 @@ def init_db() -> None:
         # попытался вставить дубликат, упав в UNIQUE(project, nodeid).
         conn.execute("UPDATE test_cases SET case_key = nodeid WHERE case_key IS NULL AND nodeid IS NOT NULL")
         conn.commit()
+        _recount_run_counts_once(conn)
         conn.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_test_cases_project_case_key "
             "ON test_cases (project, case_key) WHERE case_key IS NOT NULL"

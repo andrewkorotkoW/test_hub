@@ -262,7 +262,13 @@ async def get_report(
         entry["cause"] = cause
         entry["short_reason"] = failure_causes.short_reason(entry.get("message"))
     causes["total"] = sum(causes[c] for c in failure_causes.ALL_CAUSES)
-    counts = json.loads(row["counts"]) if row["counts"] and row["counts"] != "{}" else allure_report.counts_from_tests(tests)
+    # counts — по живым allure-результатам (финальные попытки), а не из runs.counts:
+    # у прогонов до 22.10.2026 в БД лежат счётчики по всем попыткам (#96: 7 на 5 тестов);
+    # без результатов на диске (удалённый каталог) — что сохранено.
+    counts = (
+        allure_report.counts_from_tests(tests, row["repeat"]) if tests
+        else json.loads(row["counts"]) if row["counts"] else allure_report.counts_from_tests([])
+    )
     payload = _run_payload(row)
     payload["counts"] = counts
     payload["causes"] = causes
@@ -528,7 +534,27 @@ def get_report_png(
     run = _run_payload(row)
     history = _run_history(conn, row, 10)
     results = allure_report.parse_results(runner.allure_dir(run_id))
-    png = charts.build_report_png(run, history, results)
+    # nodeid из run_test_results — для коротких подписей «file::test» в топ-10 (как в
+    # окне прогона), причины — для строки в шапке; без строк в таблице (старые
+    # прогоны) топ подписывается по allure fullName, причин в шапке нет.
+    cached = {
+        r["full_name"]: r
+        for r in conn.execute(
+            "SELECT nodeid, full_name, cause FROM run_test_results WHERE run_id = ?", (run_id,)
+        ).fetchall()
+    }
+    causes = {cause: 0 for cause in failure_causes.ALL_CAUSES}
+    for entry in allure_report.final_attempts(results, row["repeat"]):
+        cached_row = cached.get(entry["name"])
+        if cached_row and cached_row["cause"] in causes:
+            causes[cached_row["cause"]] += 1
+    for entry in results:
+        cached_row = cached.get(entry["name"])
+        if cached_row:
+            entry["nodeid"] = cached_row["nodeid"]
+    if results or not run.get("counts"):
+        run["counts"] = allure_report.counts_from_tests(results, row["repeat"])
+    png = charts.build_report_png(run, history, results, causes if cached else None)
     return Response(content=png, media_type="image/png")
 
 

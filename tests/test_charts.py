@@ -131,6 +131,46 @@ class TestBuildReportPng:
 
         _assert_valid_png(data)
 
+    def test_light_theme_with_causes_label_and_rerun_duplicates(self):
+        """Светлый макет (22.10.2026): фон страницы --bg светлой темы, причины в шапке,
+        сборка в заголовке, топ-10 по финальной попытке (дубликаты по реранам не
+        дают двух строк), подписи по nodeid."""
+        run = _run({"passed": 4, "failed": 1, "broken": 0, "skipped": 0}, label="Смоук", duration=1382)
+        history = [_history_item(i) for i in range(12)]
+        results = [
+            {"name": "tests.api.test_cas#test_sync", "nodeid": "tests/api/test_cas.py::test_sync",
+             "status": "failed", "duration": 277.0, "stop_ts": "2026-10-19T22:01:00"},
+            {"name": "tests.api.test_cas#test_sync", "nodeid": "tests/api/test_cas.py::test_sync",
+             "status": "passed", "duration": 250.0, "stop_ts": "2026-10-19T22:06:00"},
+            {"name": "tests.ui.test_login#test_ok", "status": "passed", "duration": 53.5, "stop_ts": None},
+        ]
+        causes = {"throttling": 1, "session": 0, "stand": 0, "code": 0, "total": 1}
+
+        wide = build_report_png(run, history, results, causes, layout="wide")
+        mobile = build_report_png(run, history, results, causes)  # по умолчанию — портрет под телефон
+
+        _assert_valid_png(wide)
+        _assert_valid_png(mobile)
+        if HAS_PIL:
+            import io
+
+            img = Image.open(io.BytesIO(wide)).convert("RGB")
+            assert img.size == (1200, 1400)
+            assert img.getpixel((2, 2)) == (0xF5, 0xF6, 0xF8)  # --bg светлой темы, не #10142a
+            assert Image.open(io.BytesIO(mobile)).size == (1080, 1920)
+
+    def test_mobile_layout_handles_many_tests_and_empty_data(self):
+        results = [
+            {"name": f"tests.ui.test_very_long_module_name_{i}.TestSuite#test_case_with_long_name_{i}",
+             "status": "passed", "duration": float(10 * i + 1)}
+            for i in range(30)
+        ]
+        _assert_valid_png(build_report_png(_run({"passed": 30}), [], results))
+        _assert_valid_png(build_report_png({}, [], []))
+        _assert_valid_png(build_report_png(_run({"passed": 0, "failed": 2}), [_history_item(1)], [
+            {"name": "tests/test_a.py::test_x", "status": "failed", "duration": None},
+        ]))
+
 
 class TestBuildTrendPng:
     def test_empty_history(self):

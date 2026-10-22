@@ -670,6 +670,6 @@ async def _execute(
         status = "passed" if total_returncode == 0 else "failed"
 
     tests = allure_report.parse_results(results_dir)
-    counts = allure_report.counts_from_tests(tests)
+    counts = allure_report.counts_from_tests(tests, repeat)
     await _finalize(run_id, status, started_at, counts)
     await _advance_queue(project_name)

@@ -23,11 +23,37 @@ def test_seed_users_have_expected_roles(db_path):
     assert rows["manager"]["role"] == "manager"
     assert rows["customer"]["role"] == "customer"
     assert rows["admin"]["role"] == "superadmin"
-    assert rows["tg_bot"]["role"] == "customer"
+    assert rows["tg_bot"]["role"] == "qa"
     # sanity: пароли захешированы, не хранятся в открытом виде
     for login_, row in rows.items():
         assert row["password_hash"] != login_
         assert row["password_hash"].startswith("scrypt$")
+
+
+def test_seed_upgrades_existing_tg_bot_customer_to_qa_once(db_path):
+    """Старые базы (посев до 22.10.2026) держат tg_bot с ролью customer — init_db
+    повышает её до qa, не трогая пароль; вручную выставленную другую роль не меняет."""
+    conn = _connect(db_path)
+    try:
+        conn.execute("UPDATE users SET role = 'customer', password_hash = 'scrypt$keep' WHERE login = 'tg_bot'")
+        conn.commit()
+    finally:
+        conn.close()
+    init_db()
+    conn = _connect(db_path)
+    try:
+        row = conn.execute("SELECT role, password_hash FROM users WHERE login = 'tg_bot'").fetchone()
+        assert (row["role"], row["password_hash"]) == ("qa", "scrypt$keep")
+        conn.execute("UPDATE users SET role = 'manager' WHERE login = 'tg_bot'")
+        conn.commit()
+    finally:
+        conn.close()
+    init_db()
+    conn = _connect(db_path)
+    try:
+        assert conn.execute("SELECT role FROM users WHERE login = 'tg_bot'").fetchone()["role"] == "manager"
+    finally:
+        conn.close()
 
 
 def test_seed_onboarded_flags_match_seed_table(db_path):

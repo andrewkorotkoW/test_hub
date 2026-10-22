@@ -218,7 +218,9 @@ async def test_cmd_status_with_explicit_id():
     await cmd_status(message, command, client, last_run={})
 
     client.get_report.assert_awaited_once_with(7)
-    assert message.answers == ["Прогон #7 (bike_fit) — пройден\npassed: 3, failed: 0, broken: 0, skipped: 0"]
+    assert message.answers == [
+        "Прогон #7 (bike_fit) — пройден\npassed: 3, failed: 0, broken: 0, skipped: 0 · pass rate 100 %"
+    ]
 
 
 async def test_cmd_status_reuses_last_run_from_same_chat():

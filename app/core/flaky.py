@@ -56,13 +56,17 @@ def _allure_dir(run_id: int) -> Path:
     return settings.ALLURE_RESULTS_DIR / str(run_id)
 
 
-def _finished_run_ids(conn: sqlite3.Connection, project: str, stand: str, limit: int) -> list[int]:
+def _finished_runs(conn: sqlite3.Connection, project: str, stand: str, limit: int) -> list[sqlite3.Row]:
     rows = conn.execute(
-        "SELECT id FROM runs WHERE project = ? AND stand = ? "
+        "SELECT id, repeat FROM runs WHERE project = ? AND stand = ? "
         "AND status IN ('passed', 'failed', 'cancelled') ORDER BY id DESC LIMIT ?",
         (project, stand, limit),
     ).fetchall()
-    return [row["id"] for row in rows][::-1]  # по возрастанию id = в хронологическом порядке
+    return rows[::-1]  # по возрастанию id = в хронологическом порядке
+
+
+def _finished_run_ids(conn: sqlite3.Connection, project: str, stand: str, limit: int) -> list[int]:
+    return [row["id"] for row in _finished_runs(conn, project, stand, limit)]
 
 
 def _cause_by_full_name(conn: sqlite3.Connection, run_id: int) -> dict[str, str | None]:
@@ -79,14 +83,13 @@ def recalc(project: str, stand: str, test_history: int = DEFAULT_HISTORY) -> lis
     прогонам проекта на стенде и перезаписывает flaky_stats для этой пары
     (project, stand) целиком.
 
-    rerun-дубликаты (несколько *-result.json с одним fullName внутри одного
-    прогона, например при RunCreate.repeat > 1) не схлопываются в одну запись —
-    каждый идёт в общую хронологическую последовательность статусов теста тем же
-    порядком, что вернул allure_report.parse_results (сортировка по имени файла
-    результата — точное время старта эта функция не отдаёт, так что для тестов
-    внутри одного прогона это лучшее доступное приближение к порядку выполнения).
-    flips — число смен статуса между соседними элементами последовательности,
-    score = flips / (runs - 1).
+    Рераны (несколько *-result.json с одним fullName внутри обычного прогона —
+    pytest-rerunfailures, повтор упавших) схлопываются в финальную попытку
+    (allure_report.final_attempts, по stop_ts): упал и прошёл на реране — это один
+    passed, а не «смена статуса». Исключение — RunCreate.repeat > 1: там повторы
+    намеренные, каждый идёт в хронологическую последовательность отдельной записью
+    в порядке файлов результатов. flips — число смен статуса между соседними
+    элементами последовательности, score = flips / (runs - 1).
 
     Падения, классифицированные app.core.failure_causes как инфраструктурные
     (throttling/session/stand, т.е. cause != 'code' в run_test_results — см.
@@ -100,12 +103,17 @@ def recalc(project: str, stand: str, test_history: int = DEFAULT_HISTORY) -> lis
     есть."""
     conn = get_connection()
     try:
-        run_ids = _finished_run_ids(conn, project, stand, test_history)
+        runs = _finished_runs(conn, project, stand, test_history)
 
         by_test: dict[str, list[tuple[str, str | None]]] = {}
-        for run_id in run_ids:
+        for run in runs:
+            run_id = run["id"]
             cause_by_full_name = _cause_by_full_name(conn, run_id)
-            for entry in allure_report.parse_results(_allure_dir(run_id)):
+            # final_attempts: реран внутри одного прогона (failed → passed) — не два
+            # прогона и не «смена статуса», а одна финальная попытка (22.10.2026: раньше
+            # такой тест получал 100 % нестабильности при нуле падений).
+            entries = allure_report.final_attempts(allure_report.parse_results(_allure_dir(run_id)), run["repeat"])
+            for entry in entries:
                 name = entry["name"]
                 by_test.setdefault(test_key(entry), []).append((entry["status"], cause_by_full_name.get(name)))
 
@@ -132,7 +140,9 @@ def recalc(project: str, stand: str, test_history: int = DEFAULT_HISTORY) -> lis
                 prev = eff
             # fails — по фактическим падениям (не по унаследованному эффективному статусу:
             # skipped после failed иначе считался бы вторым падением), стендовые причины не в счёт
-            fails = sum(1 for status, cause in entries if status == "failed" and cause in (None, "code"))
+            # broken (ошибка в setup/teardown, таймаут Playwright) — тоже падение: иначе тест
+            # с broken-статусами показывал «0 падений» при ненулевой нестабильности (22.10.2026)
+            fails = sum(1 for status, cause in entries if status in ("failed", "broken") and cause in (None, "code"))
             flips = sum(1 for a, b in zip(effective, effective[1:]) if a != b)
             score = flips / (runs_count - 1) if runs_count > 1 else 0.0
             stats.append({

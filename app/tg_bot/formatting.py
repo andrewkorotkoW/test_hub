@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from ..config import settings
-from ..core import failure_causes
+from ..core import allure_report, failure_causes
+from ..core.fmt import fmt_run_duration, fmt_test_duration, pass_rate, short_test_name
 
 MAX_FAILED_LISTED = 15
 
 
-MAX_REASON_LEN = 120
+# В подписи к фото на телефоне длинный текст ошибки занимал полэкрана (22.10.2026) —
+# в боте причина короче, чем в GET /runs/{id}/causes (failure_causes.MAX_REASON_LEN)
+MAX_REASON_LEN = 80
 
 
 MAX_FAILED_LABEL_LEN = 40
@@ -57,16 +60,38 @@ def format_projects(projects: list[dict]) -> str:
 
 
 def _counts_line(counts: dict) -> str:
-    return (
+    line = (
         f"passed: {counts.get('passed', 0)}, failed: {counts.get('failed', 0)}, "
         f"broken: {counts.get('broken', 0)}, skipped: {counts.get('skipped', 0)}"
     )
+    rate = pass_rate(counts)
+    if rate is not None:
+        line += f" · pass rate {rate} %"
+    return line
+
+
+def _run_title(report: dict) -> str:
+    """«Прогон #96 (vshgu, develop, сборка X) — провален»: стенд в скобках, как в
+    окне прогона; прогон сборки называем по имени сборки (см. этап 2 миссии
+    2026-10-01_coverage_k_and_test_sets.md), а не по списку целей."""
+    status_ru = STATUS_RU.get(report["status"], report["status"])
+    parts = [str(report.get("project"))]
+    if report.get("stand"):
+        parts.append(str(report["stand"]))
+    if report.get("label"):
+        parts.append(f"сборка {report['label']}")
+    return f"Прогон #{report['id']} ({', '.join(parts)}) — {status_ru}"
+
+
+def run_url(report: dict) -> str:
+    """Ссылка на окно прогона по TH_PUBLIC_URL (адрес, видимый снаружи), а не по
+    127.0.0.1:TH_PORT — с телефона такой адрес не открывался (22.10.2026)."""
+    return f"{settings.TH_PUBLIC_URL}/project.html?name={report.get('project')}&run={report['id']}"
 
 
 def format_status(report: dict) -> str:
-    status_ru = STATUS_RU.get(report["status"], report["status"])
     lines = [
-        f"Прогон #{report['id']} ({report.get('project')}) — {status_ru}",
+        _run_title(report),
         _counts_line(report.get("counts") or {}),
     ]
     return "\n".join(lines)
@@ -84,7 +109,12 @@ def _bad_tests(report: dict, causes: dict | None = None) -> list[dict]:
     список ограничивается code-падениями — стендовые (throttling/session/stand)
     и так видны в сводной строке _causes_line, перечислять их здесь избыточно.
     Без causes (старые вызовы, недоступность API) — прежнее поведение: все failed/broken."""
-    bad = [t for t in report.get("tests", []) if t.get("status") in ("failed", "broken")]
+    # final_attempts: при реране (failed → passed) тест не упавший, а при двух
+    # падениях — не два теста (22.10.2026, прогон #96: 7 строк на 5 тестов).
+    bad = [
+        t for t in allure_report.final_attempts(report.get("tests") or [], report.get("repeat") or 1)
+        if t.get("status") in ("failed", "broken")
+    ]
     cause_by_name = _cause_by_full_name(causes)
     if not cause_by_name:
         return bad
@@ -94,7 +124,8 @@ def _bad_tests(report: dict, causes: dict | None = None) -> list[dict]:
 def _short_reason(test: dict) -> str:
     """Обёртка над app.core.failure_causes.short_reason — общей логикой для бота
     и GET /runs/{id}/causes (см. docs/missions/2026-10-13_run_compare_and_causes.md)."""
-    return failure_causes.short_reason(test.get("message"))
+    reason = failure_causes.short_reason(test.get("message"))
+    return reason if len(reason) <= MAX_REASON_LEN else reason[: MAX_REASON_LEN - 1].rstrip() + "…"
 
 
 def _short_test_label(name: str) -> str:
@@ -212,17 +243,10 @@ def format_report(report: dict, causes: dict | None = None, compare: dict | None
     (см. app/tg_bot/client.py), подтягиваются вызывающей стороной только для
     завершённых прогонов (app/tg_bot/handlers.py); без них — прежнее поведение
     (строка причин и сравнения не добавляются, список упавших — все failed/broken)."""
-    status_ru = STATUS_RU.get(report["status"], report["status"])
-    duration = report.get("duration")
-    duration_str = f"{duration:.1f}с" if isinstance(duration, (int, float)) else "—"
-    label = report.get("label")
-    # Прогон сборки (см. этап 2 миссии 2026-10-01_coverage_k_and_test_sets.md)
-    # называем по имени сборки, а не по (обычно длинному) списку целей.
-    title_suffix = f", сборка {label}" if label else ""
     lines = [
-        f"Прогон #{report['id']} ({report.get('project')}{title_suffix}) — {status_ru}",
+        _run_title(report),
         _counts_line(report.get("counts") or {}),
-        f"Длительность: {duration_str}",
+        f"Длительность: {fmt_run_duration(report.get('duration'))}",
     ]
     causes_line = _causes_line(causes)
     if causes_line:
@@ -237,11 +261,13 @@ def format_report(report: dict, causes: dict | None = None, compare: dict | None
         for t in shown:
             reason = _short_reason(t)
             suffix = f": {reason}" if reason else ""
-            lines.append(f"  - {t.get('name')}{suffix}")
+            # nodeid есть в ответе GET /runs/{id}/report (окно прогона); у старых
+            # вызовов и уведомлений — только allure fullName, short_test_name понимает оба
+            lines.append(f"  - {short_test_name(t.get('nodeid') or t.get('name') or '')}{suffix}")
         remaining = len(bad_tests) - len(shown)
         if remaining > 0:
             lines.append(f"  …и ещё {remaining}")
-    lines.append(f"http://127.0.0.1:{settings.TH_PORT}/project.html?name={report.get('project')}&run={report['id']}")
+    lines.append(run_url(report))
     return "\n".join(lines)
 
 
@@ -290,7 +316,7 @@ def format_stats(project: str, stand: str | None, data: dict) -> str:
     for s in sections[:STATS_SECTIONS_LIMIT]:
         percent = s["passed_percent"]
         percent_text = f"{percent}%" if percent is not None else "—"
-        duration_text = f"{s['avg_duration']:.1f}с" if s.get("avg_duration") is not None else "—"
+        duration_text = fmt_test_duration(s.get("avg_duration"))
         extra = []
         if s.get("flaky_count"):
             extra.append(f"флаки {s['flaky_count']}")

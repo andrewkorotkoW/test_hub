@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING
 from ..config import settings
 from ..db import get_connection
 from . import allure_report, charts, runner
+from .fmt import short_test_name
 
 if TYPE_CHECKING:
     from aiogram import Bot
@@ -307,7 +308,7 @@ def _run_history(conn: sqlite3.Connection, project: str, stand: str | None, limi
 
 
 def _short_name(full_name: str) -> str:
-    return (full_name or "").rsplit("#", 1)[-1]
+    return short_test_name(full_name)
 
 
 def _notification_caption(run_row: sqlite3.Row, comparison: dict, xpass_count: int) -> str:

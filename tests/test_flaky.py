@@ -50,8 +50,10 @@ def _write_allure_result(results_dir, filename, full_name, test_status):
 @pytest.fixture()
 def flaky_history(db_path, isolated_allure_dir):
     """3 прогона: passed, failed, и третий с двумя *-result.json одного fullName
-    (rerun-дубликат внутри прогона) — passed затем failed, тоже считается как
-    отдельные элементы хронологической последовательности статусов."""
+    (rerun-дубликат внутри прогона) — passed затем failed. С 22.10.2026 recalc берёт
+    финальную попытку (allure_report.final_attempts: без stop_ts — последнюю по
+    порядку файлов, здесь failed), а не обе записи: реран внутри прогона — не два
+    прогона и не смена статуса."""
     from app.config import settings
 
     conn = get_connection()
@@ -78,12 +80,12 @@ def test_recalc_computes_runs_fails_flips_score(flaky_history):
     assert len(stats) == 1
     row = stats[0]
     assert row["test"] == full_name
-    # хронология: passed, failed, passed, failed -> 4 записи, 3 смены статуса подряд
-    assert row["runs"] == 4
+    # хронология: passed, failed, failed (финальная попытка run_c) -> 3 записи, 1 смена статуса
+    assert row["runs"] == 3
     assert row["fails"] == 2
-    assert row["flips"] == 3
-    assert row["score"] == pytest.approx(1.0)
-    assert row["last_statuses"] == ["passed", "failed", "passed", "failed"]
+    assert row["flips"] == 1
+    assert row["score"] == pytest.approx(0.5)
+    assert row["last_statuses"] == ["passed", "failed", "failed"]
 
     conn = get_connection()
     try:
@@ -91,7 +93,7 @@ def test_recalc_computes_runs_fails_flips_score(flaky_history):
     finally:
         conn.close()
     assert cached is not None
-    assert cached["runs"] == 4
+    assert cached["runs"] == 3
 
 
 def test_recalc_overwrites_previous_stats_for_same_project_stand(flaky_history):
@@ -102,7 +104,39 @@ def test_recalc_overwrites_previous_stats_for_same_project_stand(flaky_history):
     finally:
         conn.close()
     assert row is not None
-    assert row["runs"] == 2  # run_c сам по себе содержит 2 записи (rerun-дубликат)
+    assert row["runs"] == 1  # run_c содержит 2 записи (rerun-дубликат), считается финальная
+
+
+def test_recalc_rerun_passed_after_failed_is_not_a_flip(db_path, isolated_allure_dir):
+    """Тест упал и прошёл на реране в каждом из двух прогонов: до 22.10.2026 это давало
+    последовательность failed, passed, failed, passed — 100 % нестабильности и 2 падения;
+    теперь финальная попытка (по stop_ts) обоих прогонов passed — 0 flips, 0 fails."""
+    from app.config import settings
+
+    conn = get_connection()
+    try:
+        _insert_project_and_stand(conn)
+        runs = [_insert_run(conn, "passed"), _insert_run(conn, "passed")]
+    finally:
+        conn.close()
+    full_name = "tests.test_flaky_sample#test_rerun"
+    for run_id in runs:
+        results_dir = settings.ALLURE_RESULTS_DIR / str(run_id)
+        results_dir.mkdir(parents=True, exist_ok=True)
+        # файлы названы так, что «по порядку» passed шёл бы первым — порядок решает stop_ts
+        (results_dir / "00-result.json").write_text(
+            json.dumps({"status": "passed", "fullName": full_name, "start": 2000, "stop": 3000}), encoding="utf-8"
+        )
+        (results_dir / "01-result.json").write_text(
+            json.dumps({"status": "failed", "fullName": full_name, "start": 0, "stop": 1000}), encoding="utf-8"
+        )
+
+    stats = flaky.recalc(PROJECT, STAND)
+    assert len(stats) == 1
+    assert stats[0]["runs"] == 2
+    assert stats[0]["fails"] == 0
+    assert stats[0]["flips"] == 0
+    assert stats[0]["last_statuses"] == ["passed", "passed"]
 
 
 async def test_flaky_api_list_and_history(qa_client, flaky_history):
@@ -113,9 +147,9 @@ async def test_flaky_api_list_and_history(qa_client, flaky_history):
     assert len(body["items"]) == 1
     item = body["items"][0]
     assert item["test"] == flaky_history
-    assert item["runs"] == 4
+    assert item["runs"] == 3
     assert item["fails"] == 2
-    assert item["score"] == pytest.approx(1.0)
+    assert item["score"] == pytest.approx(0.5)
     # tmp_path-проект без .venv -> runner.discover() не находит дерево тестов,
     # nodeid остаётся best-effort None (см. app/routers/flaky.py).
     assert item["nodeid"] is None
@@ -267,7 +301,7 @@ def test_recalc_without_run_test_results_keeps_old_behavior(flaky_history):
     row = stats[0]
     assert row["test"] == full_name
     assert row["fails"] == 2
-    assert row["flips"] == 3
+    assert row["flips"] == 1
 
 
 # ------------------------------------------------------------------ 14.10.2026: skipped нейтрален, параметры не схлопываются

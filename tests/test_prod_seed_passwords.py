@@ -76,7 +76,7 @@ def test_prod_seed_tg_bot_user_still_uses_static_configured_password(tmp_path, m
     сервисная учётка Telegram-бота всегда получает пароль settings.TH_TG_SERVICE_PASSWORD
     (по умолчанию буквально 'tg_bot') без генерации случайного пароля и без записи в лог,
     даже в TH_ENV=prod. Если оператор не переопределит TH_TG_SERVICE_PASSWORD сам, эта
-    учётка (роль customer: видит проекты/стенды/дерево, запускает прогоны) в проде
+    учётка (роль qa с 22.10.2026: прогоны, отчёты, «Поделиться», «Данные») в проде
     остаётся с предсказуемым паролем из репозитория/README."""
     db_path = _init_db_with_env(tmp_path, monkeypatch, "prod")
 

@@ -135,9 +135,50 @@ def parse_results(results_dir: Path) -> list[dict]:
     return tests
 
 
-def counts_from_tests(tests: list[dict]) -> dict[str, int]:
-    counts = _empty_counts()
+def _attempt_key(test: dict) -> str:
+    return f"{test.get('name') or ''}[{test.get('params') or ''}]"
+
+
+def final_attempts(tests: list[dict], repeat: int | None = 1) -> list[dict]:
+    """Последняя попытка каждого теста (pytest-rerunfailures пишет несколько
+    *-result.json с одним fullName): по максимальному stop_ts, без него — последняя
+    по порядку. У оставленной записи поле attempts — сколько попыток было. Порядок —
+    по первому появлению теста. Тот же выбор, что у DashboardChartsLogic.lastAttempts
+    в UI; раньше повторы считались отдельными тестами и искажали counts/pass
+    rate/флаки (прогон #96: 5 тестов, 7 строк, 57 %).
+
+    repeat > 1 (RunCreate.repeat — «прогнать N раз» для флаки-детектора, см.
+    runner._execute) — повторы намеренные и независимые: ничего не схлопываем,
+    каждая запись возвращается как есть с attempts=1."""
+    if repeat and repeat > 1:
+        return [dict(test, attempts=1) for test in tests]
+    by_key: dict[str, dict] = {}
+    attempts: dict[str, int] = {}
+    order: list[str] = []
     for test in tests:
+        key = _attempt_key(test)
+        attempts[key] = attempts.get(key, 0) + 1
+        prev = by_key.get(key)
+        if prev is None:
+            order.append(key)
+            by_key[key] = test
+            continue
+        newer = not test.get("stop_ts") or not prev.get("stop_ts") or str(test["stop_ts"]) >= str(prev["stop_ts"])
+        if newer:
+            by_key[key] = test
+    result = []
+    for key in order:
+        entry = dict(by_key[key])
+        entry["attempts"] = attempts[key]
+        result.append(entry)
+    return result
+
+
+def counts_from_tests(tests: list[dict], repeat: int | None = 1) -> dict[str, int]:
+    """Счётчики по финальным попыткам (final_attempts), а не по всем файлам результатов;
+    repeat — как у final_attempts (при repeat > 1 считаются все записи)."""
+    counts = _empty_counts()
+    for test in final_attempts(tests, repeat):
         if test["status"] in counts:
             counts[test["status"]] += 1
     return counts
