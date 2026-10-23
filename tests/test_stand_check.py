@@ -103,6 +103,23 @@ def test_check_url_connect_error_is_not_ok_without_status(monkeypatch):
     assert result.error == "Сеть недоступна"
 
 
+def test_check_url_blank_is_url_not_set_without_network_attempt(monkeypatch):
+    """Пустой url у стенда — осознанный выбор (проект берёт адрес из своего .env),
+    не ошибка сети: отдельная причина, и никакого httpx.get вообще не происходит
+    (реальный баг, найденный владельцем 23.10.2026, — стенд VSHGU/develop с
+    url="" показывал «Сеть недоступна» вместо понятной причины)."""
+    calls = _install(monkeypatch, lambda req: httpx.Response(200))
+
+    for blank in ("", "   "):
+        result = stand_check.check_url(blank)
+        assert result.ok is False
+        assert result.status_code is None
+        assert result.error == "URL не задан"
+        assert result.elapsed_ms == 0
+
+    assert calls == []
+
+
 # ------------------------------------------------------------------ API: POST /{name}/stands/check
 
 async def test_check_stand_api_ok(qa_client, tmp_path, monkeypatch):
@@ -140,6 +157,19 @@ async def test_check_stand_api_unreachable_is_still_200_with_ok_false(qa_client,
     assert body["ok"] is False
     assert body["status_code"] is None
     assert body["error"] == "Сеть недоступна"
+
+
+async def test_check_stand_api_blank_url_is_url_not_set_not_network_error(qa_client, tmp_path):
+    """Стенд с пустым url (проект берёт адрес из своего .env, см. StandCreate.url)
+    -- отдельная причина, не «Сеть недоступна»."""
+    await register_project(qa_client, "stand_check_api_blank_proj", tmp_path)
+    resp = await qa_client.post(
+        "/api/projects/stand_check_api_blank_proj/stands/check", json={"url": ""}
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["ok"] is False
+    assert body["error"] == "URL не задан"
 
 
 async def test_check_stand_api_works_for_unsaved_url(qa_client, tmp_path, monkeypatch):

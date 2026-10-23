@@ -31,6 +31,11 @@ class StandCheckResult:
 
 
 def check_url(url: str) -> StandCheckResult:
+    if not url or not url.strip():
+        # Пустой url у стенда — осознанный выбор (проект сам берёт адрес из своего
+        # .env/конфига, см. StandCreate.url), а не ошибка; отдаём отдельную причину,
+        # а не пытаемся сходить по пустой строке и получить непонятную сетевую ошибку.
+        return StandCheckResult(ok=False, status_code=None, elapsed_ms=0, error="URL не задан")
     start = time.monotonic()
     try:
         resp = httpx.get(url, timeout=TIMEOUT, follow_redirects=True)
