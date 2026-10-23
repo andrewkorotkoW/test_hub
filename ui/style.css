@@ -839,15 +839,7 @@ td.report-reason .cmp-tag { margin-top: 4px; display: inline-block; }
    страницы — рамка имитирует физическое устройство, а не поверхность приложения. Высоту
    задаёт инлайн-стиль из RunLiveLogic.phoneFrameScale (project.js/share.js), max-height
    здесь — запасной предел до первого измерения панели. */
-.phone-frame-toggle-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
-/* Выбор рамки просмотра телефон/планшет (визуальный, не меняет эмуляцию теста —
-   он всегда Pixel 7, см. run-device-badge) — сегмент из двух кнопок рядом с
-   «Без рамки». Активная кнопка — акцентная заливка, как button.primary. */
-.phone-frame-device-switch { display: flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
-.phone-frame-device-btn { border: none; border-radius: 0; padding: 6px 12px; font-size: 12px; }
-.phone-frame-device-btn + .phone-frame-device-btn { border-left: 1px solid var(--border); }
-.phone-frame-device-btn.active { background: var(--action-accent); border-color: var(--action-accent); color: var(--action-accent-text); }
-.phone-frame-device-btn.active:hover { background: var(--action-accent-hover); border-color: var(--action-accent-hover); color: var(--action-accent-text); }
+.phone-frame-toggle-row { display: flex; justify-content: flex-end; }
 .phone-frame-wrap { display: flex; justify-content: center; }
 .phone-frame {
   width: auto;
@@ -858,23 +850,6 @@ td.report-reason .cmp-tag { margin-top: 4px; display: inline-block; }
   background: #000;
   border: 10px solid #000;
   border-radius: 36px;
-  box-shadow: var(--shadow-card);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-/* Рамка планшета — второй вариант просмотра мобильного прогона (RunLiveLogic.
-   frameDimensions), тот же .phone-frame-statusbar/.phone-frame-screen внутри:
-   отличия только в пропорции/радиусе/толщине рамки под размер планшета. */
-.tablet-frame {
-  width: auto;
-  height: 480px;
-  max-width: 100%;
-  max-height: 1180px; /* натуральная высота рамки планшета, см. .phone-frame max-height */
-  aspect-ratio: 820 / 1180;
-  background: #000;
-  border: 14px solid #000;
-  border-radius: 20px;
   box-shadow: var(--shadow-card);
   display: flex;
   flex-direction: column;

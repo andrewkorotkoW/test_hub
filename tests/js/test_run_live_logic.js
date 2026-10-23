@@ -224,35 +224,6 @@ test("phoneFrameScale: нулевая/отрицательная/нечисло�
   assert.strictEqual(Logic.phoneFrameScale(undefined), 1);
 });
 
-// ------------------------------------------------------------------ frameDimensions / рамка планшета
-
-test("frameDimensions: 'phone' -> размеры и класс рамки телефона", function () {
-  assert.deepStrictEqual(Logic.frameDimensions("phone"), {
-    width: Logic.PHONE_FRAME_WIDTH, height: Logic.PHONE_FRAME_HEIGHT, className: "phone-frame",
-  });
-});
-
-test("frameDimensions: 'tablet' -> размеры и класс рамки планшета", function () {
-  assert.deepStrictEqual(Logic.frameDimensions("tablet"), {
-    width: Logic.TABLET_FRAME_WIDTH, height: Logic.TABLET_FRAME_HEIGHT, className: "tablet-frame",
-  });
-});
-
-test("frameDimensions: неизвестное/пустое значение -> телефон по умолчанию", function () {
-  assert.strictEqual(Logic.frameDimensions(undefined).className, "phone-frame");
-  assert.strictEqual(Logic.frameDimensions("").className, "phone-frame");
-  assert.strictEqual(Logic.frameDimensions("desktop").className, "phone-frame");
-});
-
-test("phoneFrameScale: с явной высотой рамки планшета масштабируется по ней, не по телефонной", function () {
-  assert.strictEqual(Logic.phoneFrameScale(Logic.TABLET_FRAME_HEIGHT / 2, Logic.TABLET_FRAME_HEIGHT), 0.5);
-  assert.strictEqual(Logic.phoneFrameScale(Logic.TABLET_FRAME_HEIGHT, Logic.TABLET_FRAME_HEIGHT), 1);
-});
-
-test("phoneFrameScale: высота рамки не передана -> как раньше, масштаб по телефонной высоте", function () {
-  assert.strictEqual(Logic.phoneFrameScale(Logic.PHONE_FRAME_HEIGHT / 2), 0.5);
-});
-
 var failed = 0;
 tests.forEach(function (t) {
   try {

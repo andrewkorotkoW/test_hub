@@ -71,7 +71,7 @@
     if (currentData && !reportCharts.hidden) renderReportCharts(currentData);
   }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
-  // ---------------- рамка телефона/планшета и эфир ----------------
+  // ---------------- рамка телефона и эфир ----------------
   const PHONE_FRAME_OFF_KEY = "th_phone_frame_off";
   function isPhoneFrameOff() {
     try { return localStorage.getItem(PHONE_FRAME_OFF_KEY) === "1"; } catch { return false; }
@@ -80,37 +80,20 @@
     try { localStorage.setItem(PHONE_FRAME_OFF_KEY, off ? "1" : "0"); } catch { /* localStorage недоступен */ }
   }
 
-  // Выбор рамки просмотра — телефон/планшет (RunLiveLogic.frameDimensions), чисто
-  // визуальный: сам тест по-прежнему шёл с эмуляцией Pixel 7 независимо от выбора.
-  // Тот же ключ localStorage, что и в ui/project-run-split.js.
-  const PHONE_FRAME_DEVICE_KEY = "th_phone_frame_device";
-  function phoneFrameDevice() {
-    try { return localStorage.getItem(PHONE_FRAME_DEVICE_KEY) === "tablet" ? "tablet" : "phone"; } catch { return "phone"; }
-  }
-  function setPhoneFrameDevice(device) {
-    try { localStorage.setItem(PHONE_FRAME_DEVICE_KEY, device === "tablet" ? "tablet" : "phone"); } catch { /* localStorage недоступен */ }
-  }
-
-  // Без id у кнопок — они попадают и в #live-frame-area, и (отдельным экземпляром) в
+  // Без id у кнопки — она попадает и в #live-frame-area, и (отдельным экземпляром) в
   // открытую строку с видео теста, document.getElementById с дублирующимся id был бы
   // неоднозначен; клик ловим делегированием на document (см. ниже).
   function maybePhoneFrame(innerHtml, timeText) {
     if (!runMobile) return innerHtml;
     const off = isPhoneFrameOff();
-    const device = phoneFrameDevice();
     const toggleRow = `
       <div class="phone-frame-toggle-row">
-        <div class="phone-frame-device-switch" role="group" aria-label="Рамка просмотра">
-          <button type="button" class="phone-frame-device-btn${device === "phone" ? " active" : ""}" data-device="phone">Телефон</button>
-          <button type="button" class="phone-frame-device-btn${device === "tablet" ? " active" : ""}" data-device="tablet">Планшет</button>
-        </div>
         <button type="button" class="phone-frame-toggle-btn">${off ? "Показать рамку" : "Без рамки"}</button>
       </div>`;
     if (!RunLiveLogic.phoneFrameEnabled(runMobile, off)) return toggleRow + innerHtml;
-    const dims = RunLiveLogic.frameDimensions(device);
     return `${toggleRow}
       <div class="phone-frame-wrap">
-        <div class="${dims.className}">
+        <div class="phone-frame">
           <div class="phone-frame-statusbar">${escapeHtml(timeText || "")}</div>
           <div class="phone-frame-screen">${innerHtml}</div>
         </div>
@@ -135,11 +118,12 @@
     liveFrameImg = document.getElementById("live-frame-img");
   }
 
-  // Переключатели «Без рамки» и «Телефон»/«Планшет» общие для кадра эфира и плеера
-  // видео теста (те же ключи localStorage, что в ui/project-run-split.js) — клик
-  // где угодно на странице перестраивает кадр эфира и, если открыта строка с
-  // видео, её тоже.
-  function rerenderOpenFrames() {
+  // Переключатель «Без рамки» общий для кадра эфира и плеера видео теста (один
+  // ключ localStorage, как в ui/project.js) — клик где угодно на странице
+  // перестраивает кадр эфира и, если открыта строка с видео, её тоже.
+  document.addEventListener("click", (ev) => {
+    if (!ev.target.closest(".phone-frame-toggle-btn")) return;
+    setPhoneFrameOff(!isPhoneFrameOff());
     renderLiveFrameArea();
     const openDetail = reportRows.querySelector(".report-detail-row");
     if (openDetail) {
@@ -147,17 +131,6 @@
       const tr = reportRows.querySelector(`tr.clickable[data-idx="${idx}"]`);
       if (tr) openDetailRow(tr);
     }
-  }
-  document.addEventListener("click", (ev) => {
-    const deviceBtn = ev.target.closest(".phone-frame-device-btn");
-    if (deviceBtn) {
-      setPhoneFrameDevice(deviceBtn.dataset.device);
-      rerenderOpenFrames();
-      return;
-    }
-    if (!ev.target.closest(".phone-frame-toggle-btn")) return;
-    setPhoneFrameOff(!isPhoneFrameOff());
-    rerenderOpenFrames();
   });
 
   // Живой кадр (docs/missions/2026-10-01_live_stream.md, п.5) — на share-странице нет

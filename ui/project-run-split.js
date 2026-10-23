@@ -1,12 +1,10 @@
 /*
  * project.html, вкладка «Запуск»: карточка прогона «Сплит» — утилиты рамки
- * вокруг кадра эфира/видео теста (isPhoneFrameOff/setPhoneFrameOff/
- * phoneFrameDevice/setPhoneFrameDevice/maybePhoneFrame/applyPhoneFrameSizing/
- * frameTimeText), выбор телефон/планшет (RunLiveLogic.frameDimensions) —
- * визуальный, эмуляция теста всегда Pixel 7 — и состояние отчёта текущего
- * прогона (currentTests/currentWs/sawLine), используемое ui/project-run-window.js.
- * Тот же приём рамки, что и в ui/share.js (общие ключи localStorage), — здесь
- * своя копия, не модуль.
+ * телефона (Pixel 7) вокруг кадра эфира/видео теста (isPhoneFrameOff/
+ * setPhoneFrameOff/maybePhoneFrame/applyPhoneFrameSizing/frameTimeText) и
+ * состояние отчёта текущего прогона (currentTests/currentWs/sawLine),
+ * используемое ui/project-run-window.js. Тот же приём рамки, что и в
+ * ui/share.js (общий ключ localStorage), — здесь своя копия, не модуль.
  */
 
   let currentTests = [];
@@ -53,37 +51,21 @@
     try { localStorage.setItem(PHONE_FRAME_OFF_KEY, off ? "1" : "0"); } catch { /* localStorage недоступен */ }
   }
 
-  // Выбор рамки просмотра — телефон/планшет (RunLiveLogic.frameDimensions), чисто
-  // визуальный: сам тест по-прежнему шёл с эмуляцией Pixel 7 независимо от выбора.
-  const PHONE_FRAME_DEVICE_KEY = "th_phone_frame_device";
-  function phoneFrameDevice() {
-    try { return localStorage.getItem(PHONE_FRAME_DEVICE_KEY) === "tablet" ? "tablet" : "phone"; } catch { return "phone"; }
-  }
-  function setPhoneFrameDevice(device) {
-    try { localStorage.setItem(PHONE_FRAME_DEVICE_KEY, device === "tablet" ? "tablet" : "phone"); } catch { /* localStorage недоступен */ }
-  }
-
-  // Оборачивает готовую разметку кадра эфира/видео в рамку (телефон/планшет, выбор
-  // переключателем) у прогонов с run.mobile; переключатель «Без рамки» всегда рядом
-  // (можно выключить рамку и включить обратно), desktop-прогоны (currentRunMobile=false)
-  // — без изменений (п.3 миссии).
+  // Оборачивает готовую разметку кадра эфира/видео в рамку Pixel 7 (412×915) у
+  // прогонов с run.mobile; переключатель «Без рамки» всегда рядом (можно выключить
+  // рамку и включить обратно), desktop-прогоны (currentRunMobile=false) — без изменений
+  // (п.3 миссии).
   function maybePhoneFrame(innerHtml, timeText) {
     if (!currentRunMobile) return innerHtml;
     const off = isPhoneFrameOff();
-    const device = phoneFrameDevice();
     const toggleRow = `
       <div class="phone-frame-toggle-row">
-        <div class="phone-frame-device-switch" role="group" aria-label="Рамка просмотра">
-          <button type="button" class="phone-frame-device-btn${device === "phone" ? " active" : ""}" data-device="phone">Телефон</button>
-          <button type="button" class="phone-frame-device-btn${device === "tablet" ? " active" : ""}" data-device="tablet">Планшет</button>
-        </div>
         <button type="button" class="phone-frame-toggle-btn">${off ? "Показать рамку" : "Без рамки"}</button>
       </div>`;
     if (!RunLiveLogic.phoneFrameEnabled(currentRunMobile, off)) return toggleRow + innerHtml;
-    const dims = RunLiveLogic.frameDimensions(device);
     return `${toggleRow}
       <div class="phone-frame-wrap">
-        <div class="${dims.className}">
+        <div class="phone-frame">
           <div class="phone-frame-statusbar">${escapeHtml(timeText || "")}</div>
           <div class="phone-frame-screen">${innerHtml}</div>
         </div>
@@ -91,15 +73,13 @@
   }
 
   // После вставки разметки — применяет масштаб (RunLiveLogic.phoneFrameScale) по
-  // высоте уже отрендеренной панели и навешивает клики на переключатели «Без рамки»
-  // и «Телефон»/«Планшет».
+  // высоте уже отрендеренной панели и навешивает клик на переключатель «Без рамки».
   function applyPhoneFrameSizing() {
-    const frame = runWindowBody.querySelector(".phone-frame, .tablet-frame");
+    const frame = runWindowBody.querySelector(".phone-frame");
     if (frame) {
-      const dims = RunLiveLogic.frameDimensions(phoneFrameDevice());
       const panelHeight = runWindowBody.clientHeight || 480;
-      const scale = RunLiveLogic.phoneFrameScale(panelHeight, dims.height);
-      frame.style.height = `${dims.height * scale}px`;
+      const scale = RunLiveLogic.phoneFrameScale(panelHeight);
+      frame.style.height = `${RunLiveLogic.PHONE_FRAME_HEIGHT * scale}px`;
     }
     const toggleBtn = runWindowBody.querySelector(".phone-frame-toggle-btn");
     if (toggleBtn) {
@@ -108,12 +88,6 @@
         renderWindowBody();
       });
     }
-    runWindowBody.querySelectorAll(".phone-frame-device-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        setPhoneFrameDevice(btn.dataset.device);
-        renderWindowBody();
-      });
-    });
   }
 
   function frameTimeText(frame) {

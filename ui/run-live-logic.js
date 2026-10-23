@@ -92,13 +92,6 @@
   var PHONE_FRAME_WIDTH = 412;
   var PHONE_FRAME_HEIGHT = 915;
 
-  // Рамка планшета — второй вариант рамки просмотра у мобильных прогонов (run.mobile):
-  // выбор чисто визуальный (переключатель рядом с «Без рамки»), сам тест по-прежнему
-  // шёл с эмуляцией Pixel 7 — это не второй профиль эмуляции, только другая рамка
-  // вокруг того же кадра. Размер — портрет iPad в логических пикселях Safari (820×1180).
-  var TABLET_FRAME_WIDTH = 820;
-  var TABLET_FRAME_HEIGHT = 1180;
-
   // Рамка показывается только у мобильных прогонов (run.mobile), и только пока
   // пользователь не выключил её вручную переключателем «Без рамки» (его состояние
   // хранится в localStorage вызывающим кодом и приходит сюда уже как boolean).
@@ -106,26 +99,14 @@
     return Boolean(runMobile) && !noFrameOverride;
   }
 
-  // Размеры и CSS-класс рамки по выбору устройства просмотра ('phone'|'tablet',
-  // хранится в localStorage вызывающим кодом) — неизвестное/пустое значение -> телефон.
-  function frameDimensions(device) {
-    if (device === "tablet") {
-      return { width: TABLET_FRAME_WIDTH, height: TABLET_FRAME_HEIGHT, className: "tablet-frame" };
-    }
-    return { width: PHONE_FRAME_WIDTH, height: PHONE_FRAME_HEIGHT, className: "phone-frame" };
-  }
-
   // Масштаб кадра/видео внутри рамки по доступной высоте панели: рамка не должна
   // вызывать вертикальный (а значит и горизонтальный, т.к. ширина считается от высоты)
   // скролл панели — поэтому масштаб ограничен сверху единицей (рамка не растягивается
-  // больше своего натурального размера). frameHeightPx — натуральная высота текущей
-  // рамки (PHONE_FRAME_HEIGHT по умолчанию, когда не передана — назад совместимо с
-  // вызовами до появления рамки планшета).
-  function phoneFrameScale(panelHeightPx, frameHeightPx) {
+  // больше своего натурального размера 412×915).
+  function phoneFrameScale(panelHeightPx) {
     var height = Number(panelHeightPx) || 0;
-    var frameHeight = Number(frameHeightPx) || PHONE_FRAME_HEIGHT;
     if (height <= 0) return 1;
-    return Math.min(1, height / frameHeight);
+    return Math.min(1, height / PHONE_FRAME_HEIGHT);
   }
 
   var api = {
@@ -139,10 +120,7 @@
     liveCheckboxState: liveCheckboxState,
     PHONE_FRAME_WIDTH: PHONE_FRAME_WIDTH,
     PHONE_FRAME_HEIGHT: PHONE_FRAME_HEIGHT,
-    TABLET_FRAME_WIDTH: TABLET_FRAME_WIDTH,
-    TABLET_FRAME_HEIGHT: TABLET_FRAME_HEIGHT,
     phoneFrameEnabled: phoneFrameEnabled,
-    frameDimensions: frameDimensions,
     phoneFrameScale: phoneFrameScale,
   };
 
