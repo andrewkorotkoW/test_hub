@@ -45,7 +45,9 @@
           </label>
           <div class="stand-form-actions">
             <button type="submit" class="primary">Сохранить</button>
+            <button type="button" id="stand-check-btn">Проверить</button>
             <button type="button" id="stand-cancel-edit" hidden>Отмена</button>
+            <span id="stand-check-result" class="stand-check-result" hidden></span>
           </div>
         </form>
         <p class="muted small">Sentry project/environment — для карточки «Ошибки продукта» и вкладки «Sentry» прогона. Потоки: 0 — последовательно; на k8s v2 с несколькими репликами 4 потока — 27 мин вместо 1,5 ч.</p>

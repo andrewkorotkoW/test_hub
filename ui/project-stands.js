@@ -61,7 +61,25 @@
     }
   }
 
-  standSelect.addEventListener("change", updateRunControlsForStand);
+  standSelect.addEventListener("change", () => {
+    standCheckResult.hidden = true;
+    updateRunControlsForStand();
+  });
+
+  standCheckBtn.addEventListener("click", async () => {
+    const stand = standsByName[standSelect.value];
+    if (!stand) { standCheckResult.hidden = true; return; }
+    standCheckBtn.disabled = true;
+    standCheckResult.hidden = true;
+    try {
+      const result = await checkStandUrl(projectName, stand.url);
+      renderStandCheckResult(standCheckResult, result);
+    } catch (err) {
+      renderStandCheckResult(standCheckResult, { ok: false, error: err.message });
+    } finally {
+      standCheckBtn.disabled = false;
+    }
+  });
 
   function openManualRunModal({ label, stand, target, marker, runLabel = null }) {
     manualRunModalOverlay.dataset.pending = JSON.stringify({ stand, target, marker: marker || null, runLabel });

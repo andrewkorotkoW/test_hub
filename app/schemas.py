@@ -62,6 +62,17 @@ class StandManualOnlyUpdate(BaseModel):
     manual_only: bool
 
 
+class StandCheckRequest(BaseModel):
+    url: str
+
+
+class StandCheckResponse(BaseModel):
+    ok: bool
+    status_code: Optional[int] = None
+    elapsed_ms: int
+    error: Optional[str] = None
+
+
 class StandPresetCreate(BaseModel):
     name: str
     target: str = "all"

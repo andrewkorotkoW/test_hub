@@ -19,6 +19,8 @@
   const dataScenarioList = document.getElementById("data-scenario-list");
   const dataScenarioDesc = document.getElementById("data-scenario-desc");
   const dataStandSelect = document.getElementById("data-stand-select");
+  const dataStandCheckBtn = document.getElementById("data-stand-check-btn");
+  const dataStandCheckResult = document.getElementById("data-stand-check-result");
   const dataCountInput = document.getElementById("data-count-input");
   const dataCountHint = document.getElementById("data-count-hint");
   const dataPrefixInput = document.getElementById("data-prefix-input");
@@ -148,12 +150,33 @@
     if (!event.composedPath().includes(dataScenarioCombobox)) dgCloseScenarioList();
   });
 
+  let dgStandsByName = {};
+
   async function dgLoadStands() {
     const stands = await api(`/api/projects/${encodeURIComponent(projectName)}/stands`);
+    dgStandsByName = {};
+    stands.forEach((s) => { dgStandsByName[s.name] = s; });
     dataStandSelect.innerHTML = `<option value="">— окружение CLI по умолчанию (develop) —</option>` +
       stands.map((s) => `<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)}${s.url ? ` (${escapeHtml(s.url)})` : ""}</option>`).join("");
     if (stands.length) dataStandSelect.value = stands[0].name;
   }
+
+  dataStandSelect.addEventListener("change", () => { dataStandCheckResult.hidden = true; });
+
+  dataStandCheckBtn.addEventListener("click", async () => {
+    const stand = dgStandsByName[dataStandSelect.value];
+    if (!stand) { dataStandCheckResult.hidden = true; return; }
+    dataStandCheckBtn.disabled = true;
+    dataStandCheckResult.hidden = true;
+    try {
+      const result = await checkStandUrl(projectName, stand.url);
+      renderStandCheckResult(dataStandCheckResult, result);
+    } catch (err) {
+      renderStandCheckResult(dataStandCheckResult, { ok: false, error: err.message });
+    } finally {
+      dataStandCheckBtn.disabled = false;
+    }
+  });
 
   async function dgCreate() {
     const form = {

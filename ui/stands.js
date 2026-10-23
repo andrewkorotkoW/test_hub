@@ -27,12 +27,31 @@
   const standSentryEnvironment = document.getElementById("stand-sentry-environment");
   const standWorkers = document.getElementById("stand-workers");
   const standCancelEdit = document.getElementById("stand-cancel-edit");
+  const standCheckBtn = document.getElementById("stand-check-btn");
+  const standCheckResult = document.getElementById("stand-check-result");
 
   function resetStandForm() {
     standForm.removeAttribute("data-editing-id");
     standForm.reset();
     standCancelEdit.hidden = true;
+    standCheckResult.hidden = true;
   }
+
+  standCheckBtn.addEventListener("click", async () => {
+    const url = standUrl.value.trim();
+    if (!url) { standUrl.focus(); return; }
+    const project = projectSelect.value;
+    standCheckBtn.disabled = true;
+    standCheckResult.hidden = true;
+    try {
+      const result = await checkStandUrl(project, url);
+      renderStandCheckResult(standCheckResult, result);
+    } catch (err) {
+      renderStandCheckResult(standCheckResult, { ok: false, error: err.message });
+    } finally {
+      standCheckBtn.disabled = false;
+    }
+  });
 
   async function loadProjects() {
     const projects = await api("/api/projects");
@@ -74,6 +93,7 @@
       standSentryEnvironment.value = editBtn.dataset.sentryEnvironment;
       standWorkers.value = editBtn.dataset.workers || "0";
       standCancelEdit.hidden = false;
+      standCheckResult.hidden = true;
       return;
     }
     const delBtn = ev.target.closest(".delete-stand");

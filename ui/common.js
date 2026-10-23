@@ -23,6 +23,27 @@ async function api(path, { method = "GET", json, ...rest } = {}) {
   return data;
 }
 
+// Проверка доступности URL стенда (кнопка «Проверить» в форме стенда и рядом
+// с выбором стенда во вкладках «Запуск»/«Данные») — см. app/core/stand_check.py.
+// Только доступность URL, не логин: test_hub не хранит пароль стенда.
+async function checkStandUrl(projectName, url) {
+  return api(`/api/projects/${encodeURIComponent(projectName)}/stands/check`, {
+    method: "POST",
+    json: { url },
+  });
+}
+
+function renderStandCheckResult(el, result) {
+  if (result.ok) {
+    el.textContent = `✓ отвечает (${result.status_code}, ${result.elapsed_ms} мс)`;
+    el.className = "stand-check-result ok";
+  } else {
+    el.textContent = `✗ ${result.error || "недоступен"}`;
+    el.className = "stand-check-result fail";
+  }
+  el.hidden = false;
+}
+
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (ch) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",

@@ -148,6 +148,8 @@
         <div class="stand-row">
           <label for="stand-select">Стенд</label>
           <select id="stand-select"><option value="">— без стенда —</option></select>
+          <button type="button" id="stand-check-btn" title="Проверить доступность URL стенда">Проверить</button>
+          <span id="stand-check-result" class="stand-check-result" hidden></span>
           <label for="marker-select">Маркер</label>
           <select id="marker-select">
             <option value="">— без маркера —</option>
@@ -547,6 +549,10 @@
           <div class="field">
             <label for="data-stand-select">Стенд</label>
             <select id="data-stand-select"><option value="">— окружение CLI по умолчанию (develop) —</option></select>
+            <div class="stand-check-inline">
+              <button type="button" id="data-stand-check-btn" title="Проверить доступность URL стенда">Проверить</button>
+              <span id="data-stand-check-result" class="stand-check-result" hidden></span>
+            </div>
           </div>
           <div class="field">
             <label for="data-count-input">Количество</label>

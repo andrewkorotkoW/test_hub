@@ -118,6 +118,8 @@
   }).catch(() => { /* без цвета проекта остаётся дефолтный акцент из style.css */ });
 
   const standSelect = document.getElementById("stand-select");
+  const standCheckBtn = document.getElementById("stand-check-btn");
+  const standCheckResult = document.getElementById("stand-check-result");
   const markerSelect = document.getElementById("marker-select");
   const testsError = document.getElementById("tests-error");
   const setCard = document.getElementById("set-card");

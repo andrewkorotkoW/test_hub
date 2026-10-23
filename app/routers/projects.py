@@ -4,12 +4,14 @@ import sqlite3
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from ..core import markers
+from ..core import stand_check
 from ..deps import get_current_user, get_db, require_roles
 from ..schemas import (
     PROJECT_COLOR_PALETTE,
     ProjectColorUpdate,
     ProjectCreate,
     ProjectUpdate,
+    StandCheckRequest,
     StandCreate,
     StandManualOnlyUpdate,
     StandPresetCreate,
@@ -205,6 +207,26 @@ def create_stand(
         (cur.lastrowid,),
     ).fetchone()
     return _stand_payload(row)
+
+
+@router.post("/{name}/stands/check")
+def check_stand(
+    name: str,
+    body: StandCheckRequest,
+    conn: sqlite3.Connection = Depends(get_db),
+    _user: sqlite3.Row = Depends(get_current_user),
+) -> dict:
+    """Доступность URL стенда — кнопка «Проверить» в форме стенда (можно
+    проверить ещё не сохранённый URL) и рядом с выбором стенда во вкладках
+    «Запуск»/«Данные». Не проверяет логин — см. app/core/stand_check.py."""
+    _get_project_or_404(conn, name)
+    result = stand_check.check_url(body.url)
+    return {
+        "ok": result.ok,
+        "status_code": result.status_code,
+        "elapsed_ms": result.elapsed_ms,
+        "error": result.error,
+    }
 
 
 def _get_stand_or_404(conn: sqlite3.Connection, project: str, stand_id: int) -> sqlite3.Row:
