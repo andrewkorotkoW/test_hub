@@ -29,7 +29,7 @@
         </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Имя</th><th>URL</th><th>Логин</th><th>Sentry</th><th></th></tr></thead>
+            <thead><tr><th>Имя</th><th>URL</th><th>Логин</th><th>Sentry</th><th>--env</th><th></th></tr></thead>
             <tbody id="stands-rows"></tbody>
           </table>
         </div>
@@ -40,6 +40,7 @@
           <input id="stand-login" placeholder="Логин (необязательно)">
           <input id="stand-sentry-project" placeholder="Sentry project" title="Slug проекта в Sentry, например vshgu-dev-lms (необязательно)">
           <input id="stand-sentry-environment" placeholder="Sentry environment" title="environment в Sentry, например development (необязательно)">
+          <input id="stand-env-name" placeholder="Значение --env (необязательно)" title="Для кастомных/ревью-стендов, когда имя стенда — просто ярлык (например &quot;2066&quot;), а проект понимает только свои литералы (develop/stage/stand и т.п.) — впишите нужный литерал, например &quot;stand&quot;. Пусто — раннер использует имя стенда как раньше.">
           <label class="stand-form-workers" for="stand-workers">Потоки (pytest -n)
             <input id="stand-workers" type="number" min="0" max="16" step="1" value="0" title="0 — последовательно; на k8s v2 4 потока — 27 мин вместо 1,5 ч">
           </label>
@@ -50,7 +51,7 @@
             <span id="stand-check-result" class="stand-check-result" hidden></span>
           </div>
         </form>
-        <p class="muted small">Sentry project/environment — для карточки «Ошибки продукта» и вкладки «Sentry» прогона. Потоки: 0 — последовательно; на k8s v2 с несколькими репликами 4 потока — 27 мин вместо 1,5 ч.</p>
+        <p class="muted small">Sentry project/environment — для карточки «Ошибки продукта» и вкладки «Sentry» прогона. Потоки: 0 — последовательно; на k8s v2 с несколькими репликами 4 потока — 27 мин вместо 1,5 ч. Значение --env — только для проектов с «--env в раннере»: переопределяет, какой литерал раннер передаёт тестам, если он должен отличаться от имени стенда. Пароль для такого стенда — не здесь: общий на проект, задаётся на сервере переменной TH_STAND_PASSWORD_&lt;ПРОЕКТ&gt;.</p>
       </div>
     </div>
   </main>

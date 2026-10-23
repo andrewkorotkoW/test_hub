@@ -574,6 +574,13 @@ def init_db() -> None:
         _migrate_add_column(conn, "data_batches", "run_id", "run_id INTEGER")
         _migrate_add_column(conn, "runs", "mobile", "mobile INTEGER NOT NULL DEFAULT 0")
         _migrate_add_column(conn, "stands", "workers", "workers INTEGER NOT NULL DEFAULT 0")
+        # Значение для --env раннера (app/core/runner.py), когда оно должно отличаться от
+        # имени стенда (кастомные/ревью-стенды с use_env_flag=true: имя стенда — ярлык вроде
+        # "2066", а допустимый --env проекта — литерал "stand", см. ENVIRONMENTS в
+        # auto_tests_vshgu/config/environments.py). NULL по умолчанию (все существующие
+        # стенды) -> раннер использует имя стенда, как раньше — никаких изменений для
+        # develop/stage/k8s.
+        _migrate_add_column(conn, "stands", "env_name", "env_name TEXT")
         _migrate_add_column(conn, "users", "full_name", "full_name TEXT")
         _migrate_add_column(conn, "users", "position", "position TEXT")
         _migrate_add_column(conn, "users", "project", "project TEXT REFERENCES projects(name)")

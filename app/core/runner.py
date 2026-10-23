@@ -154,6 +154,13 @@ def _venv_python(project_path: str, venv: str) -> Path:
     return Path(project_path) / venv / "bin" / "python"
 
 
+def _env_suffix(project_name: str) -> str:
+    """Имя проекта -> суффикс переменной окружения TH_STAND_PASSWORD_<...>: верхний
+    регистр, всё кроме букв/цифр/подчёркивания — в подчёркивание (имена проектов вроде
+    "Courseditor_Learn" уже валидны, но подстраховка не помешает)."""
+    return re.sub(r"[^A-Za-z0-9_]", "_", project_name).upper()
+
+
 def allure_dir(run_id: int) -> Path:
     return settings.ALLURE_RESULTS_DIR / str(run_id)
 
@@ -615,8 +622,21 @@ async def _execute(
     if stand is not None:
         env["STAND_URL"] = stand["url"] or ""
         env["STAND_LOGIN"] = stand["login"] or ""
+        # Пароль для профиля --env stand (ниже) test_hub в БД не хранит — ни у одного
+        # стенда нет поля password (решение владельца 23.10.2026: держать секрет только
+        # в .env самого test_hub, не в SQLite/API). TH_STAND_PASSWORD_<PROJECT> — один
+        # общий пароль на проект для всех его кастомных/ревью-стендов (на практике у
+        # VSHGU это одна и та же тестовая учётка на всех ревью-ветках).
+        stand_password = os.getenv(f"TH_STAND_PASSWORD_{_env_suffix(project_name)}")
+        if stand_password:
+            env["STAND_PASSWORD"] = stand_password
         if project["use_env_flag"]:
-            args.extend(["--env", stand_name])
+            # env_name переопределяет --env, когда имя стенда в test_hub — просто ярлык
+            # (например "2066" для ревью-ветки), а не одно из имён окружений, которые
+            # проект понимает буквально (develop/stage/prod/k8s) — см. миграцию колонки
+            # stands.env_name в app/db.py. NULL (нет своего значения) -> как раньше,
+            # имя стенда используется буквально.
+            args.extend(["--env", stand["env_name"] or stand_name])
             env["HEADLESS"] = "1"
     if marker:
         args.extend(["-m", marker])

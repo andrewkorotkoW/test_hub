@@ -25,6 +25,7 @@
   const standLogin = document.getElementById("stand-login");
   const standSentryProject = document.getElementById("stand-sentry-project");
   const standSentryEnvironment = document.getElementById("stand-sentry-environment");
+  const standEnvName = document.getElementById("stand-env-name");
   const standWorkers = document.getElementById("stand-workers");
   const standCancelEdit = document.getElementById("stand-cancel-edit");
   const standCheckBtn = document.getElementById("stand-check-btn");
@@ -72,8 +73,9 @@
         <td>${escapeHtml(s.url)}</td>
         <td>${escapeHtml(s.login || "—")}</td>
         <td>${escapeHtml(s.sentry_project || "—")}${s.sentry_environment ? ` / ${escapeHtml(s.sentry_environment)}` : ""}</td>
+        <td>${escapeHtml(s.env_name || "—")}</td>
         <td class="inline-actions">
-          <button type="button" class="edit-stand" data-id="${s.id}" data-name="${escapeHtml(s.name)}" data-url="${escapeHtml(s.url)}" data-login="${escapeHtml(s.login || "")}" data-sentry-project="${escapeHtml(s.sentry_project || "")}" data-sentry-environment="${escapeHtml(s.sentry_environment || "")}" data-workers="${s.workers || 0}">Изменить</button>
+          <button type="button" class="edit-stand" data-id="${s.id}" data-name="${escapeHtml(s.name)}" data-url="${escapeHtml(s.url)}" data-login="${escapeHtml(s.login || "")}" data-sentry-project="${escapeHtml(s.sentry_project || "")}" data-sentry-environment="${escapeHtml(s.sentry_environment || "")}" data-workers="${s.workers || 0}" data-env-name="${escapeHtml(s.env_name || "")}">Изменить</button>
           <button type="button" class="danger delete-stand" data-id="${s.id}">Удалить</button>
         </td>
       </tr>
@@ -92,6 +94,7 @@
       standSentryProject.value = editBtn.dataset.sentryProject;
       standSentryEnvironment.value = editBtn.dataset.sentryEnvironment;
       standWorkers.value = editBtn.dataset.workers || "0";
+      standEnvName.value = editBtn.dataset.envName || "";
       standCancelEdit.hidden = false;
       standCheckResult.hidden = true;
       return;
@@ -119,6 +122,7 @@
       sentry_project: standSentryProject.value.trim() || null,
       sentry_environment: standSentryEnvironment.value.trim() || null,
       workers: standWorkers.value === "" ? 0 : parseInt(standWorkers.value, 10),
+      env_name: standEnvName.value.trim() || null,
     };
     try {
       if (standForm.dataset.editingId) {
