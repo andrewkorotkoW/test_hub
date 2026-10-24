@@ -668,18 +668,35 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
 .cmp-group-head b { font-weight: 700; }
 .cmp-group-head .cnt { font-family: var(--font-mono); font-weight: 700; padding: 1px 8px; border-radius: 999px; }
 .cmp-group-head .hint { color: var(--text-muted); font-size: 12px; margin-left: auto; }
-.cmp-group-body { border-top: 1px solid var(--border); }
+/* Колонки выровнены по всему списку, а не по отдельной строке: .cmp-group-body/
+   .rc-list — общий grid-контейнер на весь список, .cmp-row — только группировка
+   для клика/ховера через display:contents (сама не создаёт бокс), иначе каждая
+   строка считала бы ширину auto-колонок (тег, длительность) независимо от соседних
+   и колонки «съезжали» по ширине самого длинного текста в конкретной строке. */
+.cmp-group-body,
+.rc-list { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto auto; column-gap: 10px; padding: 0 16px; border-top: 1px solid var(--border); }
+/* .rc-list целиком заменяется на этот <p>, когда падений с причиной нет — без
+   grid-column он занял бы только первую 10px-колонку сетки */
+.rc-list > p.muted { grid-column: 1 / -1; padding: 16px 0; }
 
-.cmp-row { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 8px 16px; border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent); cursor: pointer; }
-.cmp-row:last-child { border-bottom: 0; }
-.cmp-row:hover { background: var(--surface-hover); }
+.cmp-row { display: contents; cursor: pointer; }
+/* align-self не задаём — по умолчанию у grid-элементов stretch, ячейки строки
+   (nm/dur — они и так почти совпадают по высоте) растягиваются на всю высоту
+   строки, и border-bottom у них оказывается на одной линии. У точки-статуса и
+   бейджа-тега своя фиксированная форма (кружок/пилюля) — растягивать их нельзя,
+   не потеряв вид, поэтому для них ниже явный align-self:center; их border-bottom
+   чуть выше общей линии — в 10px/N px узких колонках это не бросается в глаза */
+.cmp-row > * { padding: 8px 0; border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent); }
+.cmp-row:last-child > * { border-bottom: 0; }
+.cmp-row:hover > * { background: var(--surface-hover); }
 /* .dot-status сам по себе (ui/style.css выше) задаёт только цвет по статусу —
    размер/форма точки завязаны на предка .test-row (список слева в «Сплите»),
    здесь свой предок (.cmp-row), поэтому форма точки повторяется явно */
-.cmp-row .dot-status { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
+.cmp-row .dot-status { width: 8px; height: 8px; border-radius: 50%; align-self: center; }
+.cmp-row .cmp-tag { align-self: center; }
 .cmp-row .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
 .cmp-row .nm small { color: var(--text-muted); font-family: var(--font-mono); font-size: 11px; margin-right: 6px; }
-.cmp-row .dur { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); white-space: nowrap; min-width: 90px; text-align: right; }
+.cmp-row .dur { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); white-space: nowrap; text-align: right; }
 .cmp-row .dur b { color: var(--text); font-weight: 600; }
 .cmp-row .dur.slower b { color: var(--failed); }
 .cmp-row .dur.faster b { color: var(--passed); }
