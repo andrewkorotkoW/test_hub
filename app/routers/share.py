@@ -181,13 +181,13 @@ _ALLURE_UNAVAILABLE_HTML = """<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Test Hub — Allure-отчёт недоступен</title>
+  <title>Test_hub — Allure-отчёт недоступен</title>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
   <header class="site-header">
     <div class="header-left">
-      <span class="brand">Test Hub</span>
+      <span class="brand">Test_hub</span>
       <span class="muted">публичный отчёт — только чтение</span>
     </div>
   </header>

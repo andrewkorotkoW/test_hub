@@ -338,7 +338,7 @@
 
     var statusIcon = run.status === "passed" ? "✅" : (run.status === "cancelled" ? "⚪" : "❌");
     var lines = [];
-    lines.push("Test Hub · " + (ctx.projectName || "") + " · " + (run.stand || "без стенда") + " · прогон #" + run.id);
+    lines.push("Test_hub · " + (ctx.projectName || "") + " · " + (run.stand || "без стенда") + " · прогон #" + run.id);
 
     var durationText = ctx.durationText || "";
     lines.push(

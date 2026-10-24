@@ -342,7 +342,7 @@
     if (run.label) runLabelBadge.textContent = `сборка: ${run.label}`;
     runDeviceBadge.hidden = !run.mobile;
     setPill(run.status || "queued");
-    document.title = `Test Hub — ${run.project || ""} прогон #${run.id ?? ""}`;
+    document.title = `Test_hub — ${run.project || ""} прогон #${run.id ?? ""}`;
 
     if (data.allure_url) {
       allureLink.href = data.allure_url;

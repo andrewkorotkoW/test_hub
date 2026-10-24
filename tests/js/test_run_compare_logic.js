@@ -408,7 +408,7 @@ test("telegramPreviewText: сводка причин + сравнение соб
     },
   };
   var text = Logic.telegramPreviewText(ctx);
-  assert.ok(text.indexOf("Test Hub · vshgu · k8s · прогон #66") !== -1, text);
+  assert.ok(text.indexOf("Test_hub · vshgu · k8s · прогон #66") !== -1, text);
   assert.ok(text.indexOf("❌") !== -1, text);
   assert.ok(text.indexOf("96 упало") !== -1, text);
   assert.ok(text.indexOf("70 × троттлинг 429 (волна 09:43–09:50)") !== -1, text);

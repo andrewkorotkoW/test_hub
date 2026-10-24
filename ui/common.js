@@ -462,7 +462,7 @@ function renderSidebar(user, page) {
 
   mount.innerHTML = `
     <div class="app-sidebar-top">
-      <a class="app-sidebar-brand" href="projects.html">Test Hub</a>
+      <a class="app-sidebar-brand" href="projects.html">Test_hub</a>
       <button type="button" id="app-collapse-btn" class="app-collapse-btn" aria-label="${collapsed ? "Развернуть сайдбар" : "Свернуть сайдбар"}" title="${collapsed ? "Развернуть сайдбар" : "Свернуть сайдбар"}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 6l-6 6 6 6"/></svg>
       </button>
