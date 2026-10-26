@@ -118,6 +118,7 @@
   function runTags(run) {
     var tags = [];
     var label = run.label || "";
+    if (run.schedule_id) tags.push({ kind: "schedule", text: "по расписанию" });
     if (label) tags.push({ kind: "label", text: "сборка: " + label });
     if (run.live) tags.push({ kind: "live", text: "эфир" });
     if (run.mobile && !/pixel\s*7/i.test(label)) tags.push({ kind: "mobile", text: "Pixel 7" });

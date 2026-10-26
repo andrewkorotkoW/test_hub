@@ -70,15 +70,17 @@ def test_marker_select_lists_e2e_on_run_and_schedule_forms():
         assert options == ["", "smoke", "api", "ui", "e2e"], options
 
 
-def test_schedules_tab_has_only_three_presets_no_smoke_button():
-    """Миссия явно требует ту же картину на «Расписаниях», но без маркера smoke
-    (бэкенд расписаний такого не поддерживает) — кнопки Smoke там быть не должно."""
+def test_schedules_tab_has_same_presets_as_run_form_except_mobile():
+    """На «Расписаниях» — те же пресеты, что в «Запуске» (schedules.marker давно есть,
+    планировщик и «Запустить сейчас» передают его в runner.submit_run — ограничение
+    «бэкенд не поддерживает smoke» снято). Нет только Mobile: он включает
+    #mobile-checkbox (MOBILE=1), а у расписаний флага mobile нет."""
     m = re.search(r'<div class="run-buttons" id="sched-sections-presets-row">(.*?)</div>', PROJECT_HTML, re.DOTALL)
     assert m, "не найден блок пресетов вкладки «Расписания»"
     body = m.group(1)
     presets = re.findall(r'data-preset="(\w+)"', body)
-    assert presets == ["api", "ui", "all"]
-    assert "smoke" not in body
+    assert presets == ["api", "ui", "smoke", "e2e", "all", "regression"]
+    assert "mobile" not in body
 
 
 def test_sections_tree_logic_script_loaded_before_project_js():

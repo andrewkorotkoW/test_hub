@@ -346,22 +346,28 @@
           <thead>
             <tr>
               <th></th><th>Стенд</th><th>Маркер</th><th>Цель</th><th>Cron</th>
-              <th>Следующий запуск</th><th>Последний результат</th><th></th>
+              <th>Следующий запуск</th><th>Последний результат</th><th>Уведомления</th><th></th>
             </tr>
           </thead>
           <tbody id="schedules-rows"></tbody>
         </table>
       </div>
 
-      <h3>Новое расписание</h3>
+      <h3 id="sched-form-title">Новое расписание</h3>
       <div class="field sections-search-field">
         <label for="sched-sections-search-input">Поиск по разделам</label>
         <input type="search" id="sched-sections-search-input" placeholder="например notifications">
       </div>
+      <!-- Те же пресеты, что в форме «Запуск», кроме Mobile: он включает галочку
+           «Мобильный (Pixel 7)» (MOBILE=1), а у расписаний такого флага нет — без него
+           tests/ui/mobile шли бы в десктопном вьюпорте. -->
       <div class="run-buttons" id="sched-sections-presets-row">
         <button type="button" class="sections-preset-btn" data-preset="api">API</button>
         <button type="button" class="sections-preset-btn" data-preset="ui">UI</button>
+        <button type="button" class="sections-preset-btn" data-preset="smoke">Smoke</button>
+        <button type="button" class="sections-preset-btn" data-preset="e2e">E2E</button>
         <button type="button" class="sections-preset-btn" data-preset="all">Всё</button>
+        <button type="button" class="sections-preset-btn" data-preset="regression" title="Весь функционал кроме внешних интеграций (ai_chat, CAS, БУК, MTS Link, P2P, Helpdesk, LRS)">Regression</button>
       </div>
       <p id="sched-sections-summary-line" class="sections-summary-line muted"></p>
       <div id="sched-sections-tree" class="test-tree"><p class="muted">Загрузка…</p></div>
@@ -404,7 +410,10 @@
           <label for="sched-chats-input">Telegram-чаты для уведомлений (id через запятую)</label>
           <input id="sched-chats-input" placeholder="например: 123456789, 987654321">
         </div>
-        <button id="sched-create-btn" class="primary">Создать расписание</button>
+        <div class="run-buttons">
+          <button id="sched-create-btn" class="primary">Создать расписание</button>
+          <button id="sched-cancel-btn" type="button" hidden>Отмена</button>
+        </div>
       </div>
     </div>
     </div>

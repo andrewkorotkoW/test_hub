@@ -332,6 +332,11 @@ async def test_run_now_creates_run_and_updates_last_run_id(qa_client, isolated_a
     updated = await poll_until(schedule_updated, timeout=10)
     assert updated is not None, "schedules.last_run_id не обновился после run-now"
 
+    # прогон помнит расписание — в «Прогонах» он получает тег «по расписанию»
+    runs = (await qa_client.get(f"/api/projects/{PROJECT}/runs")).json()
+    run = next(r for r in runs if r["id"] == run_id)
+    assert run["schedule_id"] == schedule_id
+
 
 # ------------------------------------------------------------------ планировщик: _tick() запускает просроченные расписания
 

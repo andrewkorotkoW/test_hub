@@ -335,6 +335,7 @@ async def submit_run(
     label: str | None = None,
     live: bool = False,
     mobile: bool = False,
+    schedule_id: int | None = None,
 ) -> int:
     """Создаёт запись прогона (running, если для проекта нет активного, иначе queued)
     и, если она стартует сразу, запускает фоновую задачу исполнения. `repeat` > 1
@@ -372,10 +373,10 @@ async def submit_run(
             if label is None and mobile:
                 label = "Мобильный (Pixel 7)"
             cur = conn.execute(
-                "INSERT INTO runs (project, stand, target, status, started, requested_by, counts, marker, repeat, label, live, mobile) "
-                "VALUES (?, ?, ?, ?, ?, ?, '{}', ?, ?, ?, ?, ?)",
+                "INSERT INTO runs (project, stand, target, status, started, requested_by, counts, marker, repeat, label, live, mobile, schedule_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, '{}', ?, ?, ?, ?, ?, ?)",
                 (project_name, stand_name, target, "running" if start_now else "queued",
-                 now if start_now else None, requested_by, marker, repeat, label, int(live), int(mobile)),
+                 now if start_now else None, requested_by, marker, repeat, label, int(live), int(mobile), schedule_id),
             )
             conn.commit()
             run_id = cur.lastrowid

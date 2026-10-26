@@ -179,7 +179,9 @@ async def _trigger(conn: sqlite3.Connection, row: sqlite3.Row, requested_by: str
     # п.5): у schedules нет даже поля live по аналогии с которым можно было бы
     # механически добавить mobile — тянет переделку формы расписаний, что мисия
     # прямо разрешает пропустить.
-    run_id = await runner.submit_run(row["project"], row["stand"], row["target"] or "all", requested_by, row["marker"])
+    run_id = await runner.submit_run(
+        row["project"], row["stand"], row["target"] or "all", requested_by, row["marker"], schedule_id=row["id"]
+    )
     _pending_runs[run_id] = (row["id"], row["last_run_id"])
     if advance:
         next_at = next_run_at(row["cron"], datetime.now()).isoformat(timespec="seconds")

@@ -581,6 +581,10 @@ def init_db() -> None:
         # стенды) -> раннер использует имя стенда, как раньше — никаких изменений для
         # develop/stage/k8s.
         _migrate_add_column(conn, "stands", "env_name", "env_name TEXT")
+        # Прогон, созданный планировщиком/«Запустить сейчас» расписания, помнит своё
+        # расписание — в «Прогонах» такой прогон помечен тегом «по расписанию», иначе от
+        # обычного запуска сервисной учётки tg_bot его не отличить.
+        _migrate_add_column(conn, "runs", "schedule_id", "schedule_id INTEGER")
         _migrate_add_column(conn, "users", "full_name", "full_name TEXT")
         _migrate_add_column(conn, "users", "position", "position TEXT")
         _migrate_add_column(conn, "users", "project", "project TEXT REFERENCES projects(name)")

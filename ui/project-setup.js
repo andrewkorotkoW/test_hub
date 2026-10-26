@@ -246,15 +246,15 @@
   const schedTimeInput = document.getElementById("sched-time-input");
   const schedChatsInput = document.getElementById("sched-chats-input");
   const schedCreateBtn = document.getElementById("sched-create-btn");
+  const schedCancelBtn = document.getElementById("sched-cancel-btn");
+  const schedFormTitle = document.getElementById("sched-form-title");
   const DAY_LABELS = { "0": "Вс", "1": "Пн", "2": "Вт", "3": "Ср", "4": "Чт", "5": "Пт", "6": "Сб" };
+  // Расписания последней загрузки — по ним кнопка «Изменить» заполняет форму.
+  let lastSchedules = [];
+  let editingScheduleId = null;
 
-  function formatCron(cron) {
-    const parts = (cron || "").split(" ");
-    if (parts.length !== 5) return cron || "—";
-    const [min, hour, , , dow] = parts;
-    const time = `${hour.padStart(2, "0")}:${min.padStart(2, "0")}`;
-    if (dow === "*") return `${time}, каждый день`;
-    const days = dow.split(",").flatMap((token) => {
+  function expandDow(dow) {
+    return dow.split(",").flatMap((token) => {
       if (token.includes("-")) {
         const [a, b] = token.split("-").map(Number);
         const seq = [];
@@ -263,8 +263,26 @@
       }
       return [Number(token)];
     });
-    const labels = days.map((d) => DAY_LABELS[String(((d % 7) + 7) % 7)] ?? d).join(", ");
+  }
+
+  function formatCron(cron) {
+    const parts = (cron || "").split(" ");
+    if (parts.length !== 5) return cron || "—";
+    const [min, hour, , , dow] = parts;
+    const time = `${hour.padStart(2, "0")}:${min.padStart(2, "0")}`;
+    if (dow === "*") return `${time}, каждый день`;
+    const labels = expandDow(dow).map((d) => DAY_LABELS[String(((d % 7) + 7) % 7)] ?? d).join(", ");
     return `${time}, ${labels}`;
+  }
+
+  // Обратно к полям формы (время + дни недели) — для режима «Изменить».
+  function cronToForm(cron) {
+    const parts = (cron || "").split(" ");
+    if (parts.length !== 5) return { time: "03:00", days: [1, 2, 3, 4, 5] };
+    const [min, hour, , , dow] = parts;
+    const time = `${hour.padStart(2, "0")}:${min.padStart(2, "0")}`;
+    const days = dow === "*" ? [0, 1, 2, 3, 4, 5, 6] : expandDow(dow).map((d) => ((d % 7) + 7) % 7);
+    return { time, days };
   }
 
   function buildCronFromForm() {
@@ -302,14 +320,22 @@
       ${histResultHtml(r)}`;
   }
 
+  function scheduleNotifyHtml(s) {
+    const ids = s.notify_chat_ids || [];
+    if (!ids.length) return `<span class="muted">—</span>`;
+    return `<span class="mono" title="Telegram chat id">${escapeHtml(ids.join(", "))}</span>`;
+  }
+
   function renderSchedules(items) {
     if (!items.length) {
-      schedulesRows.innerHTML = `<tr><td colspan="8" class="muted">Расписаний пока нет.</td></tr>`;
+      schedulesRows.innerHTML = `<tr><td colspan="9" class="muted">Расписаний пока нет.</td></tr>`;
       return;
     }
     const now = new Date();
-    schedulesRows.innerHTML = items.map((s) => `
-      <tr data-id="${s.id}">
+    schedulesRows.innerHTML = items.map((s) => {
+      const active = s.last_run && (s.last_run.status === "running" || s.last_run.status === "queued");
+      return `
+      <tr data-id="${s.id}"${active ? ' class="hist-row-active"' : ""}>
         <td><button class="sched-toggle-btn" data-id="${s.id}" data-enabled="${s.enabled}">${s.enabled ? "✅ вкл" : "▫️ выкл"}</button></td>
         <td>${escapeHtml(s.stand || "без стенда")}</td>
         <td>${escapeHtml(s.marker || "—")}</td>
@@ -317,19 +343,57 @@
         <td title="${escapeHtml(s.cron)}">${escapeHtml(formatCron(s.cron))}</td>
         <td class="hist-when">${scheduleNextRunHtml(s, now)}</td>
         <td>${scheduleLastRunHtml(s, now)}</td>
+        <td>${scheduleNotifyHtml(s)}</td>
         <td>
           <button class="sched-run-btn" data-id="${s.id}">Запустить сейчас</button>
+          <button class="sched-edit-btn" data-id="${s.id}">Изменить</button>
           <button class="sched-delete-btn danger" data-id="${s.id}">Удалить</button>
         </td>
-      </tr>
-    `).join("");
+      </tr>`;
+    }).join("");
   }
+
+  // Режим «Изменить»: та же форма, что «Новое расписание», но кнопка шлёт PUT.
+  // Цель кладём в ручной ввод как есть (именно он имеет приоритет над деревом при
+  // отправке, см. ниже) — так сохранённые папки/nodeid не искажаются деревом файлов.
+  function enterScheduleEdit(s) {
+    editingScheduleId = s.id;
+    schedStandSelect.value = s.stand || "";
+    schedMarkerSelect.value = s.marker || "";
+    const { time, days } = cronToForm(s.cron);
+    schedTimeInput.value = time;
+    document.querySelectorAll("#sched-days input").forEach((cb) => { cb.checked = days.includes(Number(cb.value)); });
+    schedTargetInput.value = s.target === "all" ? "" : s.target;
+    schedTargetInput.closest("details").open = s.target !== "all";
+    schedChatsInput.value = (s.notify_chat_ids || []).join(", ");
+    schedFormTitle.textContent = `Изменить расписание #${s.id}`;
+    schedCreateBtn.textContent = "Сохранить";
+    schedCancelBtn.hidden = false;
+    schedFormTitle.scrollIntoView({ block: "start", behavior: "smooth" });
+  }
+
+  function exitScheduleEdit() {
+    editingScheduleId = null;
+    schedStandSelect.value = "";
+    schedMarkerSelect.value = "";
+    schedTimeInput.value = "03:00";
+    document.querySelectorAll("#sched-days input").forEach((cb) => { cb.checked = ["1", "2", "3", "4", "5"].includes(cb.value); });
+    schedTargetInput.value = "";
+    schedTargetInput.closest("details").open = false;
+    schedChatsInput.value = "";
+    schedFormTitle.textContent = "Новое расписание";
+    schedCreateBtn.textContent = "Создать расписание";
+    schedCancelBtn.hidden = true;
+  }
+
+  schedCancelBtn.addEventListener("click", exitScheduleEdit);
 
   async function loadSchedules() {
     if (!canManageSchedules) return;
     schedulesError.hidden = true;
     try {
       const items = await api(`/api/projects/${encodeURIComponent(projectName)}/schedules`);
+      lastSchedules = items;
       renderSchedules(items);
     } catch (err) {
       schedulesRows.innerHTML = "";
@@ -377,6 +441,12 @@
       }
       return;
     }
+    const editBtn = ev.target.closest(".sched-edit-btn");
+    if (editBtn) {
+      const s = lastSchedules.find((x) => String(x.id) === editBtn.dataset.id);
+      if (s) enterScheduleEdit(s);
+      return;
+    }
     const delBtn = ev.target.closest(".sched-delete-btn");
     if (delBtn) {
       if (!confirm("Удалить это расписание?")) return;
@@ -412,23 +482,26 @@
       }
     }
     schedCreateBtn.disabled = true;
+    // В PUT null у stand/marker значит «не менять» (контракт ScheduleUpdate), поэтому
+    // через «Изменить» нельзя сбросить стенд/маркер в «без …» — только заменить.
+    const body = {
+      stand: schedStandSelect.value || null,
+      marker: schedMarkerSelect.value || null,
+      target: schedTargetInput.value.trim() || schedSectionsPicker.targets().join("\n") || "all",
+      cron,
+      notify_chat_ids: notifyChatIds,
+    };
+    const editing = editingScheduleId !== null;
     try {
-      await api(`/api/projects/${encodeURIComponent(projectName)}/schedules`, {
-        method: "POST",
-        json: {
-          stand: schedStandSelect.value || null,
-          marker: schedMarkerSelect.value || null,
-          target: schedTargetInput.value.trim() || schedSectionsPicker.targets().join("\n") || "all",
-          cron,
-          enabled: true,
-          notify_chat_ids: notifyChatIds,
-        },
-      });
-      schedTargetInput.value = "";
-      schedChatsInput.value = "";
+      if (editing) {
+        await api(`/api/projects/${encodeURIComponent(projectName)}/schedules/${editingScheduleId}`, { method: "PUT", json: body });
+      } else {
+        await api(`/api/projects/${encodeURIComponent(projectName)}/schedules`, { method: "POST", json: { ...body, enabled: true } });
+      }
+      exitScheduleEdit();
       await loadSchedules();
     } catch (err) {
-      schedulesError.textContent = `Не удалось создать расписание: ${err.message}`;
+      schedulesError.textContent = `Не удалось ${editing ? "сохранить" : "создать"} расписание: ${err.message}`;
       schedulesError.hidden = false;
     } finally {
       schedCreateBtn.disabled = false;

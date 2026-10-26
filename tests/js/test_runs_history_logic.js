@@ -105,6 +105,13 @@ test("runTags: сборка / эфир / Pixel 7 без дубля с метко
   assert.deepStrictEqual(tags(run(1)), []);
 });
 
+test("runTags: прогон по расписанию помечен первым тегом, без schedule_id тега нет", function () {
+  var tags = function (r) { return Logic.runTags(r).map(function (t) { return t.text; }); };
+  assert.deepStrictEqual(tags(run(1, { schedule_id: 3 })), ["по расписанию"]);
+  assert.deepStrictEqual(tags(run(1, { schedule_id: 3, label: "ночной", live: true })), ["по расписанию", "сборка: ночной", "эфир"]);
+  assert.deepStrictEqual(tags(run(1, { schedule_id: null })), []);
+});
+
 var failed = 0;
 tests.forEach(function (t) {
   try { t.fn(); console.log("ok - " + t.name); }

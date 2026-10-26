@@ -133,6 +133,7 @@ def _run_payload(row: sqlite3.Row) -> dict:
         "label": row["label"],
         "live": bool(row["live"]),
         "mobile": bool(row["mobile"]),
+        "schedule_id": row["schedule_id"],
     }
 
 
