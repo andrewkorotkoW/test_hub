@@ -527,6 +527,16 @@ class ScheduleUpdate(BaseModel):
     notify_chat_ids: Optional[list[int]] = None
 
 
+class ScheduleLastRun(BaseModel):
+    id: int
+    status: str
+    started: Optional[str] = None
+    finished: Optional[str] = None
+    duration: Optional[float] = None
+    counts: dict = Field(default_factory=dict)
+    delta_prev: Optional[dict] = None
+
+
 class Schedule(BaseModel):
     id: int
     project: str
@@ -538,6 +548,7 @@ class Schedule(BaseModel):
     notify_chat_ids: list[int]
     last_run_id: Optional[int] = None
     next_run_at: Optional[str] = None
+    last_run: Optional[ScheduleLastRun] = None
 
 
 class StatsSection(BaseModel):

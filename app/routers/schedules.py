@@ -10,7 +10,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from ..core import schedule as schedule_core
 from ..deps import get_db, require_roles
-from ..schemas import Schedule, ScheduleCreate, ScheduleRunNowResult, ScheduleUpdate
+from ..schemas import Schedule, ScheduleCreate, ScheduleLastRun, ScheduleRunNowResult, ScheduleUpdate
+from .runs import _delta_prev, _run_payload
 
 router = APIRouter(prefix="/api/projects", tags=["schedules"])
 
@@ -37,8 +38,30 @@ def _check_stand(conn: sqlite3.Connection, project: str, stand: str | None) -> N
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stand not found")
 
 
-def _schedule_payload(row: sqlite3.Row) -> Schedule:
-    return Schedule(**schedule_core.row_to_dict(row))
+def _last_run_payload(conn: sqlite3.Connection, run_id: int | None) -> ScheduleLastRun | None:
+    """Последний прогон расписания в том же виде, что строка «Прогонов» (статус,
+    счётчики, Δ к предыдущему на стенде) — чтобы вкладка «Расписания» показывала
+    результат, а не только номер прогона."""
+    if run_id is None:
+        return None
+    run_row = conn.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
+    if run_row is None:
+        return None
+    payload = _run_payload(run_row)
+    return ScheduleLastRun(
+        id=payload["id"],
+        status=payload["status"],
+        started=payload["started"],
+        finished=payload["finished"],
+        duration=payload["duration"],
+        counts=payload["counts"],
+        delta_prev=_delta_prev(conn, run_row),
+    )
+
+
+def _schedule_payload(conn: sqlite3.Connection, row: sqlite3.Row) -> Schedule:
+    data = schedule_core.row_to_dict(row)
+    return Schedule(**data, last_run=_last_run_payload(conn, data["last_run_id"]))
 
 
 @router.get("/{name}/schedules")
@@ -49,7 +72,7 @@ def list_schedules(
 ) -> list[Schedule]:
     _get_project_or_404(conn, name)
     rows = schedule_core.list_schedules(conn, name)
-    return [_schedule_payload(r) for r in rows]
+    return [_schedule_payload(conn, r) for r in rows]
 
 
 @router.post("/{name}/schedules", status_code=status.HTTP_201_CREATED)
@@ -67,7 +90,7 @@ def create_schedule(
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-    return _schedule_payload(row)
+    return _schedule_payload(conn, row)
 
 
 @router.put("/{name}/schedules/{schedule_id}")
@@ -93,7 +116,7 @@ def update_schedule(
         updated = schedule_core.update_schedule(conn, row, stand, target, marker, cron, enabled, notify_chat_ids)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-    return _schedule_payload(updated)
+    return _schedule_payload(conn, updated)
 
 
 @router.delete("/{name}/schedules/{schedule_id}", status_code=status.HTTP_204_NO_CONTENT)

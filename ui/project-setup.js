@@ -275,19 +275,48 @@
     return `${parseInt(mm, 10)} ${parseInt(hh, 10)} * * ${days.join(",")}`;
   }
 
+  // Цель, следующий запуск и последний результат — в том же виде, что строка
+  // «Прогонов» (HistLogic.targetSummary / fmtStarted, histResultHtml из
+  // ui/project-dashboard.js — общий верхнеуровневый scope, см. шапку файла), чтобы
+  // расписание читалось как история, а не как «все тесты · #123».
+  function scheduleTargetHtml(target) {
+    const t = HistLogic.targetSummary(target);
+    return `<span class="hist-target-text" title="${escapeHtml(t.full)}"><span class="mono">${escapeHtml(t.text)}</span>${t.more ? ` <span class="hist-target-more">+${t.more}</span>` : ""}</span>`;
+  }
+
+  function scheduleNextRunHtml(s, now) {
+    if (!s.enabled) return `<span class="muted">выключено</span>`;
+    if (!s.next_run_at) return `<span class="muted">—</span>`;
+    return `<span title="${escapeHtml(fmtDate(s.next_run_at))}">${escapeHtml(HistLogic.fmtStarted(s.next_run_at, now))}</span>`;
+  }
+
+  function scheduleLastRunHtml(s, now) {
+    const r = s.last_run;
+    if (!r) return `<span class="muted">—</span>`;
+    return `
+      <div class="sched-last-run-head">
+        <a href="#" class="sched-last-run" data-run-id="${r.id}">#${r.id}</a>
+        <span class="status-pill status-pill-sm ${escapeHtml(r.status)}">${escapeHtml(r.status)}</span>
+        <span class="muted" title="${escapeHtml(fmtDate(r.started))}">${escapeHtml(HistLogic.fmtStarted(r.started, now))}</span>
+      </div>
+      ${histResultHtml(r)}`;
+  }
+
   function renderSchedules(items) {
     if (!items.length) {
-      schedulesRows.innerHTML = `<tr><td colspan="7" class="muted">Расписаний пока нет.</td></tr>`;
+      schedulesRows.innerHTML = `<tr><td colspan="8" class="muted">Расписаний пока нет.</td></tr>`;
       return;
     }
+    const now = new Date();
     schedulesRows.innerHTML = items.map((s) => `
       <tr data-id="${s.id}">
         <td><button class="sched-toggle-btn" data-id="${s.id}" data-enabled="${s.enabled}">${s.enabled ? "✅ вкл" : "▫️ выкл"}</button></td>
         <td>${escapeHtml(s.stand || "без стенда")}</td>
         <td>${escapeHtml(s.marker || "—")}</td>
-        <td>${s.target === "all" ? "все тесты" : "выборочно"}</td>
+        <td class="hist-target">${scheduleTargetHtml(s.target)}</td>
         <td title="${escapeHtml(s.cron)}">${escapeHtml(formatCron(s.cron))}</td>
-        <td>${s.last_run_id ? `<a href="#" class="sched-last-run" data-run-id="${s.last_run_id}">#${s.last_run_id}</a>` : "—"}</td>
+        <td class="hist-when">${scheduleNextRunHtml(s, now)}</td>
+        <td>${scheduleLastRunHtml(s, now)}</td>
         <td>
           <button class="sched-run-btn" data-id="${s.id}">Запустить сейчас</button>
           <button class="sched-delete-btn danger" data-id="${s.id}">Удалить</button>

@@ -1961,6 +1961,7 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 .hist-rate.good { color: var(--tm-passed); } .hist-rate.warn { color: var(--tm-xfail); } .hist-rate.bad { color: var(--tm-failed); }
 .hist-counts { font-size: 11.5px; white-space: nowrap; flex-basis: 100%; }
 .hist-delta { font-size: 11px; margin-top: 2px; }
+.sched-last-run-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; white-space: nowrap; }
 .hist-row-active { background: color-mix(in srgb, var(--running) 10%, transparent); }
 
 /* REFERENCES.md, п.4: «спарклайн в строке» — сегментный бар passed/failed/skipped,

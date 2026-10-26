@@ -256,6 +256,52 @@ async def test_schedules_api_run_now_unknown_id_is_404(qa_client, tmp_path):
     assert resp.status_code == 404
 
 
+async def test_schedules_api_list_includes_last_run_result_like_history(qa_client, tmp_path, db_path):
+    """Вкладка «Расписания» показывает последний прогон как строку «Прогонов»
+    (статус, счётчики, Δ к предыдущему на том же стенде), а не только #id —
+    поэтому в payload расписания есть last_run с теми же полями, что у
+    GET /runs. Без прогона — last_run: null, next_run_at при этом заполнен."""
+    await _setup_project_and_stand(qa_client, tmp_path)
+    create_resp = await qa_client.post(
+        f"/api/projects/{PROJECT}/schedules", json={"stand": STAND, "target": "all", "cron": "0 3 * * 1-5"}
+    )
+    schedule_id = create_resp.json()["id"]
+    assert create_resp.json()["last_run"] is None
+    assert create_resp.json()["next_run_at"] is not None
+
+    conn = db_get_connection()
+    try:
+        conn.execute(
+            "INSERT INTO runs (project, stand, target, status, started, finished, duration, requested_by, counts) "
+            "VALUES (?, ?, 'all', 'passed', '2026-10-20T03:00:00', '2026-10-20T03:10:00', 600, 'tg_bot', ?)",
+            (PROJECT, STAND, json.dumps({"passed": 10, "failed": 2, "skipped": 1})),
+        )
+        cur = conn.execute(
+            "INSERT INTO runs (project, stand, target, status, started, finished, duration, requested_by, counts) "
+            "VALUES (?, ?, 'all', 'failed', '2026-10-21T03:00:00', '2026-10-21T03:12:00', 720, 'tg_bot', ?)",
+            (PROJECT, STAND, json.dumps({"passed": 8, "failed": 4, "skipped": 1})),
+        )
+        last_run_id = cur.lastrowid
+        conn.execute("UPDATE schedules SET last_run_id = ? WHERE id = ?", (last_run_id, schedule_id))
+        conn.commit()
+    finally:
+        conn.close()
+
+    resp = await qa_client.get(f"/api/projects/{PROJECT}/schedules")
+    assert resp.status_code == 200
+    row = resp.json()[0]
+    assert row["last_run_id"] == last_run_id
+    last = row["last_run"]
+    assert last["id"] == last_run_id
+    assert last["status"] == "failed"
+    assert last["started"] == "2026-10-21T03:00:00"
+    assert last["duration"] == 720
+    assert last["counts"] == {"passed": 8, "failed": 4, "skipped": 1}
+    # Δ к предыдущему прогону на том же стенде — как в столбце «Результат · Δ» истории
+    assert last["delta_prev"]["passed"] == -2
+    assert last["delta_prev"]["failed"] == 2
+
+
 # ------------------------------------------------------------------ реальный прогон: run-now и last_run_id
 
 async def test_run_now_creates_run_and_updates_last_run_id(qa_client, isolated_allure_dir, tmp_path):
