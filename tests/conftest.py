@@ -23,6 +23,15 @@ from app.db import init_db
 from app.main import app
 
 
+@pytest.fixture(autouse=True)
+def _eta_hook_off(monkeypatch):
+    """Хук пересчёта ETA (app/core/eta.on_run_finished) в тестах выключен: он стартует
+    discover проекта и фоновый поток после каждого прогона раннера, задача переживает
+    event loop теста (pytest-asyncio закрывает его по окончании теста) и пишет кэш в
+    рабочий workspace/eta/<тестовый проект>. Тесты самого хука включают флаг явно."""
+    monkeypatch.setattr(settings, "TH_ETA_HOOK", False)
+
+
 @pytest.fixture()
 def db_path(tmp_path, monkeypatch):
     path = tmp_path / "test_hub.db"

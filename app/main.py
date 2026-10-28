@@ -12,7 +12,7 @@ from .config import BASE_DIR, settings
 # core.datagen — под псевдонимом: ниже из .routers импортируется одноимённый модуль-роутер,
 # и без псевдонима он затенил бы ядро (lifespan звал бы recover_stale у роутера).
 from .core import datagen as datagen_core
-from .core import demo_video, live, runner, schedule
+from .core import demo_video, eta, live, runner, schedule
 from .db import init_db
 from .routers import (
     admin, auth, coverage, datagen, flaky, new_defects, product_map, projects, runs, schedules, sections, sentry,
@@ -67,6 +67,7 @@ async def lifespan(app: FastAPI):
 
     runner.register_finalize_hook(schedule.on_run_finished)
     runner.register_finalize_hook(demo_video.on_run_finished)
+    runner.register_finalize_hook(eta.on_run_finished)
     # Партии тестовых данных (app/core/datagen.py), не доведённые прошлым процессом до
     # done/deleted, завершить уже некому — помечаем сбоем, манифест сохраняем для удаления.
     stale = datagen_core.recover_stale()

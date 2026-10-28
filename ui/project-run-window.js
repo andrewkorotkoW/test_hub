@@ -754,6 +754,38 @@
     }
   });
 
+  // ETA очереди в шапке окна прогона: пока прогон queued/running, раз в 15 с спрашиваем
+  // GET /api/runs/{id}/eta (null — завершён или кэш ещё не посчитан → прячем).
+  const runEta = document.getElementById("run-eta");
+  let runEtaTimer = null;
+  let runEtaRunId = null;
+  async function refreshRunEta(runId) {
+    if (runId !== runEtaRunId) return;
+    let e = null;
+    try { e = await api(`/api/runs/${runId}/eta`); } catch { e = null; }
+    if (runId !== runEtaRunId) return;
+    const cells = e ? RunsHistoryLogic.etaCells({ eta: e }) : null;
+    runEta.hidden = !cells;
+    if (cells) {
+      runEta.textContent = cells.window;
+      runEta.title = cells.title;
+      runEta.classList.toggle("eta-rough", cells.rough);
+    }
+    if (!e) stopRunEta();
+  }
+  function startRunEta(runId) {
+    stopRunEta();
+    runEtaRunId = runId;
+    refreshRunEta(runId);
+    runEtaTimer = setInterval(() => refreshRunEta(runId), 15000);
+  }
+  function stopRunEta() {
+    if (runEtaTimer) clearInterval(runEtaTimer);
+    runEtaTimer = null;
+    runEtaRunId = null;
+    runEta.hidden = true;
+  }
+
   async function openRun(runId) {
     // run-card живёт во вкладке «Запуск» — открытие прогона (лента/история/расписания/
     // deep link ?run=) должно переключать на неё, иначе карточка заполнится, но останется
@@ -777,6 +809,7 @@
     currentRunMobile = false;
     setPill("queued");
     resetSplitState();
+    startRunEta(runId);
 
     await refreshReport(runId);
     await refreshSplitTests(runId);
@@ -807,6 +840,7 @@
       } else if (msg.type === "live") {
         handleLiveEvent(msg);
       } else if (msg.type === "status") {
+        stopRunEta();
         refreshReport(runId);
         refreshSplitTests(runId);
       }

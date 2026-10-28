@@ -590,6 +590,32 @@
   // кто уже занял очередь, чтобы не пришлось гадать, почему ничего не стартовало
   // сразу. lastRunsList уже свежий к моменту вызова (loadHistory/refreshQueueNotice
   // оба пишут его перед рендером).
+  // Оценка «вашего запуска» (POST .../eta, app.core.eta.estimate_for_form) — для цели
+  // из формы (выбранное в дереве/ручное поле, иначе «всё»); обновляется тем же
+  // 15-секундным опросом, что и очередь, и только пока баннер виден.
+  let ownRunEstimate = null;
+  async function refreshOwnRunEstimate() {
+    try {
+      const target = (typeof selectedTarget === "function" && selectedTarget()) || "all";
+      ownRunEstimate = await api(`/api/projects/${encodeURIComponent(projectName)}/eta`, {
+        method: "POST",
+        json: { stand: standSelect.value || null, target, marker: markerSelect.value || null, live: !!(liveCheckbox && liveCheckbox.checked) },
+      });
+      ownRunEstimate = ownRunEstimate ? { ...ownRunEstimate, target } : null;
+    } catch { ownRunEstimate = null; }
+  }
+
+  function queueRowHtml(r, index) {
+    const cells = HistLogic.etaCells(r);
+    const target = HistLogic.targetSummary(r.target);
+    const eta = cells
+      ? `<span class="eta${cells.rough ? " eta-rough" : ""}" title="${escapeHtml(cells.title)}">${escapeHtml(cells.queue)}</span>`
+      : `<span class="muted">оценка появится после первого завершённого прогона</span>`;
+    return `<span class="queue-pos mono">${index}.</span>`
+      + `<span>#${r.id} · <span class="mono">${escapeHtml(target.text)}</span>${target.more ? ` +${target.more}` : ""}`
+      + ` · ${escapeHtml(r.stand || "—")} · ${escapeHtml(r.requested_by || "—")}</span>${eta}`;
+  }
+
   function renderQueueNotice() {
     if (!runQueueNotice) return;
     const active = (lastRunsList || []).filter((r) => r.status === "running" || r.status === "queued");
@@ -598,18 +624,24 @@
       return;
     }
     const running = active.find((r) => r.status === "running");
-    const queuedCount = active.filter((r) => r.status === "queued").length;
-    let text;
+    const queued = active.filter((r) => r.status === "queued").sort((a, b) => a.id - b.id);
+    let head;
     if (running) {
-      text = `⏳ Сейчас выполняется прогон #${running.id}`
-        + ` (стенд ${running.stand || "—"}, запустил ${running.requested_by || "—"})`;
-      if (queuedCount) text += ` + ещё ${queuedCount} в очереди`;
-      text += " — ваш запуск встанет за ним.";
+      const cells = HistLogic.etaCells(running);
+      head = `⏳ Сейчас выполняется прогон #${running.id}`
+        + ` <span class="muted">(стенд ${escapeHtml(running.stand || "—")}, запустил ${escapeHtml(running.requested_by || "—")})</span>`
+        + (cells ? ` — <span class="eta" title="${escapeHtml(cells.title)}">${escapeHtml(cells.queue)}</span>` : "");
+      if (queued.length) head += ` · в очереди ещё ${queued.length}`;
     } else {
-      text = `⏳ В очереди уже ${queuedCount} ${pluralRu(queuedCount, "прогон", "прогона", "прогонов")}`
-        + " — ваш запуск встанет за ними.";
+      head = `⏳ В очереди ${queued.length} ${pluralRu(queued.length, "прогон", "прогона", "прогонов")}`;
     }
-    runQueueNotice.textContent = text;
+    const own = HistLogic.ownRunText(ownRunEstimate);
+    const ownLabel = ownRunEstimate && ownRunEstimate.target !== "all" ? "Ваш запуск (выбранное)" : "Ваш запуск (всё)";
+    runQueueNotice.innerHTML = `<div class="queue-head">${head}</div>`
+      + (queued.length ? `<div class="queue-list">${queued.map((r, i) => queueRowHtml(r, i + 1)).join("")}</div>` : "")
+      + (own
+        ? `<div class="queue-own"><b>${ownLabel}:</b> ${escapeHtml(own)}</div>`
+        : `<div class="queue-own muted">Ваш запуск встанет ${running ? "за ним" : "за ними"}.</div>`);
     runQueueNotice.hidden = false;
   }
 
@@ -621,6 +653,7 @@
     if (window.location.hash !== "#run") return;
     try {
       lastRunsList = await api(`/api/projects/${encodeURIComponent(projectName)}/runs`);
+      if (lastRunsList.some((r) => r.status === "running" || r.status === "queued")) await refreshOwnRunEstimate();
       renderQueueNotice();
     } catch { /* баннер очереди необязателен — тихо пропускаем сбой опроса */ }
   }
@@ -667,7 +700,11 @@
 
   function histResultHtml(r) {
     const res = HistLogic.runResult(r);
-    if (r.status === "queued" || r.status === "running") return `<span class="muted">${r.status === "queued" ? "в очереди" : "выполняется…"}</span>`;
+    if (r.status === "queued" || r.status === "running") {
+      const cells = HistLogic.etaCells(r);
+      if (cells) return `<span class="muted eta-cell${cells.rough ? " eta-rough" : ""}" title="${escapeHtml(cells.title)}">${escapeHtml(cells.result)}</span>`;
+      return `<span class="muted">${r.status === "queued" ? "в очереди" : "выполняется…"}</span>`;
+    }
     if (!res.total) return `<span class="muted">—</span>`;
     const seg = (n, cls) => n ? `<span class="${cls}" style="width:${((n / res.total) * 100).toFixed(1)}%" title="${cls.replace("hist-seg-", "")}: ${n}"></span>` : "";
     const rateCls = res.rate === null ? "" : res.rate >= 90 ? "good" : res.rate >= 60 ? "warn" : "bad";
@@ -679,6 +716,14 @@
       </div>
       <div class="hist-delta" title="Изменение к предыдущему прогону на этом стенде: passed / failed · падения из-за стенда">${historyDeltaHtml(r)}</div>
     `;
+  }
+
+  // Длительность: у завершённых — факт; у queued — «≈ оценка» (app/core/eta.py), у
+  // running — «прошло / ≈ всего». Грубая оценка (тесты без истории) — янтарным.
+  function histDurationHtml(r) {
+    const cells = HistLogic.etaCells(r);
+    if (!cells) return RunReportLogic.fmtRunDuration(r.duration);
+    return `<span class="eta${cells.rough ? " eta-rough" : ""}" title="${escapeHtml(cells.title)}">${escapeHtml(cells.duration)}</span>`;
   }
 
   function historyRowHtml(r, now) {
@@ -695,7 +740,7 @@
         </td>
         <td class="hist-when" title="${escapeHtml(fmtDate(r.started))}">${escapeHtml(HistLogic.fmtStarted(r.started, now))}</td>
         <td>${histResultHtml(r)}</td>
-        <td class="hist-duration">${RunReportLogic.fmtRunDuration(r.duration)}</td>
+        <td class="hist-duration">${histDurationHtml(r)}</td>
         <td>${escapeHtml(r.requested_by || "—")}</td>
         <td class="hist-actions">${canManageData && ["passed", "failed", "cancelled"].includes(r.status)
           ? `<button type="button" class="hist-cleanup-btn dg-delete-btn" data-run-id="${r.id}" title="Удалить данные автотестов, созданные на стенде с начала этого прогона">Очистить</button>`
@@ -744,6 +789,7 @@
     try {
       const runs = await api(`/api/projects/${encodeURIComponent(projectName)}/runs`);
       lastRunsList = runs;
+      if (runs.some((r) => r.status === "running" || r.status === "queued")) await refreshOwnRunEstimate();
       renderQueueNotice();
       renderHistoryTable();
       await renderDashboard(runs);

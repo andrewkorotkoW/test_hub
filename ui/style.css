@@ -431,6 +431,18 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
   border-color: rgba(224, 160, 32, .35);
   color: var(--xfail);
 }
+/* ETA очереди (app/core/eta.py; ui/runs-history-logic.js etaCells): список очереди в
+   баннере, «ваш запуск», ячейки истории и строка в окне прогона. .eta-rough — оценка
+   по тестам без истории на стенде (янтарный, как сам баннер). */
+.queue-notice .queue-head { color: var(--text); }
+.queue-notice .queue-list { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 14px; align-items: baseline; margin-top: 8px; color: var(--text); font-size: 13px; }
+.queue-notice .queue-pos { color: var(--text-muted); }
+.queue-notice .queue-own { margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(224, 160, 32, .35); color: var(--text); }
+.eta { font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.eta-cell { white-space: normal; }
+.eta-rough { color: var(--xfail); }
+.run-eta { font-size: 12.5px; }
+@media (max-width: 760px) { .queue-notice .queue-list { grid-template-columns: auto 1fr; } }
 
 /* ---------- бейдж статуса задачи YouTrack (вкладка «Задачи», ui/tasks.js) —
    поле "Design" в YouTrack: Sprint Backlog/In Progress/In Test/Blocked/Wait for

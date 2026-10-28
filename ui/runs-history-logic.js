@@ -4,7 +4,9 @@
  * tests/js/test_runs_history_logic.js; project-dashboard.js использует
  * window.RunsHistoryLogic. Данные — GET /api/projects/{name}/runs: [{id, stand,
  * target, status, started, duration, requested_by, counts{passed,failed,broken,
- * skipped}, label, live, mobile, delta_prev}].
+ * skipped}, label, live, mobile, delta_prev, eta}] — eta (app/core/eta.py) только у
+ * running/queued: {kind, seconds|duration, done, total, elapsed, position, start_in,
+ * start_at, finish_at, low, high, rough}.
  */
 (function (globalRoot) {
   "use strict";
@@ -125,6 +127,73 @@
     return tags;
   }
 
+  // ---- ETA очереди: поле eta у running/queued в GET .../runs (app/core/eta.py) ----
+  // «< 1 мин» / «4 мин» / «1 ч 05 мин» — минуты, без секунд: точность оценки их не стоит.
+  function fmtEta(seconds) {
+    if (seconds == null || isNaN(seconds)) return "—";
+    var s = Math.max(0, Math.round(seconds));
+    if (s < 60) return "< 1 мин";
+    var m = Math.round(s / 60);
+    if (m < 60) return m + " мин";
+    var h = Math.floor(m / 60);
+    var mm = m % 60;
+    return h + " ч" + (mm ? " " + pad2(mm) + " мин" : "");
+  }
+
+  // «≈ 4 мин», но «< 1 мин» без «≈» — два знака приближения подряд читаются плохо.
+  function approx(seconds) {
+    var t = fmtEta(seconds);
+    return t.charAt(0) === "<" || t === "—" ? t : "≈ " + t;
+  }
+
+  function fmtClock(iso) {
+    var d = parseIso(iso);
+    return d ? pad2(d.getHours()) + ":" + pad2(d.getMinutes()) : "—";
+  }
+
+  // Тексты для строки истории (result/duration), окна прогона (window) и баннера
+  // очереди (queue). null — у прогона нет eta (завершён или кэш ещё не посчитан).
+  function etaCells(run) {
+    var e = run && run.eta;
+    if (!e) return null;
+    if (e.kind === "running") {
+      var left = e.overdue ? "идёт дольше оценки" : "осталось " + approx(e.seconds);
+      var progress = e.total ? e.done + " / " + e.total : (e.done ? e.done + " завершено" : "");
+      return {
+        kind: "running",
+        result: (progress ? progress + " · " : "") + left,
+        duration: fmtEta(e.elapsed) + " / " + approx((e.elapsed || 0) + (e.seconds || 0)),
+        window: (progress ? progress + " · " : "") + left + " · финиш ≈ " + fmtClock(e.finish_at),
+        queue: (progress ? progress + " тестов, " : "") + left,
+        rough: !!e.rough,
+        title: (e.overdue ? "текущий тест уже дольше своей медианы — сколько ещё, неизвестно; " : "") + (e.pace ? "темп к оценке ×" + e.pace : ""),
+      };
+    }
+    var pos = e.position + "-й в очереди";
+    var start = "старт ≈ " + fmtClock(e.start_at) + " (через " + fmtEta(e.start_in) + ")";
+    var dur = approx(e.duration);
+    var range = "оценка " + fmtEta(e.low) + "–" + fmtEta(e.high)
+      + (e.rough ? "; грубо: в наборе тесты без истории на этом стенде" : "");
+    return {
+      kind: "queued",
+      result: pos + " · " + start,
+      duration: dur,
+      window: pos + " · " + start + " · финиш ≈ " + fmtClock(e.finish_at),
+      queue: "старт ≈ " + fmtClock(e.start_at) + " · " + dur,
+      rough: !!e.rough,
+      title: range,
+    };
+  }
+
+  // «Ваш запуск» в баннере очереди — ответ POST .../eta (app.core.eta.estimate_for_form).
+  function ownRunText(est) {
+    if (!est) return null;
+    var dur = approx(est.seconds) + (est.rough ? " (грубо)" : "");
+    if (!est.start_in) return "стартует сразу · " + dur + " · финиш ≈ " + fmtClock(est.finish_at);
+    return "старт ≈ " + fmtClock(est.start_at) + " (через " + fmtEta(est.start_in) + ") · " + dur
+      + " · финиш ≈ " + fmtClock(est.finish_at);
+  }
+
   var api = {
     NO_STAND: NO_STAND,
     PERIODS: PERIODS,
@@ -138,6 +207,11 @@
     fmtStarted: fmtStarted,
     targetSummary: targetSummary,
     runTags: runTags,
+    fmtEta: fmtEta,
+    approx: approx,
+    fmtClock: fmtClock,
+    etaCells: etaCells,
+    ownRunText: ownRunText,
   };
 
   if (typeof module !== "undefined" && module.exports) {

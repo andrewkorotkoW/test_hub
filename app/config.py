@@ -79,6 +79,11 @@ class Settings:
     # видны снаружи процесса test_hub — не обязательно совпадает с TH_PORT/127.0.0.1
     # (за прокси/туннелем). Значение по умолчанию годится только для локальной разработки.
     TH_PUBLIC_URL: str = os.getenv("TH_PUBLIC_URL", "http://127.0.0.1:8700").rstrip("/")
+    # Пересчёт кэша ETA очереди (app/core/eta.py) хуком по завершении прогона: discover
+    # проекта + чтение run_events в фоне. TH_ETA_HOOK=0 выключает хук (ручной пересчёт
+    # POST /api/projects/{name}/eta/recalc остаётся); тесты выключают его autouse-фикстурой,
+    # иначе фоновая задача переживает event loop теста и пишет кэш в рабочий workspace.
+    TH_ETA_HOOK: bool = os.getenv("TH_ETA_HOOK", "1") not in ("0", "false", "False", "")
 
     # Telegram-бот: пустой TH_TG_BOT_TOKEN полностью выключает бота (см. lifespan в
     # app/main.py); пустой TH_TG_ALLOWED_IDS означает "никому нельзя" (fail-safe), а

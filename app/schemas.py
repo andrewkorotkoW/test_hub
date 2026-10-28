@@ -96,6 +96,16 @@ class StandPreset(BaseModel):
     marker: Optional[str] = None
 
 
+class EtaRequest(BaseModel):
+    """POST /api/projects/{name}/eta — «ваш запуск» на вкладке «Запуск»: те же поля,
+    что уйдут в RunCreate, если нажать «Запустить» сейчас."""
+    stand: Optional[str] = None
+    target: str = "all"
+    marker: Optional[str] = None
+    repeat: int = Field(default=1, ge=1, le=20)
+    live: bool = False
+
+
 class RunCreate(BaseModel):
     stand: Optional[str] = None
     target: str = "all"

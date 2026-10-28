@@ -14,11 +14,11 @@ from fastapi import (
 from fastapi.responses import Response
 
 from ..config import settings
-from ..core import allure_report, charts, failure_causes, live, runner
+from ..core import allure_report, charts, eta, failure_causes, live, runner
 from ..core.ws import hub
 from ..db import get_connection
 from ..deps import get_current_user, get_db, require_roles
-from ..schemas import RunCreate
+from ..schemas import EtaRequest, RunCreate
 
 logger = logging.getLogger(__name__)
 
@@ -223,12 +223,56 @@ def list_runs(
         rows = conn.execute(
             "SELECT * FROM runs WHERE project = ? ORDER BY id DESC", (name,)
         ).fetchall()
+    # ETA очереди (app.core.eta) — только у running/queued, у остальных None; без кэша
+    # (ни одного завершённого прогона после включения ETA) — None у всех.
+    etas = eta.queue_eta(conn, name)
     payloads = []
     for r in rows:
         payload = _run_payload(r)
         payload["delta_prev"] = _delta_prev(conn, r)
+        payload["eta"] = etas.get(r["id"])
         payloads.append(payload)
     return payloads
+
+
+@router.get("/runs/{run_id}/eta")
+def get_run_eta(
+    run_id: int,
+    conn: sqlite3.Connection = Depends(get_db),
+    _user: sqlite3.Row = Depends(get_current_user),
+) -> dict | None:
+    """ETA одного прогона для окна прогона (опрос, пока он queued/running): тот же
+    объект, что в поле eta списка прогонов; None — прогон завершён или кэша нет."""
+    row = _get_run_or_404(conn, run_id)
+    if row["status"] not in ("running", "queued"):
+        return None
+    return eta.queue_eta(conn, row["project"]).get(run_id)
+
+
+@router.post("/projects/{name}/eta")
+def estimate_form_run(
+    name: str,
+    body: EtaRequest,
+    conn: sqlite3.Connection = Depends(get_db),
+    _user: sqlite3.Row = Depends(get_current_user),
+) -> dict | None:
+    """«Ваш запуск»: когда стартует и сколько займёт прогон с параметрами формы, если
+    нажать «Запустить» сейчас — старт после всей текущей очереди проекта."""
+    _get_project_or_404(conn, name)
+    return eta.estimate_for_form(conn, name, body.stand, body.target, body.marker, body.live, body.repeat)
+
+
+@router.post("/projects/{name}/eta/recalc", status_code=status.HTTP_202_ACCEPTED)
+async def recalc_eta(
+    name: str,
+    conn: sqlite3.Connection = Depends(get_db),
+    _user: sqlite3.Row = Depends(require_roles("qa", "admin")),
+) -> dict:
+    """Ручной пересчёт кэша ETA (первое включение, смена дерева тестов) — обычно не
+    нужен: кэш обновляется хуком по завершении каждого прогона."""
+    _get_project_or_404(conn, name)
+    cache = await eta.recalc_async(name)
+    return {"generated_at": cache["generated_at"] if cache else None, "nodeids": len(cache["nodeids"]) if cache else 0}
 
 
 @router.get("/runs/{run_id}/report")

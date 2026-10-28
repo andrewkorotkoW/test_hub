@@ -112,6 +112,58 @@ test("runTags: прогон по расписанию помечен первы�
   assert.deepStrictEqual(tags(run(1, { schedule_id: null })), []);
 });
 
+test("fmtEta: минуты без секунд, часы с минутами, «< 1 мин»", function () {
+  assert.strictEqual(Logic.fmtEta(0), "< 1 мин");
+  assert.strictEqual(Logic.fmtEta(45), "< 1 мин");
+  assert.strictEqual(Logic.fmtEta(231), "4 мин");
+  assert.strictEqual(Logic.fmtEta(3900), "1 ч 05 мин");
+  assert.strictEqual(Logic.fmtEta(7200), "2 ч");
+  assert.strictEqual(Logic.fmtEta(null), "—");
+  assert.strictEqual(Logic.approx(231), "≈ 4 мин");
+  assert.strictEqual(Logic.approx(20), "< 1 мин");
+});
+
+test("etaCells: queued — позиция, старт по часам и через сколько, оценка с вилкой", function () {
+  var cells = Logic.etaCells(run(110, { status: "queued", eta: {
+    kind: "queued", position: 3, start_in: 2160, start_at: "2026-10-28T13:08:00", finish_at: "2026-10-28T13:12:00",
+    duration: 231, low: 180, high: 320, rough: false,
+  } }));
+  assert.strictEqual(cells.kind, "queued");
+  assert.strictEqual(cells.result, "3-й в очереди · старт ≈ 13:08 (через 36 мин)");
+  assert.strictEqual(cells.duration, "≈ 4 мин");
+  assert.strictEqual(cells.window, "3-й в очереди · старт ≈ 13:08 (через 36 мин) · финиш ≈ 13:12");
+  assert.strictEqual(cells.title, "оценка 3 мин–5 мин");
+  assert.strictEqual(cells.rough, false);
+});
+
+test("etaCells: running — прогресс, остаток, прошло / оценка; rough помечает «грубо»", function () {
+  var cells = Logic.etaCells(run(107, { status: "running", eta: {
+    kind: "running", seconds: 540, done: 31, total: 57, elapsed: 1560, pace: 1.25, finish_at: "2026-10-28T12:41:00", rough: false,
+  } }));
+  assert.strictEqual(cells.result, "31 / 57 · осталось ≈ 9 мин");
+  assert.strictEqual(cells.duration, "26 мин / ≈ 35 мин");
+  assert.strictEqual(cells.window, "31 / 57 · осталось ≈ 9 мин · финиш ≈ 12:41");
+  var rough = Logic.etaCells(run(1, { status: "queued", eta: { kind: "queued", position: 1, start_in: 0, start_at: "2026-10-28T12:00:00", finish_at: "2026-10-28T12:22:00", duration: 1320, low: 900, high: 2000, rough: true } }));
+  assert.strictEqual(rough.rough, true);
+  assert.ok(/грубо/.test(rough.title));
+  var soon = Logic.etaCells(run(5, { status: "running", eta: { kind: "running", seconds: 30, done: 4, total: 6, elapsed: 120, pace: 1, finish_at: "2026-10-28T12:41:00", rough: false } }));
+  assert.strictEqual(soon.result, "4 / 6 · осталось < 1 мин");
+  assert.strictEqual(soon.duration, "2 мин / ≈ 3 мин");
+  var late = Logic.etaCells(run(6, { status: "running", eta: { kind: "running", seconds: 0, done: 5, total: 6, elapsed: 900, pace: 3, overdue: true, finish_at: "2026-10-28T12:41:00", rough: false } }));
+  assert.strictEqual(late.result, "5 / 6 · идёт дольше оценки");
+  assert.ok(/дольше своей медианы/.test(late.title));
+  assert.strictEqual(Logic.etaCells(run(2)), null);
+  assert.strictEqual(Logic.etaCells(run(3, { eta: null })), null);
+});
+
+test("ownRunText: сразу или после очереди", function () {
+  assert.strictEqual(Logic.ownRunText({ seconds: 231, start_in: 0, start_at: "2026-10-28T12:32:00", finish_at: "2026-10-28T12:36:00", rough: false }),
+    "стартует сразу · ≈ 4 мин · финиш ≈ 12:36");
+  assert.strictEqual(Logic.ownRunText({ seconds: 231, start_in: 2160, start_at: "2026-10-28T13:08:00", finish_at: "2026-10-28T13:12:00", rough: true }),
+    "старт ≈ 13:08 (через 36 мин) · ≈ 4 мин (грубо) · финиш ≈ 13:12");
+  assert.strictEqual(Logic.ownRunText(null), null);
+});
+
 var failed = 0;
 tests.forEach(function (t) {
   try { t.fn(); console.log("ok - " + t.name); }

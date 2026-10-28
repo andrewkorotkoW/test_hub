@@ -216,6 +216,8 @@
         <h2>Прогон #<span id="run-id-label"></span><span id="run-label-badge" class="badge-manual" hidden></span><span id="run-device-badge" class="badge-manual" hidden>Устройство: Pixel 7</span></h2>
         <div class="run-status-bar">
           <span id="run-status-pill" class="status-pill queued" data-status="queued">queued</span>
+          <!-- ETA очереди (GET /api/runs/{id}/eta, опрос раз в 15 с, пока прогон queued/running) -->
+          <span id="run-eta" class="run-eta muted" hidden></span>
           <div class="run-view-toggle" id="run-view-toggle" hidden>
             <button type="button" data-view="split" aria-current="true">Сплит</button>
             <button type="button" data-view="log" aria-current="false">Весь лог</button>
