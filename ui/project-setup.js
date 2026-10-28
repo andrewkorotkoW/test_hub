@@ -336,7 +336,7 @@
       const active = s.last_run && (s.last_run.status === "running" || s.last_run.status === "queued");
       return `
       <tr data-id="${s.id}"${active ? ' class="hist-row-active"' : ""}>
-        <td><button class="sched-toggle-btn" data-id="${s.id}" data-enabled="${s.enabled}">${s.enabled ? "✅ вкл" : "▫️ выкл"}</button></td>
+        <td><button class="sched-toggle-btn ${s.enabled ? "on" : "off"}" data-id="${s.id}" data-enabled="${s.enabled}" title="${s.enabled ? "Выключить расписание" : "Включить расписание"}"><span class="sched-toggle-dot"></span>${s.enabled ? "вкл" : "выкл"}</button></td>
         <td>${escapeHtml(s.stand || "без стенда")}</td>
         <td>${escapeHtml(s.marker || "—")}</td>
         <td class="hist-target">${scheduleTargetHtml(s.target)}</td>
@@ -344,8 +344,8 @@
         <td class="hist-when">${scheduleNextRunHtml(s, now)}</td>
         <td>${scheduleLastRunHtml(s, now)}</td>
         <td>${scheduleNotifyHtml(s)}</td>
-        <td>
-          <button class="sched-run-btn" data-id="${s.id}">Запустить сейчас</button>
+        <td class="sched-actions">
+          <button class="sched-run-btn" data-id="${s.id}" title="Запустить прогон по этому расписанию сейчас">▶ Запустить</button>
           <button class="sched-edit-btn" data-id="${s.id}">Изменить</button>
           <button class="sched-delete-btn danger" data-id="${s.id}">Удалить</button>
         </td>

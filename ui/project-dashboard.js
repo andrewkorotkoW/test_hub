@@ -366,23 +366,34 @@
   // Вся карточка — ссылка на отчёт (клик/Enter открывают окно прогона, кнопка «Отчёт»
   // убрана как дублирующая); «Поделиться» — отдельная область справа, клик по ней
   // окно не открывает (замечание владельца 21.10: «клик по карточке ничего не делает»).
+  // Карточка — одна строка-грид с фиксированными колонками (статус · # · стенд · когда ·
+  // длительность · кто · теги · полоса · «Поделиться»), чтобы карточки разных прогонов
+  // выравнивались друг под другом (замечание владельца 28.10: у завершённых теги и полоса
+  // уезжали на вторые-третьи строки). Теги не переносятся — длинная метка сборки режется
+  // многоточием, целиком — в title. У queued/running вместо даты и длительности — ETA
+  // (RunsHistoryLogic.etaCells, см. app/core/eta.py).
   function runsFeedItemHtml(r) {
+    const now = new Date();
+    const eta = HistLogic.etaCells(r);
+    const tags = HistLogic.runTags(r);
+    let when = `<span title="${escapeHtml(fmtDate(r.started))}">${escapeHtml(HistLogic.fmtStarted(r.started, now))}</span>`;
+    let duration = escapeHtml(RunReportLogic.fmtRunDuration(r.duration));
+    if (r.status === "queued") {
+      when = eta ? `<span class="eta${eta.rough ? " eta-rough" : ""}" title="${escapeHtml(eta.result)}">старт ≈ ${escapeHtml(HistLogic.fmtClock(r.eta.start_at))}</span>` : `<span class="muted">в очереди</span>`;
+      duration = eta ? `<span class="eta${eta.rough ? " eta-rough" : ""}" title="${escapeHtml(eta.title)}">${escapeHtml(eta.duration)}</span>` : "—";
+    } else if (r.status === "running" && eta) {
+      duration = `<span class="eta${eta.rough ? " eta-rough" : ""}" title="${escapeHtml(eta.result)}">${escapeHtml(eta.duration)}</span>`;
+    }
     return `
       <div class="runs-feed-item clickable" role="button" tabindex="0" data-run-id="${r.id}" title="Открыть отчёт прогона #${r.id}">
         <span class="status-pill ${escapeHtml(r.status)}" data-status="${escapeHtml(r.status)}">${escapeHtml(r.status)}</span>
         <div class="runs-feed-meta">
           <span class="runs-feed-id">#${r.id}</span>
-          <span>${escapeHtml(r.stand || "без стенда")}${isManualStandRun(r.stand) ? `<span class="badge-manual">ручной</span>` : ""}</span>
-          <span>${fmtDate(r.started)}</span>
-          <span>${RunReportLogic.fmtRunDuration(r.duration)}</span>
-          <span>${escapeHtml(r.requested_by || "—")}</span>
-          ${(r.label || r.live || r.mobile) ? `
-            <div class="runs-feed-tags">
-              ${r.label ? `<span class="runs-feed-tag">сборка: ${escapeHtml(r.label)}</span>` : ""}
-              ${r.live ? `<span class="runs-feed-tag">эфир</span>` : ""}
-              ${r.mobile ? `<span class="runs-feed-tag">Pixel 7</span>` : ""}
-            </div>
-          ` : ""}
+          <span class="runs-feed-stand">${escapeHtml(r.stand || "без стенда")}${isManualStandRun(r.stand) ? `<span class="badge-manual">ручной</span>` : ""}</span>
+          <span class="runs-feed-when">${when}</span>
+          <span class="runs-feed-duration">${duration}</span>
+          <span class="runs-feed-who">${escapeHtml(r.requested_by || "—")}</span>
+          <div class="runs-feed-tags">${tags.map((t) => `<span class="runs-feed-tag" title="${escapeHtml(t.text)}">${escapeHtml(t.text)}</span>`).join("")}</div>
         </div>
         ${runsFeedBarHtml(r)}
         ${canShare ? `<div class="runs-feed-actions"><button type="button" class="runs-feed-share-btn" data-run-id="${r.id}" title="Публичная ссылка на отчёт">Поделиться</button></div>` : ""}
