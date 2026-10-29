@@ -603,7 +603,39 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
 /* ---------- дерево разделов (project.js: sections-tree-logic.js) ---------- */
 .sections-search-field { max-width: 320px; margin-bottom: 12px; }
 .sections-summary-line { font-size: 13px; margin: 2px 0 10px; }
-.sections-preset-btn.active { background: var(--action-accent); border-color: var(--action-accent); color: var(--action-accent-text); }
+/* У каждого пресета свой акцентный цвет — раньше все кнопки (кроме активной)
+   выглядели одинаково белыми, различались только подписью. Токены — из уже
+   существующей палитры (:root выше), не новые; специально НЕ --accent/
+   --accent-hover — те перекрашиваются под цвет проекта (applyProjectColor() в
+   common.js), а это должна быть стабильная, узнаваемая по цвету кнопка независимо
+   от открытого проекта. «Всё» без цвета намеренно — это отсутствие фильтра, а не
+   категория наравне с остальными. */
+/* api — оранжевый, отсылка к Postman. */
+.sections-preset-btn[data-preset="api"] { --preset-color: var(--broken); }
+.sections-preset-btn[data-preset="ui"] { --preset-color: var(--gradient-end); }
+.sections-preset-btn[data-preset="smoke"] { --preset-color: var(--skipped); }
+.sections-preset-btn[data-preset="e2e"] { --preset-color: var(--gradient-mid); }
+.sections-preset-btn[data-preset="regression"] { --preset-color: var(--passed); }
+.sections-preset-btn[data-preset="mobile"] { --preset-color: var(--gradient-start); }
+/* Integration — единственный пресет, который реально трогает внешнюю систему
+   (прод-аккаунты интеграций, см. stands.manual_only) — цвет предупреждения, не
+   просто ещё один оттенок в ряду. */
+.sections-preset-btn[data-preset="integration"] { --preset-color: var(--danger); }
+
+.sections-preset-btn[data-preset]:not([data-preset="all"]) {
+  border-color: var(--preset-color);
+  color: var(--preset-color);
+}
+.sections-preset-btn[data-preset]:not([data-preset="all"]):hover {
+  background: var(--preset-color);
+  border-color: var(--preset-color);
+  color: #fff;
+}
+.sections-preset-btn.active {
+  background: var(--preset-color, var(--action-accent));
+  border-color: var(--preset-color, var(--action-accent));
+  color: var(--action-accent-text);
+}
 .manual-target-spoiler { margin: 4px 0 12px; }
 .manual-target-spoiler summary { cursor: pointer; color: var(--accent); font-size: 13px; font-weight: 600; }
 .manual-target-spoiler textarea { margin-top: 8px; }
