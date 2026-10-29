@@ -393,7 +393,7 @@
           <span class="runs-feed-when">${when}</span>
           <span class="runs-feed-duration">${duration}</span>
           <span class="runs-feed-who">${escapeHtml(r.requested_by || "—")}</span>
-          <div class="runs-feed-tags">${tags.map((t) => `<span class="runs-feed-tag" title="${escapeHtml(t.text)}">${escapeHtml(t.text)}</span>`).join("")}</div>
+          <div class="runs-feed-tags">${tags.map((t) => `<span class="runs-feed-tag runs-feed-tag--${t.kind}" title="${escapeHtml(t.text)}">${escapeHtml(t.text)}</span>`).join("")}</div>
         </div>
         ${runsFeedBarHtml(r)}
         ${canShare ? `<div class="runs-feed-actions"><button type="button" class="runs-feed-share-btn" data-run-id="${r.id}" title="Публичная ссылка на отчёт">Поделиться</button></div>` : ""}
@@ -747,7 +747,7 @@
         <td>${escapeHtml(r.stand || "—")}${isManualStandRun(r.stand) ? `<span class="badge-manual">ручной</span>` : ""}</td>
         <td class="hist-target">
           <div class="hist-target-text" title="${escapeHtml(target.full)}"><span class="mono">${escapeHtml(target.text)}</span>${target.more ? ` <span class="hist-target-more">+${target.more}</span>` : ""}</div>
-          ${tags.length ? `<div class="runs-feed-tags">${tags.map((t) => `<span class="runs-feed-tag">${escapeHtml(t.text)}</span>`).join("")}</div>` : ""}
+          ${tags.length ? `<div class="runs-feed-tags">${tags.map((t) => `<span class="runs-feed-tag runs-feed-tag--${t.kind}" title="${escapeHtml(t.text)}">${escapeHtml(t.text)}</span>`).join("")}</div>` : ""}
         </td>
         <td class="hist-when" title="${escapeHtml(fmtDate(r.started))}">${escapeHtml(HistLogic.fmtStarted(r.started, now))}</td>
         <td>${histResultHtml(r)}</td>
