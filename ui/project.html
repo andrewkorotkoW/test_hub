@@ -177,6 +177,7 @@
           <button type="button" class="sections-preset-btn" data-preset="all">Всё</button>
           <button type="button" class="sections-preset-btn" data-preset="regression" title="Весь функционал кроме внешних интеграций (ai_chat, CAS, БУК, MTS Link, P2P, Helpdesk, LRS)">Regression</button>
           <button type="button" class="sections-preset-btn" data-preset="mobile" title="Тесты tests/ui/mobile — заодно включает галочку «Мобильный (Pixel 7)»">Mobile</button>
+          <button type="button" class="sections-preset-btn" data-preset="integration" title="Тесты внешних интеграций (ai_chat, CAS, БУК, MTS Link, P2P, Helpdesk, LRS) — зеркало исключений Regression; обычно нужен отдельный стенд/токен интеграции">Integration</button>
         </div>
         <p id="sections-summary-line" class="sections-summary-line muted"></p>
         <div id="sections-tree" class="test-tree"><p class="muted">Загрузка…</p></div>
@@ -360,9 +361,13 @@
         <label for="sched-sections-search-input">Поиск по разделам</label>
         <input type="search" id="sched-sections-search-input" placeholder="например notifications">
       </div>
-      <!-- Те же пресеты, что в форме «Запуск», кроме Mobile: он включает галочку
-           «Мобильный (Pixel 7)» (MOBILE=1), а у расписаний такого флага нет — без него
-           tests/ui/mobile шли бы в десктопном вьюпорте. -->
+      <!-- Те же пресеты, что в форме «Запуск», кроме Mobile и Integration. Mobile
+           включает галочку «Мобильный (Pixel 7)» (MOBILE=1), а у расписаний такого
+           флага нет — без него tests/ui/mobile шли бы в десктопном вьюпорте.
+           Integration — стенды интеграций помечаются manual_only=1 (см.
+           app.core.runner.ManualRunNotConfirmed), что блокирует именно сервисные
+           запуски (бот/крон) без confirm_manual от живого человека — расписание на
+           такой стенд всё равно не выполнится, кнопка тут была бы бутафорской. -->
       <div class="run-buttons" id="sched-sections-presets-row">
         <button type="button" class="sections-preset-btn" data-preset="api">API</button>
         <button type="button" class="sections-preset-btn" data-preset="ui">UI</button>

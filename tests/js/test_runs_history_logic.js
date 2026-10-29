@@ -105,6 +105,20 @@ test("runTags: сборка / эфир / Pixel 7 без дубля с метко
   assert.deepStrictEqual(tags(run(1)), []);
 });
 
+test("isIntegrationTarget: область из REGRESSION_EXCLUDED_AREAS — да, 'all' и обычная область — нет", function () {
+  assert.strictEqual(Logic.isIntegrationTarget("tests/ui/mts_link/test_create_webinar_via_ui.py"), true);
+  assert.strictEqual(Logic.isIntegrationTarget("tests/api/notifications/test_list.py\ntests/api/buk/test_x.py"), true);
+  assert.strictEqual(Logic.isIntegrationTarget("all"), false);
+  assert.strictEqual(Logic.isIntegrationTarget("tests/api/notifications/test_list.py"), false);
+  assert.strictEqual(Logic.isIntegrationTarget(""), false);
+});
+
+test("runTags: цель из области интеграции — тег «интеграция», 'all' не считается", function () {
+  var tags = function (r) { return Logic.runTags(r).map(function (t) { return t.text; }); };
+  assert.deepStrictEqual(tags(run(1, { target: "tests/ui/mts_link/test_create_webinar_via_ui.py" })), ["интеграция"]);
+  assert.deepStrictEqual(tags(run(1, { target: "all" })), []);
+});
+
 test("runTags: прогон по расписанию помечен первым тегом, без schedule_id тега нет", function () {
   var tags = function (r) { return Logic.runTags(r).map(function (t) { return t.text; }); };
   assert.deepStrictEqual(tags(run(1, { schedule_id: 3 })), ["по расписанию"]);

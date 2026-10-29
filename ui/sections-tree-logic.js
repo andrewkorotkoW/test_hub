@@ -78,15 +78,17 @@
     return targets;
   }
 
-  // Пресеты «API»/«UI»/«всё»/«Regression»/«Mobile»: возвращают набор target'ов
-  // файлов, которые форма запуска должна отметить в дереве (см. project.js —
+  // Пресеты «API»/«UI»/«всё»/«Regression»/«Mobile»/«Integration»: возвращают набор
+  // target'ов файлов, которые форма запуска должна отметить в дереве (см. project.js —
   // после этого дерево перерисовывается с уже выставленными чекбоксами,
   // пользователь может донастроить выбор вручную). «Smoke» здесь не участвует —
   // это существующий маркер pytest (markerSelect в project.js), а не раздел
-  // файловой системы.
+  // файловой системы. «Integration» — зеркало «Regression»: ровно те области,
+  // которые Regression исключает (см. REGRESSION_EXCLUDED_AREAS).
   function presetLeafTargets(data, preset) {
     if (preset === "all") return allLeafTargets(data);
     if (preset === "regression") return allLeafTargets(data).filter(function (t) { return !isRegressionExcluded(t); });
+    if (preset === "integration") return allLeafTargets(data).filter(isRegressionExcluded);
     if (preset === "mobile") return areaLeafTargets(data, "mobile");
     var targets = [];
     (data.kinds || []).forEach(function (kindNode) {
@@ -270,6 +272,8 @@
     filterSectionsTree: filterSectionsTree,
     allLeafTargets: allLeafTargets,
     presetLeafTargets: presetLeafTargets,
+    isRegressionExcluded: isRegressionExcluded,
+    REGRESSION_EXCLUDED_AREAS: REGRESSION_EXCLUDED_AREAS,
     collectTargets: collectTargets,
     targetCoversFile: targetCoversFile,
     markerConflict: markerConflict,

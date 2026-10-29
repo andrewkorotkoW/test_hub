@@ -165,6 +165,11 @@ test("presetLeafTargets('regression') — все файлы, кроме обла
   ]);
 });
 
+test("presetLeafTargets('integration') — зеркало 'regression': только область 'buk'", function () {
+  var targets = Logic.presetLeafTargets(sampleTree(), "integration");
+  assert.deepStrictEqual(targets, ["tests/api/buk/test_x.py", "tests/ui/buk/test_form.py"]);
+});
+
 test("presetLeafTargets('mobile') — только файлы области 'mobile' (в любом kind)", function () {
   var data = {
     kinds: [

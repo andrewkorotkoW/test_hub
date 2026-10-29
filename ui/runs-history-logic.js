@@ -11,6 +11,14 @@
 (function (globalRoot) {
   "use strict";
 
+  // Список областей-интеграций (ai_chat/CAS/БУК/MTS Link/P2P/хелпдеск/LRS) общий с
+  // пресетом «Integration» формы запуска — не дублируем список здесь. В браузере
+  // sections-tree-logic.js подключён раньше этого файла (project.html), в node —
+  // через require (как сам этот модуль подключается в тестах).
+  var SectionsTreeLogic = (typeof module !== "undefined" && module.exports)
+    ? require("./sections-tree-logic.js")
+    : globalRoot.SectionsTreeLogic;
+
   var NO_STAND = "__none"; // значение фильтра для прогонов без стенда (stand: null)
   var PERIODS = ["7d", "30d", "all"];
   var STATUS_FILTERS = ["", "passed", "failed", "cancelled", "active"]; // active = running+queued
@@ -115,6 +123,16 @@
     return { text: first, more: parts.length - 1, full: parts.join("\n") };
   }
 
+  // Цель прогона задевает область внешней интеграции (ai_chat/CAS/БУК/MTS Link/P2P/
+  // хелпдеск/LRS, см. REGRESSION_EXCLUDED_AREAS) — "all" не считается: прогон «всё»
+  // не был осознанным выбором интеграционных тестов, даже если они туда попали.
+  function isIntegrationTarget(target) {
+    if (!target || target === "all" || !SectionsTreeLogic) return false;
+    return String(target).split(/\n+/).some(function (t) {
+      return SectionsTreeLogic.isRegressionExcluded(t.trim());
+    });
+  }
+
   // Теги строки без дублей: «сборка: Мобильный (Pixel 7)» уже говорит про Pixel 7 —
   // отдельная пилюля «Pixel 7» тогда не нужна.
   function runTags(run) {
@@ -124,6 +142,7 @@
     if (label) tags.push({ kind: "label", text: "сборка: " + label });
     if (run.live) tags.push({ kind: "live", text: "эфир" });
     if (run.mobile && !/pixel\s*7/i.test(label)) tags.push({ kind: "mobile", text: "Pixel 7" });
+    if (isIntegrationTarget(run.target)) tags.push({ kind: "integration", text: "интеграция" });
     return tags;
   }
 
@@ -206,6 +225,7 @@
     runResult: runResult,
     fmtStarted: fmtStarted,
     targetSummary: targetSummary,
+    isIntegrationTarget: isIntegrationTarget,
     runTags: runTags,
     fmtEta: fmtEta,
     approx: approx,
