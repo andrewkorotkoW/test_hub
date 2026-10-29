@@ -604,19 +604,26 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
 .sections-search-field { max-width: 320px; margin-bottom: 12px; }
 .sections-summary-line { font-size: 13px; margin: 2px 0 10px; }
 /* У каждого пресета свой акцентный цвет — раньше все кнопки (кроме активной)
-   выглядели одинаково белыми, различались только подписью. Токены — из уже
-   существующей палитры (:root выше), не новые; специально НЕ --accent/
-   --accent-hover — те перекрашиваются под цвет проекта (applyProjectColor() в
-   common.js), а это должна быть стабильная, узнаваемая по цвету кнопка независимо
-   от открытого проекта. «Всё» без цвета намеренно — это отсутствие фильтра, а не
-   категория наравне с остальными. */
+   выглядели одинаково белыми, различались только подписью. Специально НЕ
+   --accent/--accent-hover И НЕ --gradient-start/-mid/-end — все перекрашиваются
+   под цвет проекта (applyProjectColor() в common.js: ставит --gradient-* от
+   фирменного цвета текущего проекта через root.style.setProperty, это бьёт
+   даже само правило в этом файле — inline-стиль всегда выигрывает), а кнопка
+   должна быть стабильной и узнаваемой по цвету независимо от открытого
+   проекта (подтверждено на VSHGU 30.10.2026: --gradient-* уехали в
+   оранжевый фирменный цвет проекта, ui/e2e/mobile стали неотличимы от api).
+   Для ui/e2e/mobile поэтому литеральный hex тех же самых оттенков, а не
+   ссылка на переменную — остальные (--broken/--skipped/--passed/--danger)
+   run-статусы, applyProjectColor() их не трогает (см. её же комментарий).
+   «Всё» без цвета намеренно — это отсутствие фильтра, а не категория
+   наравне с остальными. */
 /* api — оранжевый, отсылка к Postman. */
 .sections-preset-btn[data-preset="api"] { --preset-color: var(--broken); }
-.sections-preset-btn[data-preset="ui"] { --preset-color: var(--gradient-end); }
+.sections-preset-btn[data-preset="ui"] { --preset-color: #38bdf8; }
 .sections-preset-btn[data-preset="smoke"] { --preset-color: var(--skipped); }
-.sections-preset-btn[data-preset="e2e"] { --preset-color: var(--gradient-mid); }
+.sections-preset-btn[data-preset="e2e"] { --preset-color: #ec4899; }
 .sections-preset-btn[data-preset="regression"] { --preset-color: var(--passed); }
-.sections-preset-btn[data-preset="mobile"] { --preset-color: var(--gradient-start); }
+.sections-preset-btn[data-preset="mobile"] { --preset-color: #7c3aed; }
 /* Integration — единственный пресет, который реально трогает внешнюю систему
    (прод-аккаунты интеграций, см. stands.manual_only) — цвет предупреждения, не
    просто ещё один оттенок в ряду. */
@@ -631,10 +638,24 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
   border-color: var(--preset-color);
   color: #fff;
 }
+/* «Всё» без цвета и на наведении тоже — иначе общий button:hover подхватывает
+   --accent (цвет проекта) и кнопка внезапно красится в чужой оттенок. */
+.sections-preset-btn[data-preset="all"]:hover {
+  border-color: var(--border);
+  color: var(--text);
+}
 .sections-preset-btn.active {
   background: var(--preset-color, var(--action-accent));
   border-color: var(--preset-color, var(--action-accent));
   color: var(--action-accent-text);
+}
+/* Системное кольцо фокуса (жёлтый halo в macOS при Full Keyboard Access) ложится
+   поверх цветной рамки кнопки и даёт грязный смешанный цвет вместо выделения —
+   своё кольцо в тон самой кнопки вместо системного. */
+.sections-preset-btn { outline: none; }
+.sections-preset-btn:focus-visible {
+  outline: 2px solid var(--preset-color, var(--action-accent));
+  outline-offset: 1px;
 }
 .manual-target-spoiler { margin: 4px 0 12px; }
 .manual-target-spoiler summary { cursor: pointer; color: var(--accent); font-size: 13px; font-weight: 600; }
