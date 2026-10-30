@@ -1975,13 +1975,20 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
    ячейками грида. На узком экране теги уходят второй строкой на всю ширину. */
 .runs-feed-item {
   display: grid;
-  grid-template-columns: 86px 48px minmax(56px, max-content) max-content max-content max-content minmax(0, 1fr) 90px max-content;
+  grid-template-columns: 86px 48px minmax(56px, 170px) max-content max-content max-content minmax(0, 1fr) 90px max-content;
   align-items: center; column-gap: 10px; row-gap: 6px;
   border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px;
 }
 .runs-feed-item > .status-pill { justify-self: start; }
 .runs-feed-item .runs-feed-meta { display: contents; }
 .runs-feed-item .runs-feed-meta > span { white-space: nowrap; }
+/* Колонка стенда — ограниченная (170px), не max-content: длинное имя стенда
+   (mts-link-release-main) + бейдж «ручной» иначе раздувало колонку шире доступного
+   места и текст наезжал на соседние (дата/длительность) — не wrap/overflow, а
+   буквальное наложение, т.к. у max-content нет верхней границы (скриншот владельца,
+   30.10.2026). Имя стенда — отдельный span с ellipsis, бейдж всегда виден целиком. */
+.runs-feed-item .runs-feed-stand { display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: 100%; }
+.runs-feed-item .runs-feed-stand-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .runs-feed-item .runs-feed-tags { flex-wrap: nowrap; overflow: hidden; margin-top: 0; min-width: 0; }
 .runs-feed-item .runs-feed-tag { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 0 1 auto; }
 .runs-feed-item .runs-feed-tags:empty { display: none; }
@@ -1990,7 +1997,11 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
    остаются в первой — карточки по-прежнему одной высоты. */
 .runs-feed { container-type: inline-size; }
 @container (max-width: 820px) {
-  .runs-feed-item { grid-template-columns: 86px 48px minmax(56px, max-content) max-content max-content minmax(0, 1fr) 90px max-content; }
+  /* 9 треков, не 8: статус/id/стенд/когда/длительность/кто/теги/полоса/действия — в
+     шаблоне не хватало колонки под «кто» (qa), из-за чего она наезжала на полосу
+     прогона (скриншот владельца, 30.10.2026, видно только после починки колонки
+     стенда — раньше маскировалось тем наложением). */
+  .runs-feed-item { grid-template-columns: 86px 48px minmax(56px, 170px) max-content max-content max-content minmax(0, 1fr) 90px max-content; }
   .runs-feed-item > .status-pill, .runs-feed-item .runs-feed-meta > span, .runs-feed-item .runs-feed-bar, .runs-feed-item .runs-feed-actions { grid-row: 1; }
   .runs-feed-item .runs-feed-who { justify-self: start; }
   /* contain: inline-size — теги, растянутые на несколько колонок, не раздувают их своим
@@ -2000,7 +2011,7 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 }
 /* Совсем узкая лента (< 620px): полоса и «Поделиться» тоже во второй строке, справа от тегов. */
 @container (max-width: 620px) {
-  .runs-feed-item { grid-template-columns: 86px 48px minmax(56px, max-content) max-content minmax(72px, max-content) minmax(0, 1fr); }
+  .runs-feed-item { grid-template-columns: 86px 48px minmax(56px, 170px) max-content minmax(72px, max-content) minmax(0, 1fr); }
   .runs-feed-item .runs-feed-tags { grid-column: 1 / 5; }
   .runs-feed-item .runs-feed-bar { grid-row: 2; grid-column: 5; flex-basis: auto; width: 100%; min-width: 60px; }
   .runs-feed-item .runs-feed-actions { grid-row: 2; grid-column: 6; justify-self: end; }

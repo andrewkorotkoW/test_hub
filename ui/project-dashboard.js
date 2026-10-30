@@ -389,7 +389,7 @@
         <span class="status-pill ${escapeHtml(r.status)}" data-status="${escapeHtml(r.status)}">${escapeHtml(r.status)}</span>
         <div class="runs-feed-meta">
           <span class="runs-feed-id">#${r.id}</span>
-          <span class="runs-feed-stand">${escapeHtml(r.stand || "без стенда")}${isManualStandRun(r.stand) ? `<span class="badge-manual">ручной</span>` : ""}</span>
+          <span class="runs-feed-stand"><span class="runs-feed-stand-name" title="${escapeHtml(r.stand || "без стенда")}">${escapeHtml(r.stand || "без стенда")}</span>${isManualStandRun(r.stand) ? `<span class="badge-manual">ручной</span>` : ""}</span>
           <span class="runs-feed-when">${when}</span>
           <span class="runs-feed-duration">${duration}</span>
           <span class="runs-feed-who">${escapeHtml(r.requested_by || "—")}</span>
