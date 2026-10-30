@@ -1993,26 +1993,18 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 .runs-feed-item .runs-feed-tag { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 0 1 auto; }
 .runs-feed-item .runs-feed-tags:empty { display: none; }
 /* Ширина самой ленты (карточка делит ряд с «Известными дефектами»), а не окна: при
-   контейнере уже 820px теги уходят второй строкой на всю ширину, полоса и «Поделиться»
-   остаются в первой — карточки по-прежнему одной высоты. */
+   контейнере уже 820px теги+полоса+«Поделиться» уходят второй строкой вместе
+   (в первой — всё остальное, включая «кто») — карточки по-прежнему одной высоты.
+   Раньше это был отдельный breakpoint на 820px, где тегам одним давали вторую
+   строку, а полоса/«Поделиться» оставались в первой — от этого «кто» (qa) наезжала
+   на полосу (скриншот владельца, 30.10.2026). Вместо починки той раскладки отдельно
+   просто подняли порог уже готового паттерна с 620px (владелец, 30.10.2026, макет
+   https://claude.ai/code/artifact/d43b86ec-fcc6-43d1-b60d-7b02de21bd53) — один
+   breakpoint вместо двух, ничего не скрыто. */
 .runs-feed { container-type: inline-size; }
 @container (max-width: 820px) {
-  /* 9 треков, не 8: статус/id/стенд/когда/длительность/кто/теги/полоса/действия — в
-     шаблоне не хватало колонки под «кто» (qa), из-за чего она наезжала на полосу
-     прогона (скриншот владельца, 30.10.2026, видно только после починки колонки
-     стенда — раньше маскировалось тем наложением). */
-  .runs-feed-item { grid-template-columns: 86px 48px minmax(56px, 170px) max-content max-content max-content minmax(0, 1fr) 90px max-content; }
-  .runs-feed-item > .status-pill, .runs-feed-item .runs-feed-meta > span, .runs-feed-item .runs-feed-bar, .runs-feed-item .runs-feed-actions { grid-row: 1; }
-  .runs-feed-item .runs-feed-who { justify-self: start; }
-  /* contain: inline-size — теги, растянутые на несколько колонок, не раздувают их своим
-     max-content (длинная метка сборки иначе растягивала колонку «когда» до 300px) */
-  .runs-feed-item .runs-feed-tags { grid-column: 1 / -1; grid-row: 2; display: flex; contain: inline-size; }
-  .runs-feed-item .runs-feed-tags:empty { display: none; }
-}
-/* Совсем узкая лента (< 620px): полоса и «Поделиться» тоже во второй строке, справа от тегов. */
-@container (max-width: 620px) {
   .runs-feed-item { grid-template-columns: 86px 48px minmax(56px, 170px) max-content minmax(72px, max-content) minmax(0, 1fr); }
-  .runs-feed-item .runs-feed-tags { grid-column: 1 / 5; }
+  .runs-feed-item .runs-feed-tags { grid-column: 1 / 5; grid-row: 2; }
   .runs-feed-item .runs-feed-bar { grid-row: 2; grid-column: 5; flex-basis: auto; width: 100%; min-width: 60px; }
   .runs-feed-item .runs-feed-actions { grid-row: 2; grid-column: 6; justify-self: end; }
   .runs-feed-item .runs-feed-tags:empty { display: block; }
