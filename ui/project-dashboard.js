@@ -389,7 +389,7 @@
         <span class="status-pill ${escapeHtml(r.status)}" data-status="${escapeHtml(r.status)}">${escapeHtml(r.status)}</span>
         <div class="runs-feed-meta">
           <span class="runs-feed-id">#${r.id}</span>
-          <span class="runs-feed-stand"><span class="runs-feed-stand-name" title="${escapeHtml(r.stand || "без стенда")}">${escapeHtml(r.stand || "без стенда")}</span>${isManualStandRun(r.stand) ? `<span class="badge-manual">ручной</span>` : ""}</span>
+          <span class="runs-feed-stand"><span class="runs-feed-stand-name" title="${escapeHtml(r.stand || "без стенда")}">${escapeHtml(r.stand || "без стенда")}</span>${isManualStandRun(r.stand) ? `<span class="badge-manual">Manual</span>` : ""}</span>
           <span class="runs-feed-when">${when}</span>
           <span class="runs-feed-duration">${duration}</span>
           <span class="runs-feed-who">${escapeHtml(r.requested_by || "—")}</span>
@@ -744,7 +744,7 @@
       <tr class="clickable${r.status === "running" || r.status === "queued" ? " hist-row-active" : ""}" data-run-id="${r.id}">
         <td class="hist-id">#${r.id}</td>
         <td><span class="status-pill status-pill-sm ${escapeHtml(r.status)}">${escapeHtml(r.status)}</span></td>
-        <td>${escapeHtml(r.stand || "—")}${isManualStandRun(r.stand) ? `<span class="badge-manual">ручной</span>` : ""}</td>
+        <td>${escapeHtml(r.stand || "—")}${isManualStandRun(r.stand) ? `<span class="badge-manual">Manual</span>` : ""}</td>
         <td class="hist-target">
           <div class="hist-target-text" title="${escapeHtml(target.full)}"><span class="mono">${escapeHtml(target.text)}</span>${target.more ? ` <span class="hist-target-more">+${target.more}</span>` : ""}</div>
           ${tags.length ? `<div class="runs-feed-tags">${tags.map((t) => `<span class="runs-feed-tag runs-feed-tag--${t.kind}" title="${escapeHtml(t.text)}">${escapeHtml(t.text)}</span>`).join("")}</div>` : ""}

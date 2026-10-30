@@ -133,16 +133,18 @@
     });
   }
 
-  // Теги строки без дублей: «сборка: Мобильный (Pixel 7)» уже говорит про Pixel 7 —
-  // отдельная пилюля «Pixel 7» тогда не нужна.
+  // Теги строки без дублей: «Build: Мобильный (Pixel 7)» уже говорит про Pixel 7 —
+  // отдельная пилюля «Pixel 7» тогда не нужна. Подписи на английском (владелец
+  // 31.10.2026) — остальной текст приложения по-русски остаётся как есть, это
+  // только короткие пилюли-теги.
   function runTags(run) {
     var tags = [];
     var label = run.label || "";
-    if (run.schedule_id) tags.push({ kind: "schedule", text: "по расписанию" });
-    if (label) tags.push({ kind: "label", text: "сборка: " + label });
-    if (run.live) tags.push({ kind: "live", text: "эфир" });
+    if (run.schedule_id) tags.push({ kind: "schedule", text: "Scheduled" });
+    if (label) tags.push({ kind: "label", text: "Build: " + label });
+    if (run.live) tags.push({ kind: "live", text: "Live" });
     if (run.mobile && !/pixel\s*7/i.test(label)) tags.push({ kind: "mobile", text: "Pixel 7" });
-    if (isIntegrationTarget(run.target)) tags.push({ kind: "integration", text: "интеграция" });
+    if (isIntegrationTarget(run.target)) tags.push({ kind: "integration", text: "Integration" });
     return tags;
   }
 

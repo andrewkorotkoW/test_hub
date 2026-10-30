@@ -1026,7 +1026,10 @@ td.report-reason .cmp-tag { margin-top: 4px; display: inline-block; }
 .badge-manual[hidden] { display: none; }
 .badge-manual {
   display: inline-block;
-  background: var(--flaky);
+  /* sky blue, не цвет прогона — владелец 31.10.2026: «ручной» это свойство стенда,
+     не результата прогона, раньше был var(--flaky), который теперь занят тегами
+     .runs-feed-tag (ui/style.css, блок «Цвет тега = цвет прогона»), нужен свой. */
+  background: #0ea5e9;
   color: #fff;
   border-radius: var(--radius);
   padding: 2px 8px;
@@ -2023,12 +2026,12 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
    .runs-feed-meta, не вперемешку с текстовыми пунктами (стенд/дата/длительность/
    автор): при недостатке места теги переносятся все вместе одним блоком на новую
    строку, а не ломают строку посреди текстовых пунктов (см. .runs-feed-tags).
-   .badge-manual оставлен только для "ручной" — у него теперь нет прежней причины
-   совпадать по классу с этими тегами, цвет по умолчанию (var(--flaky)) сохранён. */
+   .badge-manual оставлен только для "ручной"/"Manual" — у него теперь нет прежней
+   причины совпадать по цвету с этими тегами, свой цвет ниже. */
 .runs-feed-tags { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
 .runs-feed-tag {
   display: inline-block;
-  background: var(--flaky);
+  background: var(--text-muted); /* фоллбэк — статус всегда должен совпасть ниже */
   color: #fff;
   border-radius: var(--radius);
   padding: 2px 8px;
@@ -2036,18 +2039,19 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
   font-weight: 600;
   vertical-align: middle;
 }
-/* Разные цвета по виду тега — раньше все (сборка/эфир/Pixel 7/интеграция/
-   расписание) были одинаковым фиолетовым, неотличимы друг от друга в строке
-   прогона (см. runTags() в ui/runs-history-logic.js — у каждого тега уже есть
-   kind). «label» (сборка) оставлен var(--flaky) — исходный цвет, к которому все
-   привыкли. Литеральный hex, НЕ var(--gradient-*)/--accent — те перекрашиваются
-   под цвет проекта (applyProjectColor() в common.js), см. тот же урок в
-   .sections-preset-btn выше. mobile/integration — те же оттенки, что у
-   одноимённых кнопок-пресетов «Запуска», для узнаваемости по всему приложению. */
-.runs-feed-tag--schedule { background: #64748b; }
-.runs-feed-tag--live { background: #38bdf8; }
-.runs-feed-tag--mobile { background: #7c3aed; }
-.runs-feed-tag--integration { background: #dc2626; }
+/* Цвет тега = цвет прогона (та же шкала, что у .status-pill), не фиксированный
+   цвет на вид тега — владелец 31.10.2026: тег «интеграция» на упавшем прогоне
+   должен быть красным, на прошедшем — зелёным, а не всегда одним цветом. :has()
+   читает класс соседней пилюли статуса в общем предке — у ленты дашборда это
+   .runs-feed-item, у таблицы «Прогоны» (historyRowHtml) — <tr>, оба перечислены
+   на каждый статус. Макет: https://claude.ai/code/artifact/96c47ccb-19a2-4165-b2f8-e933fbd26c79 */
+.runs-feed-item:has(.status-pill.passed) .runs-feed-tag, tr:has(.status-pill.passed) .runs-feed-tag { background: var(--passed); }
+.runs-feed-item:has(.status-pill.failed) .runs-feed-tag, tr:has(.status-pill.failed) .runs-feed-tag { background: var(--failed); }
+.runs-feed-item:has(.status-pill.broken) .runs-feed-tag, tr:has(.status-pill.broken) .runs-feed-tag { background: var(--broken); }
+.runs-feed-item:has(.status-pill.cancelled) .runs-feed-tag, tr:has(.status-pill.cancelled) .runs-feed-tag { background: var(--cancelled); }
+.runs-feed-item:has(.status-pill.running) .runs-feed-tag, tr:has(.status-pill.running) .runs-feed-tag { background: var(--running); }
+.runs-feed-item:has(.status-pill.queued) .runs-feed-tag, tr:has(.status-pill.queued) .runs-feed-tag { background: var(--queued); }
+.runs-feed-item:has(.status-pill.skipped) .runs-feed-tag, tr:has(.status-pill.skipped) .runs-feed-tag { background: var(--skipped); }
 /* ---------- вкладка «Прогоны» (таблица истории с фильтрами, 20.10.2026) ---------- */
 .hist-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 8px; }
 .hist-head h2 { margin: 0; }

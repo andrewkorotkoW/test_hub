@@ -97,11 +97,11 @@ test("targetSummary: всё / первый раздел без tests/ и +N / п
   assert.strictEqual(Logic.targetSummary("").text, "всё");
 });
 
-test("runTags: сборка / эфир / Pixel 7 без дубля с меткой", function () {
+test("runTags: сборка / эфир / Pixel 7 без дубля с меткой (подписи по-английски)", function () {
   var tags = function (r) { return Logic.runTags(r).map(function (t) { return t.text; }); };
-  assert.deepStrictEqual(tags(sampleRuns()[0]), ["сборка: Мобильный (Pixel 7)", "эфир"]);
+  assert.deepStrictEqual(tags(sampleRuns()[0]), ["Build: Мобильный (Pixel 7)", "Live"]);
   assert.deepStrictEqual(tags(run(1, { mobile: true })), ["Pixel 7"]);
-  assert.deepStrictEqual(tags(run(1, { label: "перегон упавших #71", live: true, mobile: true })), ["сборка: перегон упавших #71", "эфир", "Pixel 7"]);
+  assert.deepStrictEqual(tags(run(1, { label: "перегон упавших #71", live: true, mobile: true })), ["Build: перегон упавших #71", "Live", "Pixel 7"]);
   assert.deepStrictEqual(tags(run(1)), []);
 });
 
@@ -113,16 +113,16 @@ test("isIntegrationTarget: область из REGRESSION_EXCLUDED_AREAS — д�
   assert.strictEqual(Logic.isIntegrationTarget(""), false);
 });
 
-test("runTags: цель из области интеграции — тег «интеграция», 'all' не считается", function () {
+test("runTags: цель из области интеграции — тег «Integration», 'all' не считается", function () {
   var tags = function (r) { return Logic.runTags(r).map(function (t) { return t.text; }); };
-  assert.deepStrictEqual(tags(run(1, { target: "tests/ui/mts_link/test_create_webinar_via_ui.py" })), ["интеграция"]);
+  assert.deepStrictEqual(tags(run(1, { target: "tests/ui/mts_link/test_create_webinar_via_ui.py" })), ["Integration"]);
   assert.deepStrictEqual(tags(run(1, { target: "all" })), []);
 });
 
 test("runTags: прогон по расписанию помечен первым тегом, без schedule_id тега нет", function () {
   var tags = function (r) { return Logic.runTags(r).map(function (t) { return t.text; }); };
-  assert.deepStrictEqual(tags(run(1, { schedule_id: 3 })), ["по расписанию"]);
-  assert.deepStrictEqual(tags(run(1, { schedule_id: 3, label: "ночной", live: true })), ["по расписанию", "сборка: ночной", "эфир"]);
+  assert.deepStrictEqual(tags(run(1, { schedule_id: 3 })), ["Scheduled"]);
+  assert.deepStrictEqual(tags(run(1, { schedule_id: 3, label: "ночной", live: true })), ["Scheduled", "Build: ночной", "Live"]);
   assert.deepStrictEqual(tags(run(1, { schedule_id: null })), []);
 });
 
