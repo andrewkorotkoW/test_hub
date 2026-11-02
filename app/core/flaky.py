@@ -22,9 +22,10 @@ from . import allure_report
 
 DEFAULT_HISTORY = 20
 
-# Статусы, при которых тест по-настоящему не запускался (xfail/xpass в allure — skipped,
-# пропуски по условию): для fails/flips нейтральны, см. recalc().
-NEUTRAL_STATUSES = ("skipped", "unknown")
+# Статусы падения, которые считаются за fails (и за flips) только при причине
+# None/code — инфраструктурные (throttling/session/stand) из обоих счётчиков
+# исключаются, см. recalc().
+FAIL_STATUSES = ("failed", "broken")
 
 
 PARAMS_KEY_LIMIT = 80
@@ -92,15 +93,19 @@ def recalc(project: str, stand: str, test_history: int = DEFAULT_HISTORY) -> lis
     элементами последовательности, score = flips / (runs - 1).
 
     Падения, классифицированные app.core.failure_causes как инфраструктурные
-    (throttling/session/stand, т.е. cause != 'code' в run_test_results — см.
-    docs/missions/2026-10-13_run_compare_and_causes.md, п.5), не должны считаться
-    за fails/flips: волна 429 не тест сделала нестабильным, а стенд. Для них
-    эффективный статус (только для подсчёта fails/flips, не для last_statuses)
-    наследуется от предыдущего элемента последовательности — так инфраструктурный
-    всплеск не создаёт ни fail, ни искусственный flip между соседними реальными
-    статусами. Прогоны без строк в run_test_results (старые, до этой фичи) не
-    знают cause — для них поведение прежнее: каждый failed/broken учитывается как
-    есть."""
+    (throttling/session/stand, т.е. cause не в (None, 'code') в run_test_results —
+    см. docs/missions/2026-10-13_run_compare_and_causes.md, п.5), не должны
+    считаться ни за fails, ни за flips: волна 429 не тест сделала нестабильным,
+    а стенд. До 02.11.2026 flips считался по последовательности с наследованием
+    эффективного статуса от предыдущего элемента — инфраструктурные падения и
+    skipped в неё всё равно попадали (унаследованный статус мог тасовать
+    passed→skipped→passed в флип через промежуточное наследование), из-за чего
+    тест с fails=0 мог показывать ненулевую нестабильность. Теперь flips считается
+    по той же урезанной последовательности, что и fails: инфраструктурные падения
+    и skipped (не «настоящий» запуск) из последовательности просто выбрасываются —
+    тест с fails=0 всегда даёт flips=0. Прогоны без строк в run_test_results
+    (старые, до этой фичи) не знают cause — там failed/broken без записи в
+    run_test_results считаются «настоящими» (cause=None)."""
     conn = get_connection()
     try:
         runs = _finished_runs(conn, project, stand, test_history)
@@ -122,28 +127,21 @@ def recalc(project: str, stand: str, test_history: int = DEFAULT_HISTORY) -> lis
         for test_name, entries in sorted(by_test.items()):
             statuses = [status for status, _cause in entries]
             runs_count = len(statuses)
-            effective: list[str] = []
-            prev: str | None = None
-            for status, cause in entries:
-                if status in ("failed", "broken") and cause not in (None, "code"):
-                    eff = prev if prev is not None else "passed"
-                elif status in NEUTRAL_STATUSES:
-                    # skipped — это xfail/xpass-xfail и пропуски по условию (env=stage,
-                    # «нет данных»): тест не запускался по-настоящему, и смена
-                    # passed↔skipped — не нестабильность. Наследуем предыдущий статус,
-                    # как и у инфраструктурных падений (13.10.2026: на дашборде VSHGU
-                    # 148 «флаки», из них больше половины — xfail, начавшие проходить).
-                    eff = prev if prev is not None else "passed"
-                else:
-                    eff = status
-                effective.append(eff)
-                prev = eff
-            # fails — по фактическим падениям (не по унаследованному эффективному статусу:
-            # skipped после failed иначе считался бы вторым падением), стендовые причины не в счёт
-            # broken (ошибка в setup/teardown, таймаут Playwright) — тоже падение: иначе тест
-            # с broken-статусами показывал «0 падений» при ненулевой нестабильности (22.10.2026)
-            fails = sum(1 for status, cause in entries if status in ("failed", "broken") and cause in (None, "code"))
-            flips = sum(1 for a, b in zip(effective, effective[1:]) if a != b)
+            # fails — реальные падения (code/None), broken (ошибка в setup/teardown,
+            # таймаут Playwright) — тоже падение: иначе тест с broken-статусами
+            # показывал «0 падений» при ненулевой нестабильности (22.10.2026)
+            fails = sum(1 for status, cause in entries if status in FAIL_STATUSES and cause in (None, "code"))
+            # «из них стенд» — падения с инфраструктурной причиной, исключённые из fails.
+            stand_fails = sum(1 for status, cause in entries if status in FAIL_STATUSES and cause not in (None, "code"))
+            # flips — по той же урезанной последовательности, что и fails: только passed
+            # и «настоящие» падения, по порядку появления; инфраструктурные падения и
+            # skipped просто выброшены (не наследуются), иначе fails=0 мог давать flips>0.
+            real_sequence = [
+                "passed" if status == "passed" else "failed"
+                for status, cause in entries
+                if status == "passed" or (status in FAIL_STATUSES and cause in (None, "code"))
+            ]
+            flips = sum(1 for a, b in zip(real_sequence, real_sequence[1:]) if a != b)
             score = flips / (runs_count - 1) if runs_count > 1 else 0.0
             stats.append({
                 "project": project,
@@ -153,6 +151,7 @@ def recalc(project: str, stand: str, test_history: int = DEFAULT_HISTORY) -> lis
                 "fails": fails,
                 "flips": flips,
                 "score": score,
+                "stand_fails": stand_fails,
                 "last_statuses": statuses[-test_history:],
                 "updated_at": now,
             })
@@ -161,10 +160,10 @@ def recalc(project: str, stand: str, test_history: int = DEFAULT_HISTORY) -> lis
         for s in stats:
             conn.execute(
                 "INSERT INTO flaky_stats "
-                "(project, stand, test, runs, fails, flips, score, last_statuses, updated_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "(project, stand, test, runs, fails, flips, score, stand_fails, last_statuses, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (s["project"], s["stand"], s["test"], s["runs"], s["fails"], s["flips"],
-                 s["score"], json.dumps(s["last_statuses"], ensure_ascii=False), s["updated_at"]),
+                 s["score"], s["stand_fails"], json.dumps(s["last_statuses"], ensure_ascii=False), s["updated_at"]),
             )
         conn.commit()
     finally:

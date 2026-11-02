@@ -12,6 +12,7 @@ var path = require("path");
 var RunWindowSplitLogic = require(path.join(__dirname, "..", "..", "ui", "run-window-split-logic.js"));
 var filterRequestLines = RunWindowSplitLogic.filterRequestLines;
 var normalizeTestStatus = RunWindowSplitLogic.normalizeTestStatus;
+var attemptsBadgeText = RunWindowSplitLogic.attemptsBadgeText;
 
 var tests = [];
 function test(name, fn) {
@@ -65,6 +66,27 @@ test("normalizeTestStatus: неизвестный/пустой статус -> u
 
 test("normalizeTestStatus: регистронезависимость (PASSED -> passed)", function () {
   assert.strictEqual(normalizeTestStatus("PASSED"), "passed");
+});
+
+// ------------------------------------------------------------------ attemptsBadgeText
+
+test("attemptsBadgeText: passed со 2-й попытки -> «со 2-й попытки» (эвфония)", function () {
+  assert.strictEqual(attemptsBadgeText(2, "passed"), "прошёл со 2-й попытки");
+});
+
+test("attemptsBadgeText: passed с 3-й+ попытки -> «с N-й попытки»", function () {
+  assert.strictEqual(attemptsBadgeText(3, "passed"), "прошёл с 3-й попытки");
+  assert.strictEqual(attemptsBadgeText(5, "passed"), "прошёл с 5-й попытки");
+});
+
+test("attemptsBadgeText: attempts <= 1 -> нет пометки (не рераненный тест)", function () {
+  assert.strictEqual(attemptsBadgeText(1, "passed"), null);
+  assert.strictEqual(attemptsBadgeText(0, "passed"), null);
+  assert.strictEqual(attemptsBadgeText(undefined, "passed"), null);
+});
+
+test("attemptsBadgeText: статус не passed -> нет пометки, даже если был реран", function () {
+  assert.strictEqual(attemptsBadgeText(3, "failed"), null);
 });
 
 var failed = 0;

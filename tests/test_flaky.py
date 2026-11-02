@@ -149,6 +149,7 @@ async def test_flaky_api_list_and_history(qa_client, flaky_history):
     assert item["test"] == flaky_history
     assert item["runs"] == 3
     assert item["fails"] == 2
+    assert item["stand_fails"] == 0
     assert item["score"] == pytest.approx(0.5)
     # tmp_path-проект без .venv -> runner.discover() не находит дерево тестов,
     # nodeid остаётся best-effort None (см. app/routers/flaky.py).
@@ -251,6 +252,18 @@ def test_recalc_stand_cause_failure_does_not_count_as_fail_or_flip(flaky_history
     # эффективную — см. docstring flaky.recalc
     assert row["last_statuses"] == ["passed", "failed", "passed", "failed"]
     assert row["runs"] == 4
+    assert row["stand_fails"] == 1, "стендовое падение исключено из fails, но учтено отдельно"
+
+
+async def test_flaky_api_exposes_stand_fails(qa_client, flaky_history_with_stand_failure):
+    full_name = flaky_history_with_stand_failure
+    flaky.recalc(PROJECT, STAND)
+    resp = await qa_client.get(f"/api/projects/{PROJECT}/flaky", params={"stand": STAND, "min_runs": 1})
+    assert resp.status_code == 200, resp.text
+    item = resp.json()["items"][0]
+    assert item["test"] == full_name
+    assert item["fails"] == 1
+    assert item["stand_fails"] == 1
 
 
 @pytest.fixture()

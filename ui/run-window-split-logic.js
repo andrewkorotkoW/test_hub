@@ -22,11 +22,22 @@
     return lines.filter((line) => HTTP_LINE_RE.test(line));
   }
 
+  // Пометка «прошёл со N-й попытки» (п.3 миссии 2026-11-02): только когда тест
+  // в итоге passed, но потребовался реран (allure_report.final_attempts,
+  // attempts > 1) — сигнал нестабильности, а не шум. "со" только перед "2-й"
+  // (euphonic-исключение русского языка, как в "со второй попытки").
+  function attemptsBadgeText(attempts, status) {
+    if (!attempts || attempts <= 1 || normalizeTestStatus(status) !== "passed") return null;
+    const prefix = attempts === 2 ? "со" : "с";
+    return `прошёл ${prefix} ${attempts}-й попытки`;
+  }
+
   const api = {
     TEST_STATUS_CLASSES: TEST_STATUS_CLASSES,
     normalizeTestStatus: normalizeTestStatus,
     HTTP_LINE_RE: HTTP_LINE_RE,
     filterRequestLines: filterRequestLines,
+    attemptsBadgeText: attemptsBadgeText,
   };
 
   if (typeof module !== "undefined" && module.exports) {

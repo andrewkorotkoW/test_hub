@@ -297,6 +297,7 @@ class FlakyTestStat(BaseModel):
     fails: int
     flips: int
     score: float
+    stand_fails: int = 0
     last_statuses: list[str]
     updated_at: Optional[str] = None
 

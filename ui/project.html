@@ -479,7 +479,8 @@
         <table class="flaky-table">
           <thead>
             <tr>
-              <th>Тест</th><th class="num-col">Запусков</th><th class="num-col">Падений</th><th class="num-col">% нестабильности</th>
+              <th>Тест</th><th class="num-col">Запусков</th><th class="num-col">Падений</th><th class="num-col" title="падения с инфраструктурной причиной (троттлинг/потеря сессии/стенд не ответил) — не входят в «Падений» и в «% нестабильности»">Из них стенд</th>
+              <th class="num-col" title="доля смен passed↔failed между соседними прогонами, стендовые падения не считаются">% нестабильности</th>
               <th>Последние статусы</th><th></th>
             </tr>
           </thead>

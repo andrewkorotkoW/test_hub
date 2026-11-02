@@ -337,8 +337,13 @@ async def list_run_tests(
 ) -> list[dict]:
     """Тесты прогона со статусами: пока прогон running/queued — по живым
     test_start/test_end событиям run_events (статус теста в это время известен
-    только из "[TH] end <nodeid> <status>"-строки, nodeid там уже pytest nodeid),
-    после завершения — из allure_report.parse_results, как get_report.
+    только из "[TH] end <nodeid> <status>"-строки, nodeid там уже pytest nodeid,
+    словарь statuses по nodeid даёт одну строку на тест со статусом последнего
+    test_end), после завершения — allure_report.final_attempts поверх
+    parse_results, те же финальные попытки, что и счётчики шапки (см.
+    db._recount_run_counts_once) — иначе реран (pytest-rerunfailures) даёт
+    несколько строк на один тест (прогон #105: 72 вместо 57). Поле attempts у
+    записи — сколько попыток было (UI помечает тест, прошедший не с первой).
 
     allure отдаёт только fullName (см. allure_report._parse_result), а единый ключ
     теста в ответе — pytest nodeid (кадры и лог пишутся под ним, не под fullName) —
@@ -394,12 +399,16 @@ async def list_run_tests(
         discovered = await runner.discover(project["path"], project["venv"])
         nodeid_by_full_name = _full_name_index(discovered.get("tree") or {})
 
-    results = allure_report.parse_results(runner.allure_dir(run_id))
+    # final_attempts — те же финальные попытки, что уже считают счётчики шапки
+    # (allure_report.counts_from_tests, 22.10.2026): без этого список «Тесты»
+    # показывал реран как отдельные строки (прогон #105: 72 строки вместо 57).
+    results = allure_report.final_attempts(allure_report.parse_results(runner.allure_dir(run_id)), row["repeat"])
     return [
         {
             "nodeid": nodeid_by_full_name.get(t["name"], t["name"]),
             "full_name": t["name"],
             "status": t["status"],
+            "attempts": t.get("attempts", 1),
             "has_frames": nodeid_by_full_name.get(t["name"], t["name"]) in frame_nodeids,
             "has_video": nodeid_by_full_name.get(t["name"], t["name"]) in video_nodeids,
             "video_duration_ms": video_duration_by_nodeid.get(nodeid_by_full_name.get(t["name"], t["name"])),

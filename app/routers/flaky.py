@@ -55,6 +55,7 @@ async def list_flaky(
             fails=r["fails"],
             flips=r["flips"],
             score=r["score"],
+            stand_fails=r["stand_fails"],
             last_statuses=json.loads(r["last_statuses"]),
             updated_at=r["updated_at"],
         )
