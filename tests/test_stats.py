@@ -200,6 +200,158 @@ def test_recalc_no_full_run_leaves_sections_empty_but_keeps_discovered_dirs(stat
     assert result["top_slowest"] == []
 
 
+# ------------------------------------------------------------------ п.1: cancelled не затмевает failed
+# (docs/missions/2026-11-02_review_fixes.md, п.1) — отменённый прогон неполный и часто
+# падает по стенду, он не должен становиться «последним прогоном» для KPI/разделов,
+# даже если он новее последнего failed/passed на этом же стенде.
+
+def test_latest_full_run_skips_cancelled_even_if_newer_than_failed(stats_project):
+    conn = get_connection()
+    try:
+        failed_run = _insert_run(conn, target="all", status="failed", started="2024-01-01T00:00:00")
+        cancelled_run = _insert_run(conn, target="all", status="cancelled", started="2024-01-02T00:00:00")
+    finally:
+        conn.close()
+    assert cancelled_run > failed_run  # новее и по id, и по started
+
+    result = stats.recalc(PROJECT, STAND)
+
+    assert result["run_id"] == failed_run
+    assert result["full_run"]["id"] == failed_run
+    assert result["full_run"]["target"] == "all"
+
+
+def test_latest_finished_run_id_cache_cursor_follows_newer_cancelled_run(stats_project):
+    """В отличие от _latest_full_run, latest_finished_run_id — это курсор инвалидации
+    кэша (см. докстринг stats.latest_finished_run_id), а не источник KPI: он обязан
+    заметить новый cancelled-прогон, иначе 30-дневная динамика (которая cancelled
+    всё-таки использует) останется закэширована по старому прогону."""
+    conn = get_connection()
+    try:
+        failed_run = _insert_run(conn, target="all", status="failed", started="2024-01-01T00:00:00")
+        cancelled_run = _insert_run(conn, target="all", status="cancelled", started="2024-01-02T00:00:00")
+        cursor = stats.latest_finished_run_id(conn, PROJECT, STAND)
+    finally:
+        conn.close()
+    assert cursor == cancelled_run != failed_run
+
+
+def test_recalc_dynamics_project_keeps_cancelled_run_despite_excluding_it_from_full_run(stats_project):
+    recent_failed = (datetime.now() - timedelta(days=2)).isoformat(timespec="seconds")
+    recent_cancelled = (datetime.now() - timedelta(days=1)).isoformat(timespec="seconds")
+    conn = get_connection()
+    try:
+        failed_run = _insert_run(conn, target="all", status="failed", started=recent_failed)
+        cancelled_run = _insert_run(conn, target="all", status="cancelled", started=recent_cancelled)
+    finally:
+        conn.close()
+    _write_result(failed_run, "00", "tests.api.notifications#test_a", "failed")
+    _write_result(cancelled_run, "00", "tests.api.notifications#test_a", "failed")
+
+    result = stats.recalc(PROJECT, STAND)
+
+    assert result["run_id"] == failed_run  # KPI/«последний прогон» — не cancelled
+    dynamics_ids = {p["run_id"] for p in result["dynamics_project"]}
+    assert dynamics_ids == {failed_run, cancelled_run}  # динамика видит оба
+
+
+# ------------------------------------------------------------------ п.2: частичный прогон на стенде (fallback_run)
+# (docs/missions/2026-11-02_review_fixes.md, п.2) — на стенде нет ни одного прогона
+# с target='all': вместо таблицы разделов в нулях — fallback_run с данными последнего
+# (частичного) прогона, а "Разделы без единого теста" не считаются вовсе.
+
+def test_recalc_partial_run_without_all_target_returns_fallback_run_and_no_top_level_sections(stats_project):
+    conn = get_connection()
+    try:
+        run_id = _insert_run(conn, target="api/notifications", status="passed", started="2024-03-01T00:00:00")
+        # tests_total у fallback_run читается из runs.counts (не из allure-results,
+        # см. recalc()) — тот же приём, что у _project_dynamics_point.
+        conn.execute(
+            "UPDATE runs SET counts = ? WHERE id = ?", (json.dumps({"passed": 1, "failed": 1}), run_id)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    _write_result(run_id, "00", "tests.api.notifications#test_a", "passed")
+    _write_result(run_id, "01", "tests.api.notifications#test_b", "failed")
+
+    result = stats.recalc(PROJECT, STAND)
+
+    assert result["full_run"] is None
+    assert result["run_id"] is None
+    # верхнеуровневые "Разделы"/"Разделы без единого теста" не считаются для
+    # частичного прогона — раздел, которого не было в цели, не значит "без тестов"
+    assert result["sections"] == []
+    assert result["empty_sections"] == []
+
+    fallback = result["fallback_run"]
+    assert fallback is not None
+    assert fallback["id"] == run_id
+    assert fallback["target"] == "api/notifications"
+    assert fallback["started"] == "2024-03-01T00:00:00"
+    assert fallback["tests_total"] == 2
+    fallback_sections = {s["section"] for s in fallback["sections"]}
+    assert fallback_sections == {"api/notifications"}
+
+
+def test_recalc_fallback_run_expected_total_from_discover(stats_project, monkeypatch):
+    """expected_total — «N из M тестов» у fallback_run — считается через
+    runner.discover/count_target_tests (единственное место в stats.py, которое
+    зовёт раннер), раз на стенде никогда не было прогона target='all', чтобы
+    посчитать M по нему самому."""
+    from app.core import runner
+
+    async def fake_discover(project_path, venv):
+        return {"tree": {"tests/api/notifications/test_a.py": {"": ["test_a", "test_b", "test_c"]}}}
+
+    monkeypatch.setattr(runner, "discover", fake_discover)
+
+    conn = get_connection()
+    try:
+        run_id = _insert_run(conn, target="api/notifications", status="passed")
+    finally:
+        conn.close()
+    _write_result(run_id, "00", "tests.api.notifications#test_a", "passed")
+
+    result = stats.recalc(PROJECT, STAND)
+    assert result["fallback_run"]["expected_total"] == 3
+
+
+def test_recalc_fallback_run_expected_total_none_when_discover_fails(stats_project, monkeypatch):
+    from app.core import runner
+
+    async def failing_discover(project_path, venv):
+        raise RuntimeError("venv недоступен")
+
+    monkeypatch.setattr(runner, "discover", failing_discover)
+
+    conn = get_connection()
+    try:
+        run_id = _insert_run(conn, target="api/notifications", status="passed")
+    finally:
+        conn.close()
+    _write_result(run_id, "00", "tests.api.notifications#test_a", "passed")
+
+    result = stats.recalc(PROJECT, STAND)
+    assert result["fallback_run"]["expected_total"] is None
+
+
+def test_recalc_full_run_present_takes_priority_over_fallback(stats_project):
+    """Если на стенде уже был полный прогон, fallback_run не нужен вовсе — даже
+    если после него прошёл ещё и частичный прогон поновее."""
+    conn = get_connection()
+    try:
+        full_run = _insert_run(conn, target="all", status="passed", started="2024-01-01T00:00:00")
+        _insert_run(conn, target="api/notifications", status="passed", started="2024-02-01T00:00:00")
+    finally:
+        conn.close()
+    _write_result(full_run, "00", "tests.api.notifications#test_a", "passed")
+
+    result = stats.recalc(PROJECT, STAND)
+    assert result["full_run"]["id"] == full_run
+    assert result["fallback_run"] is None
+
+
 # ------------------------------------------------------------------ флаки/xfail по разделу
 
 def test_recalc_flaky_and_xfail_counts_by_section(stats_project):

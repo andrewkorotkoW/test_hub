@@ -128,6 +128,68 @@ async def test_get_stats_visible_to_manager_and_customer(role_client, isolated_a
         assert resp.json()["project"] == PROJECT
 
 
+# ------------------------------------------------------------------ full_run/fallback_run (docs/missions/2026-11-02_review_fixes.md, п.1+п.2)
+
+async def test_get_stats_full_run_carries_source_signature(qa_client, isolated_allure_dir, stats_api_project_dir):
+    """Подпись источника «по прогону #N · стенд · дата» на странице «Статистика»
+    (ui/stats.js::sectionsSourceHtml) берёт id/started прямо из full_run ответа API."""
+    await _register(qa_client, stats_api_project_dir)
+    run_id = _insert_run(PROJECT, "stage")
+    _write_result(run_id, "00", "tests.api.notifications#test_a", "passed")
+
+    resp = await qa_client.get(f"/api/projects/{PROJECT}/stats")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["full_run"] == {"id": run_id, "stand": "stage", "target": "all", "started": "2024-01-01T00:00:00"}
+    assert body["fallback_run"] is None
+
+
+async def test_get_stats_stand_without_all_target_run_returns_null_full_run_and_fallback_run(
+    qa_client, isolated_allure_dir, stats_api_project_dir
+):
+    """Стенд без прогонов target='all' — п.2 миссии: вместо таблицы разделов в
+    нулях API отдаёт full_run: null и fallback_run с данными последнего (частичного)
+    прогона; верхнеуровневые sections/empty_sections ("Разделы без единого теста")
+    не считаются вовсе — раздел, которого не было в цели, не значит "без тестов"."""
+    await _register(qa_client, stats_api_project_dir)
+    run_id = _insert_run(PROJECT, "stage", target="api/notifications")
+    _write_result(run_id, "00", "tests.api.notifications#test_a", "passed")
+    _write_result(run_id, "01", "tests.api.notifications#test_b", "failed")
+
+    resp = await qa_client.get(f"/api/projects/{PROJECT}/stats")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+
+    assert body["full_run"] is None
+    assert body["run_id"] is None
+    assert body["sections"] == []
+    assert body["empty_sections"] == []
+
+    fallback = body["fallback_run"]
+    assert fallback is not None
+    assert fallback["id"] == run_id
+    assert fallback["target"] == "api/notifications"
+    assert fallback["started"] == "2024-01-01T00:00:00"
+    fallback_sections = {s["section"] for s in fallback["sections"]}
+    assert fallback_sections == {"api/notifications"}
+
+
+async def test_get_stats_stand_never_run_returns_null_full_run_and_null_fallback_run(
+    qa_client, isolated_allure_dir, stats_api_project_dir
+):
+    """Стенда вообще не касались (ни одного прогона) — fallback_run тоже null
+    (нечем заполнить «Последний прогон — #N»); прежнее поведение — разделы по
+    файловой системе в нулях — сохраняется."""
+    await _register(qa_client, stats_api_project_dir)
+
+    resp = await qa_client.get(f"/api/projects/{PROJECT}/stats")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["full_run"] is None
+    assert body["fallback_run"] is None
+    assert {s["section"] for s in body["sections"]} == {"api/notifications"}
+
+
 async def test_get_stats_csv_export_content_and_headers(qa_client, isolated_allure_dir, stats_api_project_dir):
     await _register(qa_client, stats_api_project_dir)
     run_id = _insert_run(PROJECT, "stage")
