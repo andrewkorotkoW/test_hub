@@ -68,6 +68,31 @@ async def test_list_run_tests_while_running_uses_live_th_events(qa_client, db_pa
     }
 
 
+async def test_list_run_tests_while_running_rerun_collapses_to_one_row_with_last_status(qa_client, db_path):
+    """Живой плагин может прислать несколько пар test_start/test_end для одного
+    nodeid (flaky-реран прямо во время прогона, до завершения и до allure):
+    statuses — словарь по nodeid (app/routers/runs.py::list_run_tests), поэтому
+    вторая пара событий должна просто перезаписать статус первой, а не породить
+    вторую строку (п.3 миссии 2026-11-02: одна строка на nodeid)."""
+    conn = sqlite3.connect(db_path)
+    try:
+        run_id = _insert_run(conn, "any_proj", "running")
+        nodeid = "tests/test_x.py::test_flaky"
+        _insert_event(conn, run_id, f"[TH] start {nodeid}", nodeid, "test_start")
+        _insert_event(conn, run_id, f"[TH] end {nodeid} failed", nodeid, "test_end")
+        _insert_event(conn, run_id, f"[TH] start {nodeid}", nodeid, "test_start")
+        _insert_event(conn, run_id, f"[TH] end {nodeid} passed", nodeid, "test_end")
+    finally:
+        conn.close()
+
+    resp = await qa_client.get(f"/api/runs/{run_id}/tests")
+    assert resp.status_code == 200
+    items = resp.json()
+    assert len(items) == 1, "одна строка на nodeid, не по одной на каждую пару start/end"
+    assert items[0]["nodeid"] == nodeid
+    assert items[0]["status"] == "passed", "статус последнего test_end, а не первого"
+
+
 async def test_list_run_tests_after_finish_falls_back_to_full_name_for_unknown_project(
     qa_client, isolated_allure_dir, db_path
 ):
@@ -226,6 +251,48 @@ async def test_list_run_tests_after_finish_has_frames_matches_by_pytest_nodeid(
             "video_duration_ms": None,
         }
     ]
+
+
+async def test_list_run_tests_after_finish_collapses_rerun_to_last_attempt(
+    qa_client, isolated_allure_dir, runnable_project_dir, db_path
+):
+    """Прогон #105 из миссии: flaky(reruns=1) в conftest проекта пишет два
+    *-result.json для одного fullName — до этой правки список «Тесты» показывал
+    обе строки (72 вместо 57), счётчики шапки — уже только финальную попытку
+    (allure_report.final_attempts, 22.10.2026). list_run_tests должен брать те же
+    финальные попытки: одна строка на nodeid со статусом последней попытки и
+    attempts: 2, а сумма строк сплита равна сумме счётчиков шапки (GET .../report)."""
+    await register_project(qa_client, "rerun_proj", runnable_project_dir)
+    conn = sqlite3.connect(db_path)
+    try:
+        run_id = _insert_run(conn, "rerun_proj", "passed")
+    finally:
+        conn.close()
+
+    full_name = "tests.test_sample#test_ok"
+    results_dir = runner.allure_dir(run_id)
+    results_dir.mkdir(parents=True)
+    (results_dir / "00-result.json").write_text(
+        json.dumps({"fullName": full_name, "status": "failed", "start": 0, "stop": 1000})
+    )
+    (results_dir / "01-result.json").write_text(
+        json.dumps({"fullName": full_name, "status": "passed", "start": 2000, "stop": 3000})
+    )
+
+    resp = await qa_client.get(f"/api/runs/{run_id}/tests")
+    assert resp.status_code == 200
+    items = resp.json()
+    assert len(items) == 1, "реран одного nodeid не должен давать две строки"
+    assert items[0]["nodeid"] == "tests/test_sample.py::test_ok"
+    assert items[0]["status"] == "passed", "статус последней попытки (по stop_ts), а не первой"
+    assert items[0]["attempts"] == 2
+
+    report_resp = await qa_client.get(f"/api/runs/{run_id}/report")
+    assert report_resp.status_code == 200
+    counts = report_resp.json()["counts"]
+    assert sum(counts.values()) == len(items), "сумма строк сплита == сумме счётчиков шапки"
+    assert counts["passed"] == 1
+    assert counts["failed"] == 0
 
 
 async def test_get_run_test_log_and_frames_404_for_unknown_run(qa_client):
