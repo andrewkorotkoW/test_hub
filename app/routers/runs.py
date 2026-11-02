@@ -365,6 +365,12 @@ async def list_run_tests(
         ).fetchall()
     }
     video_nodeids = set(video_duration_by_nodeid)
+    # Ретеншен (app/core/retention.py) удаляет каталоги целиком, но не трогает строки
+    # run_events/run_test_videos — has_video/has_frames остаются true навсегда (запись,
+    # что медиа когда-то было), а video_purged/frames_purged по отсутствию каталога
+    # говорят UI показать "удалено по сроку хранения" вместо "плагин не записал".
+    video_purged = bool(video_nodeids) and not runner.video_dir(run_id).is_dir()
+    frames_purged = bool(frame_nodeids) and not runner.frames_dir(run_id).is_dir()
 
     if row["status"] in ("running", "queued"):
         events = conn.execute(
@@ -389,6 +395,10 @@ async def list_run_tests(
                 "has_frames": nodeid in frame_nodeids,
                 "has_video": nodeid in video_nodeids,
                 "video_duration_ms": video_duration_by_nodeid.get(nodeid),
+                "video_purged": video_purged,
+                "frames_purged": frames_purged,
+                "video_retention_days": settings.TH_KEEP_VIDEO_DAYS,
+                "frames_retention_days": settings.TH_KEEP_FRAMES_DAYS,
             }
             for nodeid, test_status in statuses.items()
         ]
@@ -412,6 +422,10 @@ async def list_run_tests(
             "has_frames": nodeid_by_full_name.get(t["name"], t["name"]) in frame_nodeids,
             "has_video": nodeid_by_full_name.get(t["name"], t["name"]) in video_nodeids,
             "video_duration_ms": video_duration_by_nodeid.get(nodeid_by_full_name.get(t["name"], t["name"])),
+            "video_purged": video_purged,
+            "frames_purged": frames_purged,
+            "video_retention_days": settings.TH_KEEP_VIDEO_DAYS,
+            "frames_retention_days": settings.TH_KEEP_FRAMES_DAYS,
         }
         for t in results
     ]

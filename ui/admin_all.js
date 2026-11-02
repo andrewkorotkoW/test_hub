@@ -81,6 +81,8 @@
   // ---------------- overview ----------------
   const overviewBadges = document.getElementById("overview-badges");
   const recentRunsRows = document.getElementById("recent-runs-rows");
+  const diskUsageLine = document.getElementById("disk-usage-line");
+  const purgeNowBtn = document.getElementById("purge-now-btn");
 
   function jsonCell(value) {
     const text = typeof value === "string" ? value : JSON.stringify(value);
@@ -99,6 +101,7 @@
       <span class="status-pill ${escapeHtml(st)}">${escapeHtml(st)}: ${count}</span>
     `).join("");
     overviewBadges.innerHTML = badges + statusBadges;
+    diskUsageLine.textContent = AdminLogic.diskUsageLine(data.disk);
 
     if (!data.recent_runs.length) {
       recentRunsRows.innerHTML = `<tr><td colspan="6" class="muted">Прогонов ещё не было.</td></tr>`;
@@ -313,6 +316,21 @@
     } catch (err) {
       showError(`Не удалось изменить роль: ${err.message}`);
       await loadTable();
+    }
+  });
+
+  purgeNowBtn.addEventListener("click", async () => {
+    purgeNowBtn.disabled = true;
+    const originalText = purgeNowBtn.textContent;
+    purgeNowBtn.textContent = "Чистим…";
+    try {
+      const data = await api("/api/admin/retention/purge", { method: "POST" });
+      diskUsageLine.textContent = AdminLogic.diskUsageLine(data.disk);
+    } catch (err) {
+      showError(`Не удалось очистить: ${err.message}`);
+    } finally {
+      purgeNowBtn.disabled = false;
+      purgeNowBtn.textContent = originalText;
     }
   });
 

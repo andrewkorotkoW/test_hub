@@ -120,6 +120,18 @@ class Settings:
     # терминале, но не для процесса под launchd/systemd с урезанным PATH (см. README).
     TH_ALLURE_BIN: str = os.getenv("TH_ALLURE_BIN", "")
 
+    # Ретеншен файлов прогона (app/core/retention.py, фоновая задача раз в сутки в
+    # app/main.py::lifespan, по образцу schedule.scheduler_loop) — сколько дней после
+    # runs.finished хранить видео/кадры/allure-results/allure-отчёты на диске, прежде
+    # чем их каталоги удаляются (shutil.rmtree). 0 — не удалять вовсе. Строки runs/
+    # run_test_results/run_events/counts ретеншен не трогает — история остаётся навсегда,
+    # независимо от файлов. Прогону с живой публичной share-ссылкой (share_links без
+    # revoked, expires_at в будущем или null) удаление откладывается до истечения ссылки.
+    TH_KEEP_VIDEO_DAYS: int = int(os.getenv("TH_KEEP_VIDEO_DAYS", "14"))
+    TH_KEEP_FRAMES_DAYS: int = int(os.getenv("TH_KEEP_FRAMES_DAYS", "30"))
+    TH_KEEP_RESULTS_DAYS: int = int(os.getenv("TH_KEEP_RESULTS_DAYS", "90"))
+    TH_KEEP_REPORTS_DAYS: int = int(os.getenv("TH_KEEP_REPORTS_DAYS", "30"))
+
     # Корень, где лежат соседние с test_hub проекты (см. _default_projects_root
     # выше и SEED_PROJECTS/VSHGU_PROJECT_PATH в app/db.py). В другом окружении
     # (CI, чужая машина) без переопределения такие пути просто не существуют, и
