@@ -8,7 +8,7 @@ import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from ..core import schedule as schedule_core
+from ..core import failure_causes, schedule as schedule_core
 from ..deps import get_db, require_roles
 from ..schemas import Schedule, ScheduleCreate, ScheduleLastRun, ScheduleRunNowResult, ScheduleUpdate
 from .runs import _delta_prev, _run_payload
@@ -55,7 +55,7 @@ def _last_run_payload(conn: sqlite3.Connection, run_id: int | None) -> ScheduleL
         finished=payload["finished"],
         duration=payload["duration"],
         counts=payload["counts"],
-        delta_prev=_delta_prev(conn, run_row),
+        delta_prev=_delta_prev(conn, run_row, failure_causes.stand_failure_count(run_row["id"])),
     )
 
 

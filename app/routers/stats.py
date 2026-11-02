@@ -11,6 +11,8 @@ from ..core import stats
 from ..deps import get_db, require_roles
 from ..schemas import (
     StatsDynamicsPoint,
+    StatsFallbackRun,
+    StatsFullRun,
     StatsSection,
     StatsSummary,
     StatsTopFlakyTest,
@@ -47,6 +49,8 @@ def _summary_from_cache(cached: dict) -> StatsSummary:
         stand=cached["stand"],
         generated_at=cached["generated_at"],
         run_id=cached["run_id"],
+        full_run=StatsFullRun(**cached["full_run"]) if cached.get("full_run") else None,
+        fallback_run=StatsFallbackRun(**cached["fallback_run"]) if cached.get("fallback_run") else None,
         sections=[StatsSection(**s) for s in cached["sections"]],
         empty_sections=cached["empty_sections"],
         dynamics_project=[StatsDynamicsPoint(**p) for p in cached["dynamics_project"]],

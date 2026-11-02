@@ -36,21 +36,25 @@
 
     <div class="card" id="sections-card">
       <h2>Разделы</h2>
-      <p class="muted">По последнему полному прогону выбранного стенда. Область — папка <code>tests/api/&lt;area&gt;</code>,
+      <p class="muted" id="sections-source-caption">По последнему полному прогону выбранного стенда. Область — папка <code>tests/api/&lt;area&gt;</code>,
         <code>tests/ui/&lt;area&gt;</code> или весь <code>tests/e2e</code>.</p>
-      <div id="sections-empty-box" class="zero-coverage-box" hidden>
-        <strong>Разделы без единого теста:</strong> <span id="sections-empty-list"></span>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Раздел</th><th>Тестов</th><th>Passed</th><th>Failed</th><th>Xfail</th><th>Skipped</th>
-              <th>% passed</th><th>Ср. длительность</th><th>Флаки</th><th>Xfail</th><th>Покрытие маршрутов</th>
-            </tr>
-          </thead>
-          <tbody id="sections-rows"><tr><td colspan="11" class="muted">Загрузка…</td></tr></tbody>
-        </table>
+      <div id="sections-fallback-box" class="hint-box warn" hidden></div>
+      <div id="sections-table-wrap">
+        <div id="sections-partial-note" class="muted" hidden></div>
+        <div id="sections-empty-box" class="zero-coverage-box" hidden>
+          <strong>Разделы без единого теста:</strong> <span id="sections-empty-list"></span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Раздел</th><th>Тестов</th><th>Passed</th><th>Failed</th><th>Xfail</th><th>Skipped</th>
+                <th>% passed</th><th>Ср. длительность</th><th>Флаки</th><th>Xfail</th><th>Покрытие маршрутов</th>
+              </tr>
+            </thead>
+            <tbody id="sections-rows"><tr><td colspan="11" class="muted">Загрузка…</td></tr></tbody>
+          </table>
+        </div>
       </div>
     </div>
 

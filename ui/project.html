@@ -47,6 +47,7 @@
     </nav>
 
     <div class="tab-panel" data-tab-panel="dashboard">
+    <div class="kpi-source muted" id="kpi-source" hidden></div>
     <div class="kpi-row" id="kpi-row"><p class="muted">Загрузка панели…</p></div>
 
     <div class="card" id="dashboard-charts-card">
@@ -55,6 +56,7 @@
         <div class="chart-row">
           <div class="chart-box" id="status-donut-box">
             <h3>Статусы последнего прогона</h3>
+            <div class="kpi-source muted" id="status-donut-source" hidden></div>
             <div class="chart-donut-wrap chart-donut-wrap-lg">
               <canvas id="status-donut-chart"></canvas>
               <div class="chart-donut-center" id="status-donut-center"></div>

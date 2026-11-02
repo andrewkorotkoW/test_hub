@@ -577,6 +577,28 @@ class StatsSection(BaseModel):
     routes_percent: Optional[float] = None
 
 
+class StatsFullRun(BaseModel):
+    """Последний полный (target='all') прогон стенда, по которому считаются «Разделы» —
+    подпись источника «по прогону #N · стенд · дата» (docs/missions/2026-11-02_review_fixes.md, п.1)."""
+    id: int
+    stand: Optional[str] = None
+    target: Optional[str] = None
+    started: Optional[str] = None
+
+
+class StatsFallbackRun(BaseModel):
+    """Последний прогон стенда ЛЮБОЙ цели — заполняется, только когда full_run
+    отсутствует (на стенде ни разу не было прогона с target='all', п.2 миссии выше).
+    sections — та же форма, что StatsSummary.sections, но посчитанная по этому
+    (частичному) прогону, для кнопки «Показать по последнему прогону»."""
+    id: int
+    target: Optional[str] = None
+    started: Optional[str] = None
+    tests_total: int
+    expected_total: Optional[int] = None
+    sections: list[StatsSection] = []
+
+
 class StatsDynamicsPoint(BaseModel):
     run_id: int
     started: Optional[str] = None
@@ -604,6 +626,8 @@ class StatsSummary(BaseModel):
     stand: Optional[str] = None
     generated_at: str
     run_id: Optional[int] = None
+    full_run: Optional[StatsFullRun] = None
+    fallback_run: Optional[StatsFallbackRun] = None
     sections: list[StatsSection]
     empty_sections: list[str]
     dynamics_project: list[StatsDynamicsPoint]

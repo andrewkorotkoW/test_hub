@@ -40,10 +40,15 @@
     return total;
   }
 
+  // "cancelled" намеренно не входит (docs/missions/2026-11-02_review_fixes.md, п.1):
+  // отменённый прогон неполный и часто упал по стенду — KPI и кольцо «Статусы
+  // последнего прогона» не должны опираться на него как на срез проекта. В
+  // динамике/ленте (chronoMetrics/renderRunsFeed) cancelled по-прежнему виден —
+  // там выбор не идёт через эту функцию.
   function pickRunWithResults(runs, minTests) {
     var min = typeof minTests === "number" ? minTests : 20;
     var list = runs || [];
-    var finished = ["passed", "failed", "cancelled"];
+    var finished = ["passed", "failed"];
     for (var i = 0; i < list.length; i++) {
       var r = list[i];
       if (finished.indexOf(r.status) === -1) continue;
