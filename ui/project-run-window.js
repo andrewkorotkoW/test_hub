@@ -62,10 +62,12 @@
   function testRowHtml(t) {
     const status = RunWindowSplitLogic.normalizeTestStatus(t.status);
     const shortName = t.nodeid.includes("::") ? t.nodeid.split("::").slice(1).join("::") : t.nodeid;
+    const attemptsText = RunWindowSplitLogic.attemptsBadgeText(t.attempts, t.status);
     return `
       <div class="test-row${t.nodeid === selectedNodeid ? " active" : ""}" data-nodeid="${encodeURIComponent(t.nodeid)}">
         <span class="dot-status ${status}" title="${escapeHtml(status)}"></span>
         <span class="nm" title="${escapeHtml(t.nodeid)}">${escapeHtml(shortName)}</span>
+        ${attemptsText ? `<span class="muted test-row-attempts" title="${escapeHtml(attemptsText)}">${escapeHtml(attemptsText)}</span>` : ""}
       </div>`;
   }
 

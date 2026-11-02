@@ -116,6 +116,7 @@ CREATE TABLE IF NOT EXISTS flaky_stats (
     fails INTEGER NOT NULL DEFAULT 0,
     flips INTEGER NOT NULL DEFAULT 0,
     score REAL NOT NULL DEFAULT 0,
+    stand_fails INTEGER NOT NULL DEFAULT 0,
     last_statuses TEXT NOT NULL DEFAULT '[]',
     updated_at TEXT,
     PRIMARY KEY (project, stand, test)
@@ -585,6 +586,9 @@ def init_db() -> None:
         # расписание — в «Прогонах» такой прогон помечен тегом «по расписанию», иначе от
         # обычного запуска сервисной учётки tg_bot его не отличить.
         _migrate_add_column(conn, "runs", "schedule_id", "schedule_id INTEGER")
+        # «Из них стенд» в таблице флаки (02.11.2026): падения с инфраструктурной
+        # причиной, которые recalc() не считает за fails/flips.
+        _migrate_add_column(conn, "flaky_stats", "stand_fails", "stand_fails INTEGER NOT NULL DEFAULT 0")
         _migrate_add_column(conn, "users", "full_name", "full_name TEXT")
         _migrate_add_column(conn, "users", "position", "position TEXT")
         _migrate_add_column(conn, "users", "project", "project TEXT REFERENCES projects(name)")

@@ -860,6 +860,7 @@ td.report-reason .cmp-tag { margin-top: 4px; display: inline-block; }
 .test-row.active { background: var(--surface-hover); border-left-color: var(--accent); }
 .test-row .dot-status { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
 .test-row .nm { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
+.test-row-attempts { flex: 0 0 auto; font-size: 11px; }
 .dot-status.passed { background: var(--passed); }
 .dot-status.failed { background: var(--failed); }
 .dot-status.broken { background: var(--broken); }

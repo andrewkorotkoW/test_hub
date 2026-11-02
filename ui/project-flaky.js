@@ -9,7 +9,7 @@
 
   function renderFlakyRows(items) {
     if (!items.length) {
-      flakyRows.innerHTML = `<tr><td colspan="6" class="muted">Нестабильных тестов не найдено.</td></tr>`;
+      flakyRows.innerHTML = `<tr><td colspan="7" class="muted">Нестабильных тестов не найдено.</td></tr>`;
       return;
     }
     flakyRows.innerHTML = items.map((item) => {
@@ -24,6 +24,7 @@
           <td title="${escapeHtml(item.test)}">${escapeHtml(shortName)}</td>
           <td class="num-col">${item.runs}</td>
           <td class="num-col">${item.fails}</td>
+          <td class="num-col">${item.stand_fails || 0}</td>
           <td class="num-col">${percent}%</td>
           <td class="flaky-dots">${flakyDotsHtml(item.last_statuses)}</td>
           <td>${runBtn}</td>
