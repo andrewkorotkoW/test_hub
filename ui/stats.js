@@ -21,6 +21,10 @@
 
   const standSelect = document.getElementById("stats-stand-select");
   const exportBtn = document.getElementById("stats-export-btn");
+  const sectionsSourceCaption = document.getElementById("sections-source-caption");
+  const sectionsFallbackBox = document.getElementById("sections-fallback-box");
+  const sectionsTableWrap = document.getElementById("sections-table-wrap");
+  const sectionsPartialNote = document.getElementById("sections-partial-note");
   const sectionsRows = document.getElementById("sections-rows");
   const sectionsEmptyBox = document.getElementById("sections-empty-box");
   const sectionsEmptyList = document.getElementById("sections-empty-list");
@@ -65,19 +69,81 @@
     `;
   }
 
-  function renderSections(data) {
-    if (!data.sections.length) {
+  // Цель частичного прогона (fallback_run.target) — первая строка (nodeid/маркер
+  // могут быть многострочными, как в форме запуска), без переноса на всю карточку.
+  function targetLabel(target) {
+    if (!target || target === "all") return "все тесты";
+    const first = String(target).split("\n")[0];
+    return target.includes("\n") ? `${first}…` : first;
+  }
+
+  // Стенд без прогона с target='all' (docs/missions/2026-11-02_review_fixes.md, п.2):
+  // вместо таблицы разделов в нулях — состояние «данных нет» с кнопкой, которая
+  // досчитывает ту же таблицу по последнему (частичному) прогону стенда.
+  function fallbackStateHtml(fb, standLabel) {
+    return `
+      <p>Полного прогона на стенде «${escapeHtml(standLabel)}» не было.
+      Последний прогон — <a href="project.html?name=${encodeURIComponent(projectName)}&run=${fb.id}">#${fb.id}</a>
+      (${escapeHtml(targetLabel(fb.target))}, ${escapeHtml(fmtDate(fb.started))}).</p>
+      <button type="button" id="sections-fallback-btn">Показать по последнему прогону</button>
+    `;
+  }
+
+  function renderSectionsTable(sections, emptySections) {
+    if (!sections.length) {
       sectionsRows.innerHTML = `<tr><td colspan="11" class="muted">Разделов не найдено (нет tests/api, tests/ui, tests/e2e).</td></tr>`;
     } else {
-      sectionsRows.innerHTML = data.sections.map(sectionRowHtml).join("");
+      sectionsRows.innerHTML = sections.map(sectionRowHtml).join("");
     }
-    if (data.empty_sections.length) {
-      sectionsEmptyList.textContent = data.empty_sections.join(", ");
+    if (emptySections.length) {
+      sectionsEmptyList.textContent = emptySections.join(", ");
       sectionsEmptyBox.hidden = false;
     } else {
       sectionsEmptyBox.hidden = true;
     }
   }
+
+  // «по прогону #N · дата» (docs/missions/2026-11-02_review_fixes.md, п.1 — тот же
+  // принцип подписи источника, что и на дашборде, ui/project-dashboard.js::kpiSourceHtml).
+  function sectionsSourceHtml(fullRun) {
+    return `По прогону <a href="project.html?name=${encodeURIComponent(projectName)}&run=${fullRun.id}">#${fullRun.id}</a>`
+      + ` от ${escapeHtml(fmtDate(fullRun.started))} (последний полный прогон стенда).`
+      + ` Область — папка <code>tests/api/&lt;area&gt;</code>, <code>tests/ui/&lt;area&gt;</code> или весь <code>tests/e2e</code>.`;
+  }
+
+  function renderSections(data) {
+    const standLabel = data.stand || "без стенда";
+    if (!data.full_run && data.fallback_run) {
+      sectionsSourceCaption.hidden = true;
+      sectionsFallbackBox.hidden = false;
+      sectionsFallbackBox.innerHTML = fallbackStateHtml(data.fallback_run, standLabel);
+      sectionsTableWrap.hidden = true;
+      sectionsPartialNote.hidden = true;
+      return;
+    }
+    sectionsSourceCaption.hidden = false;
+    sectionsSourceCaption.innerHTML = data.full_run
+      ? sectionsSourceHtml(data.full_run)
+      : `По последнему полному прогону выбранного стенда. Область — папка <code>tests/api/&lt;area&gt;</code>,
+        <code>tests/ui/&lt;area&gt;</code> или весь <code>tests/e2e</code>.`;
+    sectionsFallbackBox.hidden = true;
+    sectionsTableWrap.hidden = false;
+    sectionsPartialNote.hidden = true;
+    renderSectionsTable(data.sections, data.empty_sections);
+  }
+
+  sectionsFallbackBox.addEventListener("click", (ev) => {
+    if (!ev.target.closest("#sections-fallback-btn") || !currentData || !currentData.fallback_run) return;
+    const fb = currentData.fallback_run;
+    sectionsTableWrap.hidden = false;
+    // "Разделы без единого теста" не считаем для частичного прогона (раздел, которого
+    // не было в цели, — не "без тестов", см. миссию) — всегда скрыт в этом режиме.
+    sectionsEmptyBox.hidden = true;
+    const totalText = fb.expected_total ? ` из ${fb.expected_total}` : "";
+    sectionsPartialNote.textContent = `Частичный прогон, ${fb.tests_total}${totalText} тестов — прогон #${fb.id} (${targetLabel(fb.target)}).`;
+    sectionsPartialNote.hidden = false;
+    renderSectionsTable(fb.sections, []);
+  });
 
   let dynamicsSections = [];
   // Выбранные разделы для «Динамики за 30 дней» — МНОЖЕСТВЕННЫЙ выбор (не

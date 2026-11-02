@@ -425,6 +425,11 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
 /* ---------- баннер очереди прогонов (вкладка «Запуск», ui/project-dashboard.js
    renderQueueNotice) — тот же hint-box, но янтарный акцент («подожди», не
    «ошибка» и не нейтральная подсказка) ---------- */
+/* «Статистика» без полного прогона на стенде (ui/stats.js::fallbackStateHtml,
+   docs/missions/2026-11-02_review_fixes.md, п.2) — тот же .hint-box.warn, кнопка
+   «Показать по последнему прогону» внутри него */
+#sections-fallback-box button { margin-top: 8px; }
+#sections-partial-note { font-size: 12px; margin-bottom: 8px; }
 .hint-box.queue-notice,
 .hint-box.warn {
   background: rgba(224, 160, 32, .14);
@@ -1880,6 +1885,13 @@ tbody tr.xpass-row { background: rgba(22, 163, 74, 0.06); }
 .kpi-trend-good { color: var(--passed); }
 .kpi-trend-bad { color: var(--failed); }
 .kpi-trend-flat { color: var(--text-muted); }
+/* подпись источника KPI/кольца «по прогону #N · стенд · дата» (docs/missions/
+   2026-11-02_review_fixes.md, п.1) — ссылка на окно прогона, тем же шрифтом,
+   что .hist-delta/.runs-feed-when */
+.kpi-source { font-size: 12px; margin-bottom: 10px; }
+.kpi-source a { font-family: var(--font-mono); }
+/* бейдж «· N стенд» у «% passed» — то же начертание, что .delta .n в ленте/истории */
+.kpi-tile-badge { font-size: 11px; font-weight: 400; }
 
 .chart-canvas-wrap { position: relative; height: 220px; }
 .chart-donut-wrap { position: relative; height: 220px; }

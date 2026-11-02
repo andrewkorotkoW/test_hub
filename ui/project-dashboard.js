@@ -20,6 +20,8 @@
   // GET .../runs (история, DESC по id), GET .../flaky, GET .../xfail, GET /api/runs/{id}/report.
   const dashboardError = document.getElementById("dashboard-error");
   const kpiRow = document.getElementById("kpi-row");
+  const kpiSourceBox = document.getElementById("kpi-source");
+  const donutSourceBox = document.getElementById("status-donut-source");
   const areaTrafficColOk = document.getElementById("area-traffic-col-ok");
   const areaTrafficColProblems = document.getElementById("area-traffic-col-problems");
   const areaTrafficColEmpty = document.getElementById("area-traffic-col-empty");
@@ -85,12 +87,12 @@
     return { arrow: up ? "▲" : "▼", cls: good ? "kpi-trend-good" : "kpi-trend-bad" };
   }
 
-  function kpiTileHtml(i, { label, valueText, values, color, higherIsBetter }) {
+  function kpiTileHtml(i, { label, valueText, values, color, higherIsBetter, badge }) {
     const trend = sparkTrend(values, higherIsBetter);
     return `
       <div class="kpi-tile" style="animation-delay: ${i * 50}ms">
         <div class="kpi-tile-label">${escapeHtml(label)}</div>
-        <div class="kpi-tile-value">${valueText}</div>
+        <div class="kpi-tile-value">${valueText}${badge ? ` <span class="muted kpi-tile-badge" title="доля падений с инфраструктурной причиной (app/core/failure_causes.py) больше половины">${escapeHtml(badge)}</span>` : ""}</div>
         <div class="kpi-tile-foot">
           ${sparklineSvg(values, color)}
           <span class="kpi-trend ${trend.cls}" title="к прошлому прогону">${trend.arrow}</span>
@@ -98,6 +100,45 @@
       </div>
     `;
   }
+
+  // Подпись источника «по прогону #N · стенд · дата» у KPI-плиток и кольца
+  // «Статусы последнего прогона» (docs/missions/2026-11-02_review_fixes.md, п.1) —
+  // run — объект из GET .../runs (sourceRun), не runMetrics().
+  function kpiSourceHtml(run) {
+    if (!run) return "";
+    return `по прогону <a href="#" data-run-id="${run.id}">#${run.id}</a>`
+      + ` · ${escapeHtml(run.stand || "без стенда")} · ${escapeHtml(fmtDate(run.started))}`;
+  }
+
+  function renderKpiSource(run) {
+    const html = kpiSourceHtml(run);
+    [kpiSourceBox, donutSourceBox].forEach((box) => {
+      if (!box) return;
+      box.innerHTML = html;
+      box.hidden = !html;
+    });
+  }
+
+  // Бейдж «· N стенд» у «% passed» — тот же признак и то же оформление (.muted),
+  // что в «Δ к предыдущему» истории/ленты (historyDeltaHtml::d.standText ниже):
+  // больше половины падений прогона — инфраструктурные (throttling/session/stand).
+  function standBadgeText(run) {
+    if (!run) return null;
+    const m = runMetrics(run);
+    const standFailures = run.stand_failures || 0;
+    if (!m.failed || standFailures / m.failed <= 0.5) return null;
+    return `· ${standFailures} стенд`;
+  }
+
+  [kpiSourceBox, donutSourceBox].forEach((box) => {
+    if (!box) return;
+    box.addEventListener("click", (ev) => {
+      const a = ev.target.closest("a[data-run-id]");
+      if (!a) return;
+      ev.preventDefault();
+      openRun(Number(a.dataset.runId));
+    });
+  });
 
   function animateSparklines(root) {
     requestAnimationFrame(() => {
@@ -140,7 +181,7 @@
   // (первый с ≥ 20 результатами): плитки «Всего тестов / % passed / Упало / Длительность»
   // иначе показывали точечный запуск одного файла («Всего тестов 2, 0 %», #70 14.10.2026);
   // спарклайны по-прежнему идут по всей ленте.
-  function renderKpiRow(chronoRuns, chronoMetrics, flakyItemsAll, xfailItemsAll, latestOverride) {
+  function renderKpiRow(chronoRuns, chronoMetrics, flakyItemsAll, xfailItemsAll, latestOverride, standBadge) {
     if (!chronoMetrics.length) {
       kpiRow.innerHTML = `<p class="muted">Прогонов пока не было — панель появится после первого запуска.</p>`;
       return;
@@ -151,7 +192,7 @@
 
     const tiles = [
       { label: "Всего тестов", valueText: String(latest.total), values: chronoMetrics.map((m) => m.total), color: "var(--accent)", higherIsBetter: true },
-      { label: "% passed", valueText: latest.percent === null ? "—" : `${latest.percent}%`, values: chronoMetrics.map((m) => m.percent ?? 0), color: "var(--passed)", higherIsBetter: true },
+      { label: "% passed", valueText: latest.percent === null ? "—" : `${latest.percent}%`, values: chronoMetrics.map((m) => m.percent ?? 0), color: "var(--passed)", higherIsBetter: true, badge: standBadge },
       { label: "Упало", valueText: String(latest.failed), values: chronoMetrics.map((m) => m.failed), color: "var(--failed)", higherIsBetter: false },
       { label: "Длительность", valueText: RunReportLogic.fmtRunDuration(latest.duration), values: chronoMetrics.map((m) => m.duration ?? 0), color: "var(--gradient-end)", higherIsBetter: false },
       { label: "Флаки-тесты", valueText: String(activeFlaky.length), values: flakyInstabilitySpark(activeFlaky), color: "var(--flaky)", higherIsBetter: false },
@@ -556,7 +597,8 @@
       // файла или упавший на старте прогон не должны превращать плитки, светофор и долгие
       // тесты в «2 теста / 0 % / нет данных»
       const sourceRun = DashboardChartsLogic.pickRunWithResults(runs, 20);
-      renderKpiRow(chronoRuns, chronoMetrics, flakyAll.items || [], xfailAll.items || [], sourceRun ? runMetrics(sourceRun) : null);
+      renderKpiSource(sourceRun);
+      renderKpiRow(chronoRuns, chronoMetrics, flakyAll.items || [], xfailAll.items || [], sourceRun ? runMetrics(sourceRun) : null, standBadgeText(sourceRun));
       renderBarChart(chronoMetrics);
       renderAreaChart(chronoMetrics);
       renderXfailPills(xfailAll.items || []);

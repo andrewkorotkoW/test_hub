@@ -188,10 +188,12 @@ async def create_run(
     return _run_payload(row)
 
 
-def _delta_prev(conn: sqlite3.Connection, row: sqlite3.Row) -> dict | None:
+def _delta_prev(conn: sqlite3.Connection, row: sqlite3.Row, stand_failures: int) -> dict | None:
     """Δ к предыдущему прогону на том же стенде — столбец «Истории» (столбец
     «Δ к предыдущему» в UI, см. мокап docs/missions/redesign/run_compare/mockups.html).
-    None, если это первый прогон на стенде (сравнивать не с чем)."""
+    None, если это первый прогон на стенде (сравнивать не с чем) — stand_failures
+    самого прогона при этом всё равно есть в payload["stand_failures"] (список
+    runs), не только здесь."""
     prev_id = failure_causes.prev_run_id_on_stand(conn, row["project"], row["stand"], row["id"])
     if prev_id is None:
         return None
@@ -203,7 +205,7 @@ def _delta_prev(conn: sqlite3.Connection, row: sqlite3.Row) -> dict | None:
     return {
         "passed": cur_passed - prev_passed,
         "failed": cur_failed - prev_failed,
-        "stand_failures": failure_causes.stand_failure_count(row["id"]),
+        "stand_failures": stand_failures,
     }
 
 
@@ -229,7 +231,13 @@ def list_runs(
     payloads = []
     for r in rows:
         payload = _run_payload(r)
-        payload["delta_prev"] = _delta_prev(conn, r)
+        # Доля инфраструктурных причин у самого прогона — не только в delta_prev
+        # (который None для первого прогона на стенде): бейдж «· N стенд» на
+        # дашборде (ui/project-dashboard.js) у «% passed» нужен независимо от того,
+        # есть ли с чем сравнивать (docs/missions/2026-11-02_review_fixes.md, п.1).
+        stand_failures = failure_causes.stand_failure_count(r["id"])
+        payload["stand_failures"] = stand_failures
+        payload["delta_prev"] = _delta_prev(conn, r, stand_failures)
         payload["eta"] = etas.get(r["id"])
         payloads.append(payload)
     return payloads
