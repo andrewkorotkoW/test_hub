@@ -266,6 +266,111 @@ async def test_flaky_api_exposes_stand_fails(qa_client, flaky_history_with_stand
     assert item["stand_fails"] == 1
 
 
+# ------------------------------------------------------------------ три сценария из миссии 2026-11-02, п.4
+# (docs/missions/2026-11-02_review_fixes.md): проверяем ровно те последовательности,
+# что перечислены в критериях приёмки, а не только похожие кейсы выше.
+
+def test_recalc_mission_scenario_passed_broken_stand_passed_is_fully_neutral(db_path, isolated_allure_dir):
+    """[passed, broken(stand), passed] -> fails=0, flips=0, score=0: стендовый
+    broken выброшен из последовательности целиком (не наследуется, не создаёт flip)."""
+    from app.config import settings
+
+    conn = get_connection()
+    try:
+        _insert_project_and_stand(conn)
+        run_a = _insert_run(conn, "passed")
+        run_b = _insert_run(conn, "failed")
+        run_c = _insert_run(conn, "passed")
+    finally:
+        conn.close()
+
+    full_name = "tests.test_flaky_sample#test_scenario_stand_broken"
+    _write_allure_result(settings.ALLURE_RESULTS_DIR / str(run_a), "00-result.json", full_name, "passed")
+    _write_allure_result(settings.ALLURE_RESULTS_DIR / str(run_b), "00-result.json", full_name, "broken")
+    _write_allure_result(settings.ALLURE_RESULTS_DIR / str(run_c), "00-result.json", full_name, "passed")
+    conn = get_connection()
+    try:
+        _insert_run_test_result(conn, run_b, full_name, "broken", "stand")
+    finally:
+        conn.close()
+
+    stats = flaky.recalc(PROJECT, STAND)
+    assert len(stats) == 1
+    row = stats[0]
+    assert row["runs"] == 3
+    assert row["fails"] == 0
+    assert row["flips"] == 0
+    assert row["score"] == 0.0
+    assert row["stand_fails"] == 1
+
+
+def test_recalc_mission_scenario_passed_failed_code_passed_is_fully_unstable(db_path, isolated_allure_dir):
+    """[passed, failed(code), passed] -> fails=1, flips=2, score=100%."""
+    from app.config import settings
+
+    conn = get_connection()
+    try:
+        _insert_project_and_stand(conn)
+        run_a = _insert_run(conn, "passed")
+        run_b = _insert_run(conn, "failed")
+        run_c = _insert_run(conn, "passed")
+    finally:
+        conn.close()
+
+    full_name = "tests.test_flaky_sample#test_scenario_code_failure"
+    _write_allure_result(settings.ALLURE_RESULTS_DIR / str(run_a), "00-result.json", full_name, "passed")
+    _write_allure_result(settings.ALLURE_RESULTS_DIR / str(run_b), "00-result.json", full_name, "failed")
+    _write_allure_result(settings.ALLURE_RESULTS_DIR / str(run_c), "00-result.json", full_name, "passed")
+    conn = get_connection()
+    try:
+        _insert_run_test_result(conn, run_b, full_name, "failed", "code")
+    finally:
+        conn.close()
+
+    stats = flaky.recalc(PROJECT, STAND)
+    assert len(stats) == 1
+    row = stats[0]
+    assert row["runs"] == 3
+    assert row["fails"] == 1
+    assert row["flips"] == 2
+    assert row["score"] == pytest.approx(1.0)
+    assert row["stand_fails"] == 0
+
+
+def test_recalc_mission_scenario_passed_skipped_failed_code_one_flip(db_path, isolated_allure_dir):
+    """[passed, skipped, failed(code)] -> fails=1, flips=1: skipped выброшен из
+    последовательности (не считается flip ни между passed/skipped, ни между
+    skipped/failed), остаётся один переход passed -> failed."""
+    from app.config import settings
+
+    conn = get_connection()
+    try:
+        _insert_project_and_stand(conn)
+        run_a = _insert_run(conn, "passed")
+        run_b = _insert_run(conn, "passed")
+        run_c = _insert_run(conn, "failed")
+    finally:
+        conn.close()
+
+    full_name = "tests.test_flaky_sample#test_scenario_skip_then_fail"
+    _write_allure_result(settings.ALLURE_RESULTS_DIR / str(run_a), "00-result.json", full_name, "passed")
+    _write_allure_result(settings.ALLURE_RESULTS_DIR / str(run_b), "00-result.json", full_name, "skipped")
+    _write_allure_result(settings.ALLURE_RESULTS_DIR / str(run_c), "00-result.json", full_name, "failed")
+    conn = get_connection()
+    try:
+        _insert_run_test_result(conn, run_c, full_name, "failed", "code")
+    finally:
+        conn.close()
+
+    stats = flaky.recalc(PROJECT, STAND)
+    assert len(stats) == 1
+    row = stats[0]
+    assert row["runs"] == 3
+    assert row["fails"] == 1
+    assert row["flips"] == 1
+    assert row["stand_fails"] == 0
+
+
 @pytest.fixture()
 def flaky_history_all_infra_causes(db_path, isolated_allure_dir):
     """Волна инфраструктурных падений разных причин (throttling/session/stand) —
