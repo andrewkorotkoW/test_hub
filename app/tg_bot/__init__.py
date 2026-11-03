@@ -7,7 +7,10 @@
 HTTP API test_hub — обе ветки используют один и тот же HubClient.
 
 Стенд с manual_only=1 (боевой stage, см. app/db.py::VSHGU_MANUAL_ONLY_STAND) вместо
-маркеров показывает пресеты (build_preset_keyboard) и требует ещё один шаг
+маркеров сначала просит выбрать продукт (build_preset_product_keyboard — LMS/
+Helpdesk/LRS/Всё, та же классификация областей, что в ui/sections-tree-logic.js,
+продублированная константой в handlers.py), потом показывает пресеты, отфильтрованные
+по продукту (build_preset_keyboard), и требует ещё один шаг
 подтверждения (build_manual_confirm_keyboard/_manual_confirm_text) перед
 submit_run(confirm_manual=True) — как для пресета (cb_preset/cb_preset_confirm),
 так и для дерева тестов (cb_tree_run/cb_tree_run_confirm), и то же самое даёт
@@ -197,6 +200,7 @@ from .keyboards import (
     build_manual_confirm_keyboard,
     build_marker_keyboard,
     build_preset_keyboard,
+    build_preset_product_keyboard,
     build_project_keyboard,
     build_projects_keyboard,
     build_report_keyboard,

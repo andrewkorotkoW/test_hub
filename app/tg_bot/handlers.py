@@ -56,6 +56,7 @@ from .formatting import (
     format_xfail,
 )
 from .keyboards import (
+    PRESET_PRODUCTS,
     build_back_keyboard,
     build_batch_keyboard,
     build_confirm_keyboard,
@@ -66,6 +67,7 @@ from .keyboards import (
     build_manual_confirm_keyboard,
     build_marker_keyboard,
     build_preset_keyboard,
+    build_preset_product_keyboard,
     build_project_keyboard,
     build_projects_keyboard,
     build_report_keyboard,
@@ -112,6 +114,51 @@ STAGE_STAND_NAME = "stage"
 # см. app/core/runner.py::ManualRunNotConfirmed — у стенда stage свой отдельный
 # путь через /stage и пресеты, этот код его не затрагивает и не ослабляет.
 _SECTION_ARG_RE = re.compile(r"^(?:api|ui)/[\w-]+$|^e2e$")
+
+# Шаг «продукт» перед пресетами стенда (cb_stand/cb_preset_product) — та же
+# классификация областей, что в ui/sections-tree-logic.js (PRODUCT_AREAS/
+# INTEGRATION_AREAS/productOf), продублированная здесь константой, а не
+# импортированная из JS (пресеты стенда — записи БД с полем target/marker, не
+# узлы дерева тестов, см. docs/missions/2026-11-03_product_presets.md раздел 4).
+_PRODUCT_AREAS = {"helpdesk": ("helpdesk", "tickets"), "lrs": ("lrs",)}
+_INTEGRATION_AREAS = ("ai_chat", "cas", "buk", "mts_link", "p2p")
+
+
+def _area_product(area: str) -> str:
+    if area in _PRODUCT_AREAS["helpdesk"]:
+        return "helpdesk"
+    if area in _PRODUCT_AREAS["lrs"]:
+        return "lrs"
+    if area in _INTEGRATION_AREAS:
+        return "integration"
+    return "lms"
+
+
+def _preset_target_products(target: str) -> set[str]:
+    """Области пресета — второй сегмент пути после "tests/<kind>/" в каждой
+    строке target ("tests/api/buk" → "buk"); target == "all" или строки без
+    такого сегмента ("tests/e2e") не дают области — пресет считается общим
+    (под продуктом LMS/Всё, как productOf по умолчанию)."""
+    products: set[str] = set()
+    for line in target.split("\n"):
+        parts = [p for p in line.strip().split("/") if p]
+        if len(parts) >= 3 and parts[0] == "tests":
+            products.add(_area_product(parts[2]))
+    return products
+
+
+def _preset_matches_product(preset: dict, product: str) -> bool:
+    if product == "all":
+        return True
+    products = _preset_target_products(preset.get("target") or "")
+    if not products:
+        return product == "lms"
+    if product == "lms":
+        return products <= {"lms", "integration"}
+    return product in products
+
+
+PRESET_PRODUCT_LABELS: dict[str, str] = dict(PRESET_PRODUCTS)
 
 ACCESS_DENIED_MESSAGE = "Извините, у вас нет доступа к этому боту."
 MENU_TEXT = "Выберите проект:"
@@ -687,18 +734,44 @@ async def cb_stand(query: CallbackQuery, client: HubClient) -> None:
     parsed = parse_callback(query.data)
     project, stand = parsed["project"], parsed["stand"]
     if await _stand_manual_only(client, project, stand):
-        try:
-            presets = await client.list_stand_presets(project, stand)
-        except httpx.HTTPError as exc:
-            logger.warning("tg_bot: не удалось получить пресеты стенда %s/%s: %s", project, stand, exc)
-            await _safe_edit(query.message, f"Не удалось получить пресеты стенда «{stand}».")
-            return
-        text = f"Проект: {project}\nСтенд: {_stand_label(stand)} 🔒 (только вручную)\nВыберите пресет:"
-        await _safe_edit(query.message, text, build_preset_keyboard(project, stand, presets))
+        text = (
+            f"Проект: {project}\nСтенд: {_stand_label(stand)} 🔒 (только вручную)\nВыберите продукт:"
+        )
+        await _safe_edit(query.message, text, build_preset_product_keyboard(project, stand))
         return
     text = f"Проект: {project}\nСтенд: {_stand_label(stand)}\nВыберите набор тестов:"
     markers = await _project_markers(client, project)
     await _safe_edit(query.message, text, build_marker_keyboard(project, stand, markers))
+
+
+@router.callback_query(F.data.startswith("preset_product:"))
+async def cb_preset_product(query: CallbackQuery, client: HubClient) -> None:
+    """Шаг «продукт» (build_preset_product_keyboard) перед списком пресетов стенда:
+    фильтрует presets по _preset_matches_product и передаёт продукт дальше в
+    build_preset_keyboard, чтобы cb_preset_confirm знал его для автометки."""
+    await query.answer()
+    if query.message is None:
+        return
+    parsed = parse_callback(query.data)
+    if parsed["action"] != "preset_product":
+        return
+    project, stand, product = parsed["project"], parsed["stand"], parsed["product"]
+    try:
+        presets = await client.list_stand_presets(project, stand)
+    except httpx.HTTPError as exc:
+        logger.warning("tg_bot: не удалось получить пресеты стенда %s/%s: %s", project, stand, exc)
+        await _safe_edit(query.message, f"Не удалось получить пресеты стенда «{stand}».")
+        return
+    filtered = [p for p in presets if _preset_matches_product(p, product)]
+    product_label = PRESET_PRODUCT_LABELS.get(product, product)
+    stand_line = f"Проект: {project}\nСтенд: {_stand_label(stand)} 🔒 (только вручную)"
+    if not filtered:
+        text = f"{stand_line}\nДля продукта «{product_label}» нет пресетов."
+        back_callback = build_callback("stand", project=project, stand=stand)
+        await _safe_edit(query.message, text, build_back_keyboard(back_callback, "« Продукт"))
+        return
+    text = f"{stand_line}\nПродукт: {product_label}\nВыберите пресет:"
+    await _safe_edit(query.message, text, build_preset_keyboard(project, stand, filtered, product))
 
 
 @router.callback_query(F.data.startswith("marker:"))
@@ -741,7 +814,10 @@ async def cb_preset(query: CallbackQuery, client: HubClient) -> None:
     if preset is None:
         return
     text = _manual_confirm_text(stand, preset["name"])
-    yes_callback = build_callback("preset_confirm", project=project, stand=stand, id=str(preset_id))
+    confirm_fields = {"project": project, "stand": stand, "id": str(preset_id)}
+    if parsed.get("product") is not None:
+        confirm_fields["product"] = parsed["product"]
+    yes_callback = build_callback("preset_confirm", **confirm_fields)
     await _safe_edit(query.message, text, build_manual_confirm_keyboard(yes_callback))
 
 
@@ -764,10 +840,16 @@ async def cb_preset_confirm(
     preset = await _get_preset_or_notify(query, client, project, stand, preset_id)
     if preset is None:
         return
+    # Автометка сборки — та же идея, что в вебе (п.2 миссии): "<Продукт>", без
+    # "<Продукт> · <Вид>" — у бота нет шага «вид» (см. отчёт задачи), а "Всё" без
+    # вида, как и в вебе, не даёт метки.
+    product = parsed.get("product")
+    label = PRESET_PRODUCT_LABELS.get(product) if product and product != "all" else None
+    run_kwargs = {"target": preset["target"], "confirm_manual": True}
+    if label:
+        run_kwargs["label"] = label
     try:
-        run = await client.submit_run(
-            project, stand, preset.get("marker"), target=preset["target"], confirm_manual=True
-        )
+        run = await client.submit_run(project, stand, preset.get("marker"), **run_kwargs)
     except httpx.HTTPError as exc:
         logger.warning("tg_bot: не удалось поставить прогон по пресету %s: %s", preset.get("name"), exc)
         await _safe_edit(query.message, "Не удалось поставить прогон.")
