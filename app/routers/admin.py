@@ -11,7 +11,7 @@ import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from ..core import runner
+from ..core import retention, runner
 from ..deps import get_db, require_roles
 from ..schemas import AdminUserUpdate
 from ..security import hash_password
@@ -79,7 +79,18 @@ def overview(
         "counts": counts,
         "runs_by_status": runs_by_status,
         "recent_runs": [_row_payload("runs", r) for r in recent],
+        "disk": retention.disk_usage(),
     }
+
+
+@router.post("/retention/purge")
+def purge_retention_now(
+    _user: sqlite3.Row = Depends(require_roles("superadmin")),
+) -> dict:
+    """Кнопка «Очистить сейчас» — тот же код, что у фоновой задачи раз в сутки
+    (app/core/retention.py::retention_loop), запущенный немедленно."""
+    removed = retention.purge_expired()
+    return {"removed": removed, "disk": retention.disk_usage()}
 
 
 @router.get("/{table}")

@@ -12,7 +12,7 @@ from .config import BASE_DIR, settings
 # core.datagen — под псевдонимом: ниже из .routers импортируется одноимённый модуль-роутер,
 # и без псевдонима он затенил бы ядро (lifespan звал бы recover_stale у роутера).
 from .core import datagen as datagen_core
-from .core import demo_video, eta, live, runner, schedule
+from .core import demo_video, eta, live, retention, runner, schedule
 from .db import init_db
 from .routers import (
     admin, auth, coverage, datagen, flaky, new_defects, product_map, projects, runs, schedules, sections, sentry,
@@ -76,6 +76,12 @@ async def lifespan(app: FastAPI):
     scheduler_task = asyncio.create_task(schedule.scheduler_loop())
     app.state.schedule_task = scheduler_task
 
+    # Ретеншен файлов прогона (app/core/retention.py, раздел 5 docs/missions/
+    # 2026-11-02_review_fixes.md) — та же пара запуска/остановки задачи, что у
+    # scheduler_task выше, только раз в сутки.
+    retention_task = asyncio.create_task(retention.retention_loop())
+    app.state.retention_task = retention_task
+
     # Демо-сервис (demo/app/) — отдельный процесс uvicorn на TH_DEMO_PORT, не
     # asyncio-задача в нашем процессе: это самостоятельное FastAPI-приложение со
     # своими роутами, и запуск его как второго uvicorn.Server в том же event loop
@@ -103,6 +109,10 @@ async def lifespan(app: FastAPI):
     scheduler_task.cancel()
     with contextlib.suppress(asyncio.CancelledError):
         await scheduler_task
+
+    retention_task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await retention_task
 
     if demo_proc is not None and demo_proc.returncode is None:
         demo_proc.terminate()

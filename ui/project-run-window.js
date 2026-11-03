@@ -97,6 +97,10 @@
   }
 
   function renderFramesTab() {
+    const t = selectedNodeid ? splitTestsByNodeid[selectedNodeid] : null;
+    if (t && t.has_frames && t.frames_purged) {
+      return `<div class="frame-shot"><b>Кадров нет</b><span>${escapeHtml(RunLiveLogic.framesRetentionMessage(t.frames_retention_days))}</span></div>`;
+    }
     if (!selectedTestFrames.length) {
       return `<div class="frame-shot"><b>Кадров нет</b><span>У этого теста нет кадров — либо это API-тест, либо плагин ещё не прислал ни одного.</span></div>`;
     }
@@ -172,9 +176,12 @@
 
   function renderVideoTab() {
     const t = selectedNodeid ? splitTestsByNodeid[selectedNodeid] : null;
-    if (!t || !t.has_video) {
+    if (!t || !t.has_video || t.video_purged) {
+      const message = t && t.has_video && t.video_purged
+        ? RunLiveLogic.videoRetentionMessage(t.video_retention_days)
+        : "Плагин не записал видео для этого теста.";
       return maybePhoneFrame(
-        `<div class="frame-shot"><b>Видео нет</b><span>Плагин не записал видео для этого теста.</span></div>`,
+        `<div class="frame-shot"><b>Видео нет</b><span>${escapeHtml(message)}</span></div>`,
         frameTimeText(liveFrame)
       );
     }

@@ -28,6 +28,19 @@
     return null;
   }
 
+  // Ретеншен (docs/missions/2026-11-02_review_fixes.md, п.5, app/core/retention.py)
+  // удаляет каталоги video/frames прогона старше TH_KEEP_*_DAYS, но не трогает
+  // has_video/has_frames (они остаются true навсегда) — отличить "видео было, но
+  // срок хранения истёк" от "плагин ничего не записывал" даёт test.video_purged/
+  // test.frames_purged (app/routers/runs.py::list_run_tests).
+  function videoRetentionMessage(days) {
+    return "Видео удалено по сроку хранения (" + days + " дней).";
+  }
+
+  function framesRetentionMessage(days) {
+    return "Кадры удалены по сроку хранения (" + days + " дней).";
+  }
+
   // «нет сигнала»: с последнего live-кадра этого теста прошло больше LIVE_STALE_MS.
   // lastLiveAt отсутствует (ещё не было ни одного кадра) — тоже считается «нет сигнала».
   function isLiveStale(lastLiveAt, now) {
@@ -111,6 +124,8 @@
 
   var api = {
     LIVE_STALE_MS: LIVE_STALE_MS,
+    videoRetentionMessage: videoRetentionMessage,
+    framesRetentionMessage: framesRetentionMessage,
     mediaTabForTest: mediaTabForTest,
     isLiveStale: isLiveStale,
     shouldAutoSelectOnTestStart: shouldAutoSelectOnTestStart,
