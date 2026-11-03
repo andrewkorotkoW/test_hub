@@ -88,13 +88,28 @@
   // "integration" — только INTEGRATION_AREAS (зеркало "regression"), "smoke"/не
   // задан — без доп. фильтра (все файлы продукта; маркер smoke ставит вызывающий
   // код, как и раньше — это pytest-маркер, а не раздел файловой системы).
+  // Совместимость со старым вызовом presetLeafTargets(data, "api"|"all"|...) —
+  // до переписывания project-sections-picker.js (отдельная задача) он продолжает
+  // звать пресет строкой; "all" значит «любой продукт», остальные строки — это kind.
+  function normalizePresetOpts(opts) {
+    if (typeof opts === "string") {
+      return opts === "all" ? { product: "all" } : { kind: opts };
+    }
+    return opts || {};
+  }
+
   function presetLeafTargets(data, opts) {
-    var options = opts || {};
+    var options = normalizePresetOpts(opts);
     var product = options.product || "all";
     var kind = options.kind;
     var targets = [];
+    // "mobile"/"regression"/"integration"/без kind ("smoke"/не задан) фильтруют
+    // внутри kind (по области/файлу, см. ниже) — любой другой kind (включая
+    // "api"/"ui"/"e2e" и неизвестные значения) фильтрует целиком по kindNode.kind,
+    // как раньше (неизвестный preset/kind -> пустой список, а не "без фильтра").
+    var isSpecialKind = kind === "mobile" || kind === "regression" || kind === "integration" || kind === "smoke" || !kind;
     (data.kinds || []).forEach(function (kindNode) {
-      if ((kind === "api" || kind === "ui" || kind === "e2e") && kindNode.kind !== kind) return;
+      if (!isSpecialKind && kindNode.kind !== kind) return;
       (kindNode.areas || []).forEach(function (area) {
         var areaProduct = productOf(area.area);
         var inProduct = product === "all" || (product === "lms" ? areaProduct === "lms" : areaProduct === product);
