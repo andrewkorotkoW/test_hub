@@ -132,7 +132,7 @@ async def retention_loop(poll_interval: float = POLL_INTERVAL_SECONDS) -> None:
     schedule.scheduler_loop, только раз в сутки, а не раз в минуту)."""
     while True:
         try:
-            purge_expired()
+            await asyncio.to_thread(purge_expired)
         except Exception:
             logger.exception("retention: ошибка цикла очистки по сроку хранения")
         await asyncio.sleep(poll_interval)

@@ -272,6 +272,8 @@ async def test_split_card_api_shape_matches_what_project_js_reads(qa_client, iso
         {
             "nodeid": nodeid, "full_name": "tests.ui.test_x#test_foo", "status": "passed", "has_frames": True,
             "has_video": False, "video_duration_ms": None,
+            "video_purged": False, "frames_purged": True,
+            "video_retention_days": 14, "frames_retention_days": 30,
         }
     ]
     # поля, которые реально читает project.js (testRowHtml/upsertSplitTest/normalizeTestStatus) —

@@ -504,6 +504,39 @@ def test_run_history_for_test_matches_parametrized_key(flaky_history_parametrize
     assert flaky.run_history_for_test(PROJECT, STAND, base) == [], "по голому fullName параметризованный кейс не находится"
 
 
+def test_recalc_skips_run_purged_by_retention_without_crashing(db_path, isolated_allure_dir):
+    """app/core/retention.py удаляет allure_dir целиком у finished-прогонов старше
+    TH_KEEP_RESULTS_DAYS, но строку в runs не трогает — allure_report.parse_results
+    отдаёт [] для отсутствующего каталога (см. docstring recalc()), поэтому такой
+    прогон просто не добавляет запись в последовательность статусов, а не роняет
+    recalc() и не портит историю прогонов, у которых каталог ещё на диске."""
+    from app.config import settings
+
+    conn = get_connection()
+    try:
+        _insert_project_and_stand(conn)
+        run_a = _insert_run(conn, "passed")
+        run_b = _insert_run(conn, "failed")  # каталог удалён ретеншеном
+        run_c = _insert_run(conn, "passed")
+    finally:
+        conn.close()
+
+    full_name = "tests.test_flaky_sample#test_purged"
+    _write_allure_result(settings.ALLURE_RESULTS_DIR / str(run_a), "00-result.json", full_name, "passed")
+    assert not (settings.ALLURE_RESULTS_DIR / str(run_b)).is_dir()
+    _write_allure_result(settings.ALLURE_RESULTS_DIR / str(run_c), "00-result.json", full_name, "passed")
+
+    stats = flaky.recalc(PROJECT, STAND)
+
+    assert len(stats) == 1
+    row = stats[0]
+    assert row["test"] == full_name
+    assert row["runs"] == 2, "прогон без каталога просто выпал, а не добавил пустую/ошибочную запись"
+    assert row["fails"] == 0
+    assert row["flips"] == 0
+    assert row["last_statuses"] == ["passed", "passed"]
+
+
 def test_test_key_and_split_roundtrip():
     assert flaky.test_key({"name": "tests.a#test_x", "params": "p1-p2"}) == "tests.a#test_x[p1-p2]"
     assert flaky.test_key({"name": "tests.a#test_x", "params": None}) == "tests.a#test_x"
