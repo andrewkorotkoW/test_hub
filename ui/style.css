@@ -666,17 +666,6 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
   border-color: var(--border);
   color: var(--text);
 }
-/* Активная кнопка: селектор с атрибутом — иначе правила
-   .sections-preset-btn[data-preset|data-product]:not([…="all"]) выше (специфичность
-   0,3,0) перебивают цвет текста у .active (0,2,0), и подпись сливается с фоном
-   (найдено на ревью 03.11: «Helpdesk»/«API» в активном состоянии без текста). */
-.sections-preset-btn.active,
-.sections-preset-btn[data-preset].active,
-.sections-preset-btn[data-product].active {
-  background: var(--preset-color, var(--action-accent));
-  border-color: var(--preset-color, var(--action-accent));
-  color: var(--action-accent-text);
-}
 /* Ряд «Что» (продукт, data-product="lms|helpdesk|lrs|all") — отдельный ряд над
    «Как» (docs/missions/redesign/product_presets/mockups.html, вариант A): цвет
    не статусный, а цвет проекта (--accent), т.к. это не «вид проверки», а «что
@@ -694,6 +683,17 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
 .sections-preset-btn[data-product="all"]:hover {
   border-color: var(--border);
   color: var(--text);
+}
+/* Активная кнопка: селектор с атрибутом — иначе правила
+   .sections-preset-btn[data-preset|data-product]:not([…="all"]) выше (специфичность
+   0,3,0) равны по специфичности .active-правилу с атрибутом (0,3,0), поэтому оно должно стоять ПОСЛЕ обоих блоков — побеждает последнее, и подпись сливается с фоном
+   (найдено на ревью 03.11: «Helpdesk»/«API» в активном состоянии без текста). */
+.sections-preset-btn.active,
+.sections-preset-btn[data-preset].active,
+.sections-preset-btn[data-product].active {
+  background: var(--preset-color, var(--action-accent));
+  border-color: var(--preset-color, var(--action-accent));
+  color: var(--action-accent-text);
 }
 /* Буквенная марка (L/H/R) и число тестов продукта справа — различают кнопки
    ряда «Что» по форме, а не по цвету (цвет у них один, --accent). */
