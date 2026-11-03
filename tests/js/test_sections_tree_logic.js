@@ -334,6 +334,119 @@ test("presetLeafTargets: обратная совместимость со ста
   assert.deepStrictEqual(Logic.presetLeafTargets(data, "api"), Logic.presetLeafTargets(data, { kind: "api" }));
 });
 
+// Полная матрица product x kind из плана (docs/missions/2026-11-03_product_presets.md,
+// раздел 1): LMS/Helpdesk/LRS/Всё x API/UI/Smoke/E2E/Regression/Mobile/Integration/без вида,
+// на productTree() (там есть все четыре продукта: lms, helpdesk, lrs, integration).
+// Для каждой пары заданы точные ожидаемые target'ы — вычислены вручную по структуре дерева,
+// не через саму функцию (иначе тест ничего бы не проверял).
+test("presetLeafTargets: полная матрица product x kind (без вида/smoke — одинаково, все продукты)", function () {
+  var data = productTree();
+  var noKindByProduct = {
+    all: [
+      "tests/api/notifications/test_list.py",
+      "tests/api/helpdesk/test_tickets.py",
+      "tests/api/buk/test_x.py",
+      "tests/ui/tickets/test_board.py",
+      "tests/ui/lrs/test_courses.py",
+      "tests/ui/mobile/test_login.py",
+    ],
+    lms: ["tests/api/notifications/test_list.py", "tests/ui/mobile/test_login.py"],
+    helpdesk: ["tests/api/helpdesk/test_tickets.py", "tests/ui/tickets/test_board.py"],
+    lrs: ["tests/ui/lrs/test_courses.py"],
+  };
+  Object.keys(noKindByProduct).forEach(function (product) {
+    assert.deepStrictEqual(Logic.presetLeafTargets(data, { product: product }), noKindByProduct[product]);
+    // smoke — маркер, не раздел ФС: та же выборка файлов, что и без вида вовсе
+    assert.deepStrictEqual(Logic.presetLeafTargets(data, { product: product, kind: "smoke" }), noKindByProduct[product]);
+  });
+});
+
+test("presetLeafTargets: матрица product x kind='api' — только api-kindNode, сужен по продукту", function () {
+  var data = productTree();
+  assert.deepStrictEqual(Logic.presetLeafTargets(data, { product: "all", kind: "api" }), [
+    "tests/api/notifications/test_list.py",
+    "tests/api/helpdesk/test_tickets.py",
+    "tests/api/buk/test_x.py",
+  ]);
+  assert.deepStrictEqual(Logic.presetLeafTargets(data, { product: "lms", kind: "api" }), [
+    "tests/api/notifications/test_list.py",
+  ]);
+  assert.deepStrictEqual(Logic.presetLeafTargets(data, { product: "helpdesk", kind: "api" }), [
+    "tests/api/helpdesk/test_tickets.py",
+  ]);
+  assert.deepStrictEqual(Logic.presetLeafTargets(data, { product: "lrs", kind: "api" }), []);
+});
+
+test("presetLeafTargets: матрица product x kind='ui' — только ui-kindNode, сужен по продукту", function () {
+  var data = productTree();
+  assert.deepStrictEqual(Logic.presetLeafTargets(data, { product: "all", kind: "ui" }), [
+    "tests/ui/tickets/test_board.py",
+    "tests/ui/lrs/test_courses.py",
+    "tests/ui/mobile/test_login.py",
+  ]);
+  assert.deepStrictEqual(Logic.presetLeafTargets(data, { product: "lms", kind: "ui" }), [
+    "tests/ui/mobile/test_login.py",
+  ]);
+  assert.deepStrictEqual(Logic.presetLeafTargets(data, { product: "helpdesk", kind: "ui" }), [
+    "tests/ui/tickets/test_board.py",
+  ]);
+  assert.deepStrictEqual(Logic.presetLeafTargets(data, { product: "lrs", kind: "ui" }), [
+    "tests/ui/lrs/test_courses.py",
+  ]);
+});
+
+test("presetLeafTargets: матрица product x kind='e2e' — нет e2e-kindNode в дереве -> пусто для любого продукта", function () {
+  var data = productTree();
+  ["all", "lms", "helpdesk", "lrs"].forEach(function (product) {
+    assert.deepStrictEqual(Logic.presetLeafTargets(data, { product: product, kind: "e2e" }), []);
+  });
+});
+
+test("presetLeafTargets: матрица product x kind='regression' — исключает только INTEGRATION_AREAS (buk), helpdesk/lrs/mobile остаются", function () {
+  var data = productTree();
+  assert.deepStrictEqual(Logic.presetLeafTargets(data, { product: "all", kind: "regression" }), [
+    "tests/api/notifications/test_list.py",
+    "tests/api/helpdesk/test_tickets.py",
+    "tests/ui/tickets/test_board.py",
+    "tests/ui/lrs/test_courses.py",
+    "tests/ui/mobile/test_login.py",
+  ]);
+  assert.deepStrictEqual(
+    Logic.presetLeafTargets(data, { product: "lms", kind: "regression" }),
+    Logic.presetLeafTargets(data, { product: "lms" })
+  );
+  assert.deepStrictEqual(
+    Logic.presetLeafTargets(data, { product: "helpdesk", kind: "regression" }),
+    Logic.presetLeafTargets(data, { product: "helpdesk" })
+  );
+  assert.deepStrictEqual(
+    Logic.presetLeafTargets(data, { product: "lrs", kind: "regression" }),
+    Logic.presetLeafTargets(data, { product: "lrs" })
+  );
+});
+
+test("presetLeafTargets: матрица product x kind='mobile' — только область 'mobile' (продукт lms), 0 у Helpdesk/LRS", function () {
+  var data = productTree();
+  assert.deepStrictEqual(Logic.presetLeafTargets(data, { product: "all", kind: "mobile" }), [
+    "tests/ui/mobile/test_login.py",
+  ]);
+  assert.deepStrictEqual(Logic.presetLeafTargets(data, { product: "lms", kind: "mobile" }), [
+    "tests/ui/mobile/test_login.py",
+  ]);
+  assert.deepStrictEqual(Logic.presetLeafTargets(data, { product: "helpdesk", kind: "mobile" }), []);
+  assert.deepStrictEqual(Logic.presetLeafTargets(data, { product: "lrs", kind: "mobile" }), []);
+});
+
+test("presetLeafTargets: матрица product x kind='integration' — только INTEGRATION_AREAS (buk); 0 у LMS/Helpdesk/LRS (это их продукт сам не является integration)", function () {
+  var data = productTree();
+  assert.deepStrictEqual(Logic.presetLeafTargets(data, { product: "all", kind: "integration" }), [
+    "tests/api/buk/test_x.py",
+  ]);
+  assert.deepStrictEqual(Logic.presetLeafTargets(data, { product: "lms", kind: "integration" }), []);
+  assert.deepStrictEqual(Logic.presetLeafTargets(data, { product: "helpdesk", kind: "integration" }), []);
+  assert.deepStrictEqual(Logic.presetLeafTargets(data, { product: "lrs", kind: "integration" }), []);
+});
+
 // ------------------------------------------------------------------ kindAvailableForProduct
 
 test("kindAvailableForProduct: Mobile доступен только при 'all'/'lms'", function () {
