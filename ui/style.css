@@ -666,7 +666,13 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
   border-color: var(--border);
   color: var(--text);
 }
-.sections-preset-btn.active {
+/* Активная кнопка: селектор с атрибутом — иначе правила
+   .sections-preset-btn[data-preset|data-product]:not([…="all"]) выше (специфичность
+   0,3,0) перебивают цвет текста у .active (0,2,0), и подпись сливается с фоном
+   (найдено на ревью 03.11: «Helpdesk»/«API» в активном состоянии без текста). */
+.sections-preset-btn.active,
+.sections-preset-btn[data-preset].active,
+.sections-preset-btn[data-product].active {
   background: var(--preset-color, var(--action-accent));
   border-color: var(--preset-color, var(--action-accent));
   color: var(--action-accent-text);
