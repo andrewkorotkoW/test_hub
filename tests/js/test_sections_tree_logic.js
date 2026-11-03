@@ -208,6 +208,165 @@ test("presetLeafTargets('mobile') — нет области 'mobile' в дере
   assert.deepStrictEqual(Logic.presetLeafTargets(sampleTree(), "mobile"), []);
 });
 
+// ------------------------------------------------------------------ productOf/PRODUCT_AREAS/INTEGRATION_AREAS
+
+// Дерево со всеми продуктами: lms (notifications), helpdesk (helpdesk+tickets),
+// lrs, integration (buk) — у каждого файла свой tests_count (не 1), чтобы отличить
+// подсчёт тестов от подсчёта файлов (countCheckedByKind/productTestCounts).
+function productTree() {
+  return {
+    kinds: [
+      {
+        kind: "api",
+        target: "tests/api",
+        areas: [
+          {
+            area: "notifications", section: "api/notifications", target: "tests/api/notifications", tests_count: 3,
+            files: [{ name: "test_list.py", target: "tests/api/notifications/test_list.py", tests_count: 3 }],
+          },
+          {
+            area: "helpdesk", section: "api/helpdesk", target: "tests/api/helpdesk", tests_count: 2,
+            files: [{ name: "test_tickets.py", target: "tests/api/helpdesk/test_tickets.py", tests_count: 2 }],
+          },
+          {
+            area: "buk", section: "api/buk", target: "tests/api/buk", tests_count: 1,
+            files: [{ name: "test_x.py", target: "tests/api/buk/test_x.py", tests_count: 1 }],
+          },
+        ],
+      },
+      {
+        kind: "ui",
+        target: "tests/ui",
+        areas: [
+          {
+            area: "tickets", section: "ui/tickets", target: "tests/ui/tickets", tests_count: 4,
+            files: [{ name: "test_board.py", target: "tests/ui/tickets/test_board.py", tests_count: 4 }],
+          },
+          {
+            area: "lrs", section: "ui/lrs", target: "tests/ui/lrs", tests_count: 5,
+            files: [{ name: "test_courses.py", target: "tests/ui/lrs/test_courses.py", tests_count: 5 }],
+          },
+          {
+            area: "mobile", section: "ui/mobile", target: "tests/ui/mobile", tests_count: 2,
+            files: [{ name: "test_login.py", target: "tests/ui/mobile/test_login.py", tests_count: 2 }],
+          },
+        ],
+      },
+    ],
+  };
+}
+
+test("PRODUCT_AREAS/INTEGRATION_AREAS: точный набор областей из плана", function () {
+  assert.deepStrictEqual(Logic.PRODUCT_AREAS, { helpdesk: ["helpdesk", "tickets"], lrs: ["lrs"] });
+  assert.deepStrictEqual(Logic.INTEGRATION_AREAS, ["ai_chat", "cas", "buk", "mts_link", "p2p"]);
+});
+
+test("REGRESSION_EXCLUDED_AREAS: ровно INTEGRATION_AREAS (helpdesk/tickets/lrs больше не исключены)", function () {
+  assert.deepStrictEqual(Logic.REGRESSION_EXCLUDED_AREAS, Logic.INTEGRATION_AREAS);
+});
+
+test("productOf: helpdesk/tickets -> helpdesk, lrs -> lrs, внешние интеграции -> integration, остальное -> lms", function () {
+  assert.strictEqual(Logic.productOf("helpdesk"), "helpdesk");
+  assert.strictEqual(Logic.productOf("tickets"), "helpdesk");
+  assert.strictEqual(Logic.productOf("lrs"), "lrs");
+  ["ai_chat", "cas", "buk", "mts_link", "p2p"].forEach(function (area) {
+    assert.strictEqual(Logic.productOf(area), "integration");
+  });
+  assert.strictEqual(Logic.productOf("notifications"), "lms");
+  assert.strictEqual(Logic.productOf("mobile"), "lms");
+  assert.strictEqual(Logic.productOf(null), "lms");
+});
+
+// ------------------------------------------------------------------ presetLeafTargets({product, kind})
+
+test("presetLeafTargets({product: 'all'}) — все файлы всех продуктов, как и объектом не задано", function () {
+  var data = productTree();
+  assert.deepStrictEqual(Logic.presetLeafTargets(data, { product: "all" }), Logic.allLeafTargets(data));
+  assert.deepStrictEqual(Logic.presetLeafTargets(data, {}), Logic.allLeafTargets(data));
+  assert.deepStrictEqual(Logic.presetLeafTargets(data, undefined), Logic.allLeafTargets(data));
+});
+
+test("presetLeafTargets({product: 'lms'}) — всё, что не helpdesk/lrs/integration (mobile — lms)", function () {
+  assert.deepStrictEqual(Logic.presetLeafTargets(productTree(), { product: "lms" }), [
+    "tests/api/notifications/test_list.py",
+    "tests/ui/mobile/test_login.py",
+  ]);
+});
+
+test("presetLeafTargets({product: 'helpdesk'}) — только области helpdesk/tickets (в любом kind)", function () {
+  assert.deepStrictEqual(Logic.presetLeafTargets(productTree(), { product: "helpdesk" }), [
+    "tests/api/helpdesk/test_tickets.py",
+    "tests/ui/tickets/test_board.py",
+  ]);
+});
+
+test("presetLeafTargets({product: 'lrs'}) — только область lrs", function () {
+  assert.deepStrictEqual(Logic.presetLeafTargets(productTree(), { product: "lrs" }), ["tests/ui/lrs/test_courses.py"]);
+});
+
+test("presetLeafTargets({product: 'lms', kind: 'regression'}) — Regression внутри LMS не меняется (helpdesk/lrs и так не в LMS)", function () {
+  assert.deepStrictEqual(
+    Logic.presetLeafTargets(productTree(), { product: "lms", kind: "regression" }),
+    Logic.presetLeafTargets(productTree(), { product: "lms" })
+  );
+});
+
+test("presetLeafTargets({kind: 'regression'}) при product='all' — helpdesk/tickets/lrs теперь ВКЛЮЧЕНЫ (только integration исключён)", function () {
+  var targets = Logic.presetLeafTargets(productTree(), { kind: "regression" });
+  assert.deepStrictEqual(targets, [
+    "tests/api/notifications/test_list.py",
+    "tests/api/helpdesk/test_tickets.py",
+    "tests/ui/tickets/test_board.py",
+    "tests/ui/lrs/test_courses.py",
+    "tests/ui/mobile/test_login.py",
+  ]);
+});
+
+test("presetLeafTargets({kind: 'integration'}) при product='all' — ровно INTEGRATION_AREAS, helpdesk/lrs не входят", function () {
+  assert.deepStrictEqual(Logic.presetLeafTargets(productTree(), { kind: "integration" }), ["tests/api/buk/test_x.py"]);
+});
+
+test("presetLeafTargets: обратная совместимость со старым вызовом строкой (project-sections-picker.js, другая задача)", function () {
+  var data = productTree();
+  assert.deepStrictEqual(Logic.presetLeafTargets(data, "all"), Logic.allLeafTargets(data));
+  assert.deepStrictEqual(Logic.presetLeafTargets(data, "regression"), Logic.presetLeafTargets(data, { kind: "regression" }));
+  assert.deepStrictEqual(Logic.presetLeafTargets(data, "integration"), Logic.presetLeafTargets(data, { kind: "integration" }));
+  assert.deepStrictEqual(Logic.presetLeafTargets(data, "api"), Logic.presetLeafTargets(data, { kind: "api" }));
+});
+
+// ------------------------------------------------------------------ kindAvailableForProduct
+
+test("kindAvailableForProduct: Mobile доступен только при 'all'/'lms'", function () {
+  assert.strictEqual(Logic.kindAvailableForProduct("mobile", "all"), true);
+  assert.strictEqual(Logic.kindAvailableForProduct("mobile", "lms"), true);
+  assert.strictEqual(Logic.kindAvailableForProduct("mobile", "helpdesk"), false);
+  assert.strictEqual(Logic.kindAvailableForProduct("mobile", "lrs"), false);
+});
+
+test("kindAvailableForProduct: Regression/Integration недоступны при Helpdesk/LRS, доступны иначе", function () {
+  ["regression", "integration"].forEach(function (kind) {
+    assert.strictEqual(Logic.kindAvailableForProduct(kind, "helpdesk"), false);
+    assert.strictEqual(Logic.kindAvailableForProduct(kind, "lrs"), false);
+    assert.strictEqual(Logic.kindAvailableForProduct(kind, "all"), true);
+    assert.strictEqual(Logic.kindAvailableForProduct(kind, "lms"), true);
+  });
+});
+
+test("kindAvailableForProduct: остальные виды (api/ui/e2e/smoke) доступны всегда", function () {
+  ["api", "ui", "e2e", "smoke"].forEach(function (kind) {
+    ["all", "lms", "helpdesk", "lrs"].forEach(function (product) {
+      assert.strictEqual(Logic.kindAvailableForProduct(kind, product), true);
+    });
+  });
+});
+
+// ------------------------------------------------------------------ productTestCounts
+
+test("productTestCounts: суммы tests_count по продукту области (integration не имеет своей кнопки, но входит в all)", function () {
+  var counts = Logic.productTestCounts(productTree());
+  assert.deepStrictEqual(counts, { lms: 5, helpdesk: 6, lrs: 5, all: 17 });
+});
+
 // ------------------------------------------------------------------ collectTargets
 
 test("collectTargets: один файл из области с несколькими файлами — путь именно этого файла", function () {
@@ -354,6 +513,15 @@ test("countCheckedByKind: total и разбивка по api/ui/e2e", function (
 test("countCheckedByKind: пустой выбор — все счётчики нулевые", function () {
   var counts = Logic.countCheckedByKind(sampleTree(), new Set());
   assert.deepStrictEqual(counts, { total: 0, api: 0, ui: 0, e2e: 0 });
+});
+
+test("countCheckedByKind: считает тесты (file.tests_count), а не количество отмеченных файлов", function () {
+  // notifications.test_list.py отмечен один файл, но в нём 3 теста — total/api
+  // должны быть 3, не 1 (баг до этой задачи: строка итога смешивала файлы и тесты).
+  var data = productTree();
+  var checked = new Set(["tests/api/notifications/test_list.py", "tests/ui/tickets/test_board.py"]);
+  var counts = Logic.countCheckedByKind(data, checked);
+  assert.deepStrictEqual(counts, { total: 7, api: 3, ui: 4, e2e: 0 });
 });
 
 // ------------------------------------------------------------------ expandedKeysForQuery

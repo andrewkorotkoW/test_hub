@@ -52,52 +52,106 @@
     return targets;
   }
 
-  // Области (area = имя подпапки tests/api|ui/<area>), которые пресет «Regression»
-  // исключает из «всего функционала» — внешние интеграции и зависящее от них
-  // (ai_chat, CAS, БУК, MTS Link, P2P, хелпдеск/тикеты, LRS): на новом/неполном
-  // стенде они обычно не настроены и массово валятся, забивая прогон вместо
-  // проверки основного функционала (см. разведку 16.10.2026, стенд «stand»).
-  var REGRESSION_EXCLUDED_AREAS = ["ai_chat", "cas", "buk", "mts_link", "p2p", "helpdesk", "tickets", "lrs"];
+  // Продукты платформы (см. docs/missions/2026-11-03_product_presets.md): LMS —
+  // всё, что не Helpdesk/LRS/внешние интеграции (fallback в productOf), Helpdesk —
+  // области helpdesk/tickets, LRS — область lrs. INTEGRATION_AREAS — внешние
+  // интеграции (ai_chat, CAS, БУК, MTS Link, P2P), которые пресет «Regression»
+  // исключает из «всего функционала»: на новом/неполном стенде они обычно не
+  // настроены и массово валятся, забивая прогон вместо проверки основного
+  // функционала (см. разведку 16.10.2026, стенд «stand»). Helpdesk/LRS больше не
+  // входят в этот список — у них свои продуктовые пресеты, им Regression/Integration
+  // недоступны вовсе (см. kindAvailableForProduct).
+  var PRODUCT_AREAS = { helpdesk: ["helpdesk", "tickets"], lrs: ["lrs"] };
+  var INTEGRATION_AREAS = ["ai_chat", "cas", "buk", "mts_link", "p2p"];
+  var REGRESSION_EXCLUDED_AREAS = INTEGRATION_AREAS;
+
+  // Продукт, которому принадлежит область (area.area из дерева разделов).
+  function productOf(area) {
+    if (PRODUCT_AREAS.helpdesk.indexOf(area) !== -1) return "helpdesk";
+    if (PRODUCT_AREAS.lrs.indexOf(area) !== -1) return "lrs";
+    if (INTEGRATION_AREAS.indexOf(area) !== -1) return "integration";
+    return "lms";
+  }
 
   function isRegressionExcluded(target) {
     var parts = String(target || "").split("/");
     return parts.some(function (part) { return REGRESSION_EXCLUDED_AREAS.indexOf(part) !== -1; });
   }
 
-  // Файлы области area (area = имя подпапки tests/<kind>/<area>) по всем видам —
-  // для «Mobile» используется area "mobile" (сейчас только tests/ui/mobile, но
-  // ищем по всем kind на случай появления tests/api/mobile).
-  function areaLeafTargets(data, areaName) {
+  // Пресеты продукт×вид: возвращают набор target'ов файлов, которые форма запуска
+  // должна отметить в дереве (см. project.js — после этого дерево перерисовывается
+  // с уже выставленными чекбоксами, пользователь может донастроить выбор вручную).
+  // opts.product — "all" (по умолчанию, все продукты) | "lms" (всё, что не
+  // Helpdesk/LRS/Integration) | "helpdesk" | "lrs" — сужает множество областей;
+  // opts.kind фильтрует внутри продукта: "api"/"ui"/"e2e" — по виду раздела,
+  // "mobile" — область "mobile", "regression" — без INTEGRATION_AREAS,
+  // "integration" — только INTEGRATION_AREAS (зеркало "regression"), "smoke"/не
+  // задан — без доп. фильтра (все файлы продукта; маркер smoke ставит вызывающий
+  // код, как и раньше — это pytest-маркер, а не раздел файловой системы).
+  // Совместимость со старым вызовом presetLeafTargets(data, "api"|"all"|...) —
+  // до переписывания project-sections-picker.js (отдельная задача) он продолжает
+  // звать пресет строкой; "all" значит «любой продукт», остальные строки — это kind.
+  function normalizePresetOpts(opts) {
+    if (typeof opts === "string") {
+      return opts === "all" ? { product: "all" } : { kind: opts };
+    }
+    return opts || {};
+  }
+
+  function presetLeafTargets(data, opts) {
+    var options = normalizePresetOpts(opts);
+    var product = options.product || "all";
+    var kind = options.kind;
     var targets = [];
+    // "mobile"/"regression"/"integration"/без kind ("smoke"/не задан) фильтруют
+    // внутри kind (по области/файлу, см. ниже) — любой другой kind (включая
+    // "api"/"ui"/"e2e" и неизвестные значения) фильтрует целиком по kindNode.kind,
+    // как раньше (неизвестный preset/kind -> пустой список, а не "без фильтра").
+    var isSpecialKind = kind === "mobile" || kind === "regression" || kind === "integration" || kind === "smoke" || !kind;
     (data.kinds || []).forEach(function (kindNode) {
+      if (!isSpecialKind && kindNode.kind !== kind) return;
       (kindNode.areas || []).forEach(function (area) {
-        if (area.area !== areaName) return;
-        (area.files || []).forEach(function (file) { targets.push(file.target); });
+        var areaProduct = productOf(area.area);
+        var inProduct = product === "all" || (product === "lms" ? areaProduct === "lms" : areaProduct === product);
+        if (!inProduct) return;
+        if (kind === "mobile" && area.area !== "mobile") return;
+        (area.files || []).forEach(function (file) {
+          if (kind === "regression" && isRegressionExcluded(file.target)) return;
+          if (kind === "integration" && !isRegressionExcluded(file.target)) return;
+          targets.push(file.target);
+        });
       });
     });
     return targets;
   }
 
-  // Пресеты «API»/«UI»/«всё»/«Regression»/«Mobile»/«Integration»: возвращают набор
-  // target'ов файлов, которые форма запуска должна отметить в дереве (см. project.js —
-  // после этого дерево перерисовывается с уже выставленными чекбоксами,
-  // пользователь может донастроить выбор вручную). «Smoke» здесь не участвует —
-  // это существующий маркер pytest (markerSelect в project.js), а не раздел
-  // файловой системы. «Integration» — зеркало «Regression»: ровно те области,
-  // которые Regression исключает (см. REGRESSION_EXCLUDED_AREAS).
-  function presetLeafTargets(data, preset) {
-    if (preset === "all") return allLeafTargets(data);
-    if (preset === "regression") return allLeafTargets(data).filter(function (t) { return !isRegressionExcluded(t); });
-    if (preset === "integration") return allLeafTargets(data).filter(isRegressionExcluded);
-    if (preset === "mobile") return areaLeafTargets(data, "mobile");
-    var targets = [];
+  // Доступен ли вид (kind) при выбранном продукте (см. раздел «Как» в форме
+  // запуска): Mobile есть только у LMS (область "mobile" не принадлежит
+  // Helpdesk/LRS/Integration), Regression/Integration не имеют смысла для
+  // Helpdesk/LRS — у них нет внешних интеграций для исключения/выделения.
+  // Гашение кнопки (класс .dim) и сброс выбранного вида — в DOM-коде (другая
+  // задача), эта функция — чистый предикат для него.
+  function kindAvailableForProduct(kind, product) {
+    if (kind === "mobile" && product !== "all" && product !== "lms") return false;
+    if ((kind === "regression" || kind === "integration") && (product === "helpdesk" || product === "lrs")) return false;
+    return true;
+  }
+
+  // Число тестов на продукт (для цифр справа у кнопок L/H/R в ряду «Что»):
+  // {lms, helpdesk, lrs, all}, each — сумма file.tests_count по productOf(area.area);
+  // all — сумма по всем продуктам, включая Integration (у Integration нет своей
+  // кнопки, её тесты видны только внутри «Всё»/вида Integration).
+  function productTestCounts(data) {
+    var out = { lms: 0, helpdesk: 0, lrs: 0, all: 0 };
     (data.kinds || []).forEach(function (kindNode) {
-      if (kindNode.kind !== preset) return;
       (kindNode.areas || []).forEach(function (area) {
-        (area.files || []).forEach(function (file) { targets.push(file.target); });
+        var count = area.tests_count || 0;
+        var areaProduct = productOf(area.area);
+        if (areaProduct !== "integration") out[areaProduct] += count;
+        out.all += count;
       });
     });
-    return targets;
+    return out;
   }
 
   // Схлопывает отмеченные файлы в минимальный список target'ов для pytest: если
@@ -190,13 +244,18 @@
     return (files || []).filter(function (f) { return checked.has(f.target); }).length;
   }
 
-  // Строка итога под пресетами: сколько файлов отмечено всего и по каждому виду.
+  // Строка итога под пресетами: сколько ТЕСТОВ (не файлов — у файла может быть
+  // несколько тестов, file.tests_count) отмечено всего и по каждому виду.
   function countCheckedByKind(data, checkedTargets) {
+    var checked = checkedTargets instanceof Set ? checkedTargets : new Set(checkedTargets || []);
     var out = { total: 0, api: 0, ui: 0, e2e: 0 };
     (data.kinds || []).forEach(function (kindNode) {
-      var count = countChecked(kindAllFiles(kindNode), checkedTargets);
-      out[kindNode.kind] = count;
-      out.total += count;
+      var sum = 0;
+      kindAllFiles(kindNode).forEach(function (file) {
+        if (checked.has(file.target)) sum += file.tests_count || 0;
+      });
+      out[kindNode.kind] = sum;
+      out.total += sum;
     });
     return out;
   }
@@ -260,7 +319,7 @@
     var list = (targets || []).filter(Boolean);
     if (!list.length) return false;
     if (marker !== "e2e" && marker !== "api" && marker !== "ui") return false;
-    var markedFiles = presetLeafTargets(data, marker);
+    var markedFiles = presetLeafTargets(data, { kind: marker });
     if (!markedFiles.length) return false;
     return !list.some(function (target) {
       return markedFiles.some(function (file) { return targetCoversFile(target, file); });
@@ -271,7 +330,12 @@
     matchesQuery: matchesQuery,
     filterSectionsTree: filterSectionsTree,
     allLeafTargets: allLeafTargets,
+    PRODUCT_AREAS: PRODUCT_AREAS,
+    INTEGRATION_AREAS: INTEGRATION_AREAS,
+    productOf: productOf,
     presetLeafTargets: presetLeafTargets,
+    kindAvailableForProduct: kindAvailableForProduct,
+    productTestCounts: productTestCounts,
     isRegressionExcluded: isRegressionExcluded,
     REGRESSION_EXCLUDED_AREAS: REGRESSION_EXCLUDED_AREAS,
     collectTargets: collectTargets,
