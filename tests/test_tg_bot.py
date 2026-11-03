@@ -40,6 +40,7 @@ from app.tg_bot import (
     build_manual_confirm_keyboard,
     build_marker_keyboard,
     build_preset_keyboard,
+    build_preset_product_keyboard,
     build_project_keyboard,
     build_run_args,
     build_run_keyboard,
@@ -547,6 +548,25 @@ def test_parse_callback_preset_confirm():
     }
 
 
+def test_parse_callback_preset_with_product():
+    assert parse_callback("preset:bike_fit:stage:5:helpdesk") == {
+        "action": "preset",
+        "project": "bike_fit",
+        "stand": "stage",
+        "preset_id": 5,
+        "product": "helpdesk",
+    }
+
+
+def test_parse_callback_preset_product():
+    assert parse_callback("preset_product:bike_fit:stage:lms") == {
+        "action": "preset_product",
+        "project": "bike_fit",
+        "stand": "stage",
+        "product": "lms",
+    }
+
+
 def test_parse_callback_preset_non_integer_id_is_invalid():
     assert parse_callback("preset:bike_fit:stage:abc") == {"action": "invalid", "raw": "preset:bike_fit:stage:abc"}
 
@@ -646,6 +666,23 @@ def test_build_preset_keyboard_lists_presets_and_tests_and_back_buttons():
     assert buttons["Smoke"] == "preset:bike_fit:stage:1"
     assert buttons["БУК"] == "preset:bike_fit:stage:2"
     assert buttons["Выбрать тесты"] == "tests:bike_fit:stage"
+    assert buttons["« Продукт"] == "stand:bike_fit:stage"
+
+
+def test_build_preset_keyboard_carries_product_into_preset_callback():
+    presets = [{"id": 1, "name": "Smoke"}]
+    markup = build_preset_keyboard("bike_fit", "stage", presets, product="helpdesk")
+    buttons = {btn.text: btn.callback_data for row in markup.inline_keyboard for btn in row}
+    assert buttons["Smoke"] == "preset:bike_fit:stage:1:helpdesk"
+
+
+def test_build_preset_product_keyboard_has_four_products_and_back_to_stands():
+    markup = build_preset_product_keyboard("bike_fit", "stage")
+    buttons = {btn.text: btn.callback_data for row in markup.inline_keyboard for btn in row}
+    assert buttons["LMS"] == "preset_product:bike_fit:stage:lms"
+    assert buttons["Helpdesk"] == "preset_product:bike_fit:stage:helpdesk"
+    assert buttons["LRS"] == "preset_product:bike_fit:stage:lrs"
+    assert buttons["Всё"] == "preset_product:bike_fit:stage:all"
     assert buttons["« К стендам"] == "launch:bike_fit"
 
 
@@ -940,13 +977,12 @@ async def test_button_flow_stand_step_does_not_call_hub_client(monkeypatch):
     assert "Выберите набор тестов" in edited[0].text
 
 
-# ------------------------------------------------------------------ manual_only-стенд: пресеты + подтверждение запуска на stage
-async def test_button_flow_manual_only_stand_shows_preset_keyboard_instead_of_markers(monkeypatch):
+# ------------------------------------------------------------------ manual_only-стенд: продукт -> пресеты + подтверждение запуска на stage
+async def test_button_flow_manual_only_stand_shows_product_keyboard_instead_of_markers(monkeypatch):
     monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
     bot, session = _make_bot()
     client = AsyncMock(spec=HubClient)
     client.list_stands.return_value = [{"name": "stage", "manual_only": True}]
-    client.list_stand_presets.return_value = [{"id": 1, "name": "Smoke", "target": "all", "marker": "smoke"}]
     dispatcher = _make_dispatcher(client)
 
     flow_message = _message(bot, text="Выберите стенд:")
@@ -955,14 +991,71 @@ async def test_button_flow_manual_only_stand_shows_preset_keyboard_instead_of_ma
         Update(update_id=1, callback_query=_callback(bot, flow_message, "stand:bike_fit:stage", cb_id="c1")),
     )
 
+    client.list_stand_presets.assert_not_awaited()
+    edited = [c for c in session.calls if isinstance(c, EditMessageText)]
+    assert len(edited) == 1
+    assert "Выберите продукт" in edited[0].text
+    assert "только вручную" in edited[0].text
+    callback_datas = [btn.callback_data for row in edited[0].reply_markup.inline_keyboard for btn in row]
+    assert "preset_product:bike_fit:stage:lms" in callback_datas
+    assert "preset_product:bike_fit:stage:all" in callback_datas
+
+
+async def test_button_flow_preset_product_shows_filtered_preset_keyboard(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    client.list_stand_presets.return_value = [
+        {"id": 1, "name": "Smoke", "target": "all", "marker": "smoke"},
+        {"id": 2, "name": "БУК", "target": "tests/api/buk\ntests/ui/buk", "marker": None},
+    ]
+    dispatcher = _make_dispatcher(client)
+
+    flow_message = _message(bot, text="Выберите продукт:")
+    await dispatcher.feed_update(
+        bot,
+        Update(
+            update_id=1,
+            callback_query=_callback(bot, flow_message, "preset_product:bike_fit:stage:all", cb_id="c1"),
+        ),
+    )
+
     client.list_stand_presets.assert_awaited_once_with("bike_fit", "stage")
     edited = [c for c in session.calls if isinstance(c, EditMessageText)]
     assert len(edited) == 1
     assert "Выберите пресет" in edited[0].text
-    assert "только вручную" in edited[0].text
     callback_datas = [btn.callback_data for row in edited[0].reply_markup.inline_keyboard for btn in row]
-    assert "preset:bike_fit:stage:1" in callback_datas
+    assert "preset:bike_fit:stage:1:all" in callback_datas
+    assert "preset:bike_fit:stage:2:all" in callback_datas
     assert "tests:bike_fit:stage" in callback_datas
+
+
+async def test_button_flow_preset_product_filters_out_other_products(monkeypatch):
+    """Продукт Helpdesk исключает пресет "БУК" (область buk — внешняя интеграция,
+    не Helpdesk) — остаётся только общий "Smoke" (target="all", считается
+    общим/LMS-веткой, как productOf по умолчанию)."""
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    client.list_stand_presets.return_value = [
+        {"id": 2, "name": "БУК", "target": "tests/api/buk\ntests/ui/buk", "marker": None},
+    ]
+    dispatcher = _make_dispatcher(client)
+
+    flow_message = _message(bot, text="Выберите продукт:")
+    await dispatcher.feed_update(
+        bot,
+        Update(
+            update_id=1,
+            callback_query=_callback(bot, flow_message, "preset_product:bike_fit:stage:helpdesk", cb_id="c1"),
+        ),
+    )
+
+    edited = [c for c in session.calls if isinstance(c, EditMessageText)]
+    assert len(edited) == 1
+    assert "нет пресетов" in edited[0].text
+    callback_datas = [btn.callback_data for row in edited[0].reply_markup.inline_keyboard for btn in row]
+    assert callback_datas == ["stand:bike_fit:stage"]
 
 
 async def test_button_flow_preset_leads_to_confirmation_before_submit(monkeypatch):
@@ -975,7 +1068,7 @@ async def test_button_flow_preset_leads_to_confirmation_before_submit(monkeypatc
     flow_message = _message(bot, text="Выберите пресет:")
     await dispatcher.feed_update(
         bot,
-        Update(update_id=1, callback_query=_callback(bot, flow_message, "preset:bike_fit:stage:1", cb_id="c1")),
+        Update(update_id=1, callback_query=_callback(bot, flow_message, "preset:bike_fit:stage:1:lms", cb_id="c1")),
     )
 
     client.submit_run.assert_not_called()
@@ -983,8 +1076,30 @@ async def test_button_flow_preset_leads_to_confirmation_before_submit(monkeypatc
     assert len(edited) == 1
     assert edited[0].text == "⚠️ Запуск на stage: Smoke. Подтвердить?"
     buttons = {btn.text: btn.callback_data for row in edited[0].reply_markup.inline_keyboard for btn in row}
-    assert buttons["Да, запустить"] == "preset_confirm:bike_fit:stage:1"
+    assert buttons["Да, запустить"] == "preset_confirm:bike_fit:stage:1:lms"
     assert buttons["Отмена"] == "menu"
+
+
+async def test_button_flow_preset_without_product_leads_to_confirmation_without_product(monkeypatch):
+    """/stage (cmd_stage) строит preset_confirm напрямую, без шага продукта —
+    тот же путь должен работать и для "preset:" с 3 токенами (обратная
+    совместимость, без автометки по продукту)."""
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    client.list_stand_presets.return_value = [{"id": 1, "name": "Smoke", "target": "all", "marker": "smoke"}]
+    dispatcher = _make_dispatcher(client)
+
+    flow_message = _message(bot, text="Выберите пресет:")
+    await dispatcher.feed_update(
+        bot,
+        Update(update_id=1, callback_query=_callback(bot, flow_message, "preset:bike_fit:stage:1", cb_id="c1")),
+    )
+
+    edited = [c for c in session.calls if isinstance(c, EditMessageText)]
+    assert len(edited) == 1
+    buttons = {btn.text: btn.callback_data for row in edited[0].reply_markup.inline_keyboard for btn in row}
+    assert buttons["Да, запустить"] == "preset_confirm:bike_fit:stage:1"
 
 
 async def test_button_flow_preset_confirm_submits_with_confirm_manual_true(monkeypatch):
@@ -1011,6 +1126,54 @@ async def test_button_flow_preset_confirm_submits_with_confirm_manual_true(monke
         "run_status:99", "run_report:99", "run_causes:99", "run_compare:99", "run_trend:99", "run_share:99",
         "run_cleanup:99", "run_cancel:99",
     ]
+
+
+async def test_button_flow_preset_confirm_with_product_sends_autolabel(monkeypatch):
+    """Автометка сборки по продукту (п.4 миссии про продуктовые пресеты) — та же
+    идея, что в вебе: "<Продукт>" без "вида" (у бота нет второго шага), "Всё" без
+    метки вообще (см. test_button_flow_preset_confirm_submits_with_confirm_manual_true,
+    которая проверяет именно этот, 3-токенный путь без продукта/метки)."""
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    monkeypatch.setattr(tg_bot.handlers, "_watch_run", AsyncMock())
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    client.list_stand_presets.return_value = [{"id": 1, "name": "Smoke", "target": "all", "marker": "smoke"}]
+    client.submit_run.return_value = {"id": 99, "status": "queued"}
+    dispatcher = _make_dispatcher(client)
+
+    flow_message = _message(bot, text="⚠️ Запуск на stage: Smoke. Подтвердить?")
+    await dispatcher.feed_update(
+        bot,
+        Update(
+            update_id=1,
+            callback_query=_callback(bot, flow_message, "preset_confirm:bike_fit:stage:1:helpdesk", cb_id="c1"),
+        ),
+    )
+
+    client.submit_run.assert_awaited_once_with(
+        "bike_fit", "stage", "smoke", target="all", confirm_manual=True, label="Helpdesk"
+    )
+
+
+async def test_button_flow_preset_confirm_with_all_product_sends_no_label(monkeypatch):
+    monkeypatch.setattr(settings, "TH_TG_ALLOWED_IDS", {111})
+    monkeypatch.setattr(tg_bot.handlers, "_watch_run", AsyncMock())
+    bot, session = _make_bot()
+    client = AsyncMock(spec=HubClient)
+    client.list_stand_presets.return_value = [{"id": 1, "name": "Smoke", "target": "all", "marker": "smoke"}]
+    client.submit_run.return_value = {"id": 99, "status": "queued"}
+    dispatcher = _make_dispatcher(client)
+
+    flow_message = _message(bot, text="⚠️ Запуск на stage: Smoke. Подтвердить?")
+    await dispatcher.feed_update(
+        bot,
+        Update(
+            update_id=1,
+            callback_query=_callback(bot, flow_message, "preset_confirm:bike_fit:stage:1:all", cb_id="c1"),
+        ),
+    )
+
+    client.submit_run.assert_awaited_once_with("bike_fit", "stage", "smoke", target="all", confirm_manual=True)
 
 
 @pytest.mark.parametrize(

@@ -187,15 +187,46 @@ def build_confirm_keyboard(project: str, stand: str | None, marker: str | None) 
     return builder.as_markup()
 
 
-def build_preset_keyboard(project: str, stand: str | None, presets: list[dict]) -> InlineKeyboardMarkup:
+# Шаг «продукт» перед списком пресетов стенда (app/tg_bot/handlers.py:cb_stand/
+# cb_preset_product) — те же четыре варианта, что и ряд «Что» в вебе
+# (ui/sections-tree-logic.js productOf), но без второго шага «вид»: пресеты
+# стенда — именованные записи БД (Smoke/БУК/LPD/...), а не узлы дерева тестов,
+# фильтровать их ещё и по виду внутри продукта — второй экран инлайн-клавиатуры,
+# который не укладывается в один шаг (см. отчёт задачи).
+PRESET_PRODUCTS: tuple[tuple[str, str], ...] = (
+    ("lms", "LMS"),
+    ("helpdesk", "Helpdesk"),
+    ("lrs", "LRS"),
+    ("all", "Всё"),
+)
+
+
+def build_preset_product_keyboard(project: str, stand: str | None) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for product, label in PRESET_PRODUCTS:
+        builder.button(
+            text=label,
+            callback_data=build_callback("preset_product", project=project, stand=stand, product=product),
+        )
+    builder.button(text="« К стендам", callback_data=build_callback("launch", project=project))
+    builder.adjust(2, 2, 1)
+    return builder.as_markup()
+
+
+def build_preset_keyboard(
+    project: str, stand: str | None, presets: list[dict], product: str | None = None
+) -> InlineKeyboardMarkup:
+    """product — продукт, выбранный на предыдущем шаге (build_preset_product_keyboard);
+    пробрасывается в callback_data кнопки пресета, чтобы cb_preset_confirm знал его
+    для автометки сборки (см. handlers.py)."""
     builder = InlineKeyboardBuilder()
     for preset in presets:
-        builder.button(
-            text=preset["name"],
-            callback_data=build_callback("preset", project=project, stand=stand, id=str(preset["id"])),
-        )
+        fields = {"project": project, "stand": stand, "id": str(preset["id"])}
+        if product is not None:
+            fields["product"] = product
+        builder.button(text=preset["name"], callback_data=build_callback("preset", **fields))
     builder.button(text="Выбрать тесты", callback_data=build_callback("tests", project=project, stand=stand))
-    builder.button(text="« К стендам", callback_data=build_callback("launch", project=project))
+    builder.button(text="« Продукт", callback_data=build_callback("stand", project=project, stand=stand))
     builder.adjust(1)
     return builder.as_markup()
 

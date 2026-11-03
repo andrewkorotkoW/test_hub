@@ -45,6 +45,13 @@ def parse_callback(data: str) -> dict:
         return {"action": action, "project": rest[0], "scenario": rest[1], "stand": _decode_token(rest[2])}
     if action == "stand" and len(rest) == 2:
         return {"action": "stand", "project": rest[0], "stand": _decode_token(rest[1])}
+    if action == "preset_product" and len(rest) == 3:
+        return {
+            "action": "preset_product",
+            "project": rest[0],
+            "stand": _decode_token(rest[1]),
+            "product": rest[2],
+        }
     if action == "marker" and len(rest) == 3:
         return {
             "action": "marker",
@@ -72,12 +79,25 @@ def parse_callback(data: str) -> dict:
         return {"action": action, "run_id": run_id}
     if action == "tests" and len(rest) == 2:
         return {"action": "tests", "project": rest[0], "stand": _decode_token(rest[1])}
-    if action in ("preset", "preset_confirm") and len(rest) == 3:
+    if action in ("preset", "preset_confirm") and len(rest) in (3, 4):
         try:
             preset_id = int(rest[2])
         except ValueError:
             return {"action": "invalid", "raw": data}
-        return {"action": action, "project": rest[0], "stand": _decode_token(rest[1]), "preset_id": preset_id}
+        result = {
+            "action": action,
+            "project": rest[0],
+            "stand": _decode_token(rest[1]),
+            "preset_id": preset_id,
+        }
+        # product (4-й токен) есть только у callback'ов, построенных из шага
+        # «продукт» (build_preset_keyboard/cb_preset_product) — у /stage (cmd_stage),
+        # который строит preset_confirm напрямую по имени пресета, его нет, и ключа
+        # "product" в результате тоже нет (старый формат callback_data без лишнего
+        # токена, старые тесты сверяют parse_callback с точным словарём).
+        if len(rest) == 4:
+            result["product"] = _decode_token(rest[3])
+        return result
     if action == "flaky" and len(rest) == 1:
         return {"action": "flaky", "project": rest[0]}
     if action in ("xfail", "xfail_check") and len(rest) == 1:

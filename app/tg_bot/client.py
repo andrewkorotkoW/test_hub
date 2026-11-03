@@ -62,12 +62,15 @@ class HubClient:
         marker: str | None,
         target: str = "all",
         confirm_manual: bool = False,
+        label: str | None = None,
     ) -> dict:
         payload: dict = {"stand": stand, "target": target}
         if marker:
             payload["marker"] = marker
         if confirm_manual:
             payload["confirm_manual"] = True
+        if label:
+            payload["label"] = label
         resp = await self._request("POST", f"/api/projects/{project}/runs", json=payload)
         return resp.json()
 
