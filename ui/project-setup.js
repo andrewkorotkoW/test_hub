@@ -138,7 +138,8 @@
   const markerConflictHint = document.getElementById("marker-conflict-hint");
   const sectionsTreeBox = document.getElementById("sections-tree");
   const sectionsSearchInput = document.getElementById("sections-search-input");
-  const sectionsPresetsRow = document.getElementById("sections-presets-row");
+  const sectionsProductsRow = document.getElementById("sections-products-row");
+  const sectionsKindsRow = document.getElementById("sections-kinds-row");
   const sectionsSummaryLine = document.getElementById("sections-summary-line");
   const manualTargetInput = document.getElementById("manual-target-input");
   const liveCheckbox = document.getElementById("live-checkbox");
@@ -146,6 +147,7 @@
   const mobileCheckbox = document.getElementById("mobile-checkbox");
   const runAllBtn = document.getElementById("run-all-btn");
   const runSelectedBtn = document.getElementById("run-selected-btn");
+  const runBuildChip = document.getElementById("run-build-chip");
   const manualRunBlock = document.getElementById("manual-run-block");
   const manualRunStandName = document.getElementById("manual-run-stand-name");
   const manualRunPresets = document.getElementById("manual-run-presets");
@@ -241,7 +243,8 @@
   const schedTargetInput = document.getElementById("sched-target-input");
   const schedSectionsTreeBox = document.getElementById("sched-sections-tree");
   const schedSectionsSearchInput = document.getElementById("sched-sections-search-input");
-  const schedSectionsPresetsRow = document.getElementById("sched-sections-presets-row");
+  const schedSectionsProductsRow = document.getElementById("sched-sections-products-row");
+  const schedSectionsKindsRow = document.getElementById("sched-sections-kinds-row");
   const schedSectionsSummaryLine = document.getElementById("sched-sections-summary-line");
   const schedTimeInput = document.getElementById("sched-time-input");
   const schedChatsInput = document.getElementById("sched-chats-input");

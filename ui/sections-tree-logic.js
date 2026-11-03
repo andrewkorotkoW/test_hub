@@ -154,6 +154,29 @@
     return out;
   }
 
+  // Подписи продукта/вида для автометки сборки и чипа «Сборка: …» (план,
+  // раздел 2): "all" у продукта не имеет подписи — «Всё» без вида не метится,
+  // как и раньше.
+  var PRODUCT_LABELS = { lms: "LMS", helpdesk: "Helpdesk", lrs: "LRS", all: null };
+  var KIND_LABELS = {
+    api: "API", ui: "UI", smoke: "Smoke", e2e: "E2E",
+    regression: "Regression", mobile: "Mobile", integration: "Integration",
+  };
+
+  // Метка сборки по продукту/виду (project-run-window.js::submitRun и чип
+  // «Сборка: …»): "<Продукт>", "<Продукт> · <Вид>", просто "<Вид>" (продукт
+  // "all"), либо null — ничего не выбрано сверх "Всё" без вида. Галочку
+  // «Мобильный» эта функция не знает — её приоритет (null -> «Мобильный
+  // (Pixel 7)» из runner.py) разруливает вызывающий код.
+  function buildAutoLabel(product, kind) {
+    var p = PRODUCT_LABELS[product] || null;
+    var k = KIND_LABELS[kind] || null;
+    if (!p && !k) return null;
+    if (!p) return k;
+    if (!k) return p;
+    return p + " · " + k;
+  }
+
   // Схлопывает отмеченные файлы в минимальный список target'ов для pytest: если
   // в разделе (api/ui/e2e) отмечены все файлы всех его областей — вместо списка
   // файлов передаём путь папки раздела ("tests/api"); если так отмечены все файлы
@@ -336,6 +359,9 @@
     presetLeafTargets: presetLeafTargets,
     kindAvailableForProduct: kindAvailableForProduct,
     productTestCounts: productTestCounts,
+    PRODUCT_LABELS: PRODUCT_LABELS,
+    KIND_LABELS: KIND_LABELS,
+    buildAutoLabel: buildAutoLabel,
     isRegressionExcluded: isRegressionExcluded,
     REGRESSION_EXCLUDED_AREAS: REGRESSION_EXCLUDED_AREAS,
     collectTargets: collectTargets,
