@@ -18,6 +18,7 @@ ADMIN_ENDPOINTS = [
     ("get", "/api/admin/runs", None),
     ("put", "/api/admin/users/qa", {"role": "manager"}),
     ("delete", "/api/admin/users/qa", None),
+    ("post", "/api/admin/retention/purge", None),
 ]
 
 
