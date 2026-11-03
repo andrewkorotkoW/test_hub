@@ -184,18 +184,37 @@
     return Array.from(box.querySelectorAll(".tree-leaf:checked")).map((cb) => cb.dataset.target);
   }
 
+  // Числа тестов продукта справа у кнопок L/H/R/Всё в ряду «Что»
+  // (SectionsTreeLogic.productTestCounts) — моноширинным, как в макете.
+  function updateProductCounts(row, data) {
+    if (!row) return;
+    const counts = SectionsTreeLogic.productTestCounts(data);
+    row.querySelectorAll(".preset-count").forEach((el) => {
+      const product = el.dataset.countFor;
+      el.textContent = counts[product] != null ? String(counts[product]) : "";
+    });
+  }
+
   // Пикер дерева разделов используется дважды (форма запуска и форма расписания) —
   // общий стейт (данные с бэкенда + текущий поиск + отмеченные файлы + раскрытые
-  // узлы + активный пресет) и рендер под конкретную группу DOM-элементов.
-  function createSectionsPicker(box, searchInput, presetsRow, markerSelectEl, summaryLineEl) {
+  // узлы + продукт/вид) и рендер под конкретную группу DOM-элементов. opts.mobile
+  // (по умолчанию true) — есть ли в kindsRow кнопка «Mobile»: у расписания её нет
+  // в разметке (ui/project.html), флаг — просто защита от программного клика.
+  // opts.onStateChange зовётся после каждого render() — у формы запуска сюда
+  // подвешен updateBuildChip() (ui/project-run-window.js) для чипа «Сборка: …».
+  function createSectionsPicker(box, searchInput, productsRow, kindsRow, markerSelectEl, summaryLineEl, opts) {
+    const { mobile = true, onStateChange = null } = opts || {};
     let data = { kinds: [] };
     let query = "";
     let checked = new Set();
     // Раскрытые вручную узлы (kindNodeKey/areaNodeKey) — по умолчанию всё свёрнуто.
     let expanded = new Set();
-    // Текущий пресет — только для сортировки/раскрытия/подсветки кнопки и пометки
-    // «маркер: smoke» в строке итога; какие файлы отмечены — решает presetLeafTargets.
-    let activePreset = null;
+    // Продукт (ряд «Что», по умолчанию «Всё») и вид (ряд «Как», по умолчанию
+    // не выбран) — только для сортировки/раскрытия/подсветки кнопок и пометки
+    // «маркер: smoke» в строке итога; какие файлы отмечены — решает
+    // presetLeafTargets(data, {product, kind}).
+    let product = "all";
+    let kind = null;
 
     // Перед любым пересбором innerHTML (поиск/пресет/раскрытие) сначала снимаем
     // текущее состояние чекбоксов из DOM — иначе оно потеряется при замене разметки.
@@ -212,19 +231,27 @@
       return keys;
     }
 
-    function updatePresetButtons() {
-      if (!presetsRow) return;
-      presetsRow.querySelectorAll(".sections-preset-btn").forEach((btn) => {
-        btn.classList.toggle("active", btn.dataset.preset === activePreset);
+    function updateProductButtons() {
+      if (!productsRow) return;
+      productsRow.querySelectorAll(".sections-preset-btn[data-product]").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.product === product);
+      });
+    }
+
+    function updateKindButtons() {
+      if (!kindsRow) return;
+      kindsRow.querySelectorAll(".sections-preset-btn[data-preset]").forEach((btn) => {
+        const btnKind = btn.dataset.preset;
+        btn.classList.toggle("active", btnKind === kind);
+        btn.classList.toggle("dim", !SectionsTreeLogic.kindAvailableForProduct(btnKind, product));
       });
     }
 
     function updateSummaryLine() {
       if (!summaryLineEl) return;
       const counts = SectionsTreeLogic.countCheckedByKind(data, new Set(checkedFileTargets(box)));
-      let line = `Выбрано: ${counts.total} ${pluralRu(counts.total, "файл", "файла", "файлов")} · API ${counts.api} · UI ${counts.ui}`;
-      if (counts.e2e) line += ` · E2E ${counts.e2e}`;
-      // Читаем сам селект, а не activePreset — так строка верна и когда маркер
+      let line = `Выбрано: ${counts.total} ${pluralRu(counts.total, "тест", "теста", "тестов")} · API ${counts.api} · UI ${counts.ui} · E2E ${counts.e2e}`;
+      // Читаем сам селект, а не kind — так строка верна и когда маркер
       // выставлен вручную из списка, без клика по кнопке (см. ниже
       // markerSelectEl.addEventListener("change", ...)).
       const marker = markerSelectEl ? markerSelectEl.value : "";
@@ -234,11 +261,33 @@
 
     function render() {
       const filtered = SectionsTreeLogic.filterSectionsTree(data, query);
-      const sortedKinds = SectionsTreeLogic.sortKindsForPreset(filtered.kinds, activePreset);
+      const sortedKinds = SectionsTreeLogic.sortKindsForPreset(filtered.kinds, kind);
       box.innerHTML = buildSectionsTreeHtml({ kinds: sortedKinds }, checked, effectiveExpandedKeys());
       syncAllAncestors(box);
-      updatePresetButtons();
+      updateProductButtons();
+      updateKindButtons();
       updateSummaryLine();
+      if (onStateChange) onStateChange();
+    }
+
+    // Общий хвост клика по продукту/виду: пересчитать отмеченные файлы и
+    // раскрытые узлы под новую пару (product, kind), перерисовать.
+    function applyPresetChange() {
+      // Пресет сбрасывает раскрытые узлы на «выбранный вид раскрыт, остальное
+      // свёрнуто» ('all'/'smoke'/без вида ничего не раскрывают особо, см. mission).
+      expanded = new Set(SectionsTreeLogic.expandedKeysForPreset(data.kinds, kind));
+      if (markerSelectEl) {
+        if (kind === "smoke") markerSelectEl.value = "smoke";
+        // e2e — тоже маркер pytest (@pytest.mark.e2e в auto_tests_vshgu), но
+        // псевдо-раздел tests/e2e уже содержит ровно эти тесты, включая
+        // размеченные прямо в tests/ui/* (app.core.sections._e2e_virtual_files)
+        // — presetLeafTargets отмечает только их, не всё дерево целиком, как
+        // smoke. Маркер всё равно ставим — подстрахует, если в файле есть и
+        // другие тесты.
+        else if (kind === "e2e") markerSelectEl.value = "e2e";
+      }
+      checked = new Set(SectionsTreeLogic.presetLeafTargets(data, { product, kind }));
+      render();
     }
 
     setupTreeEvents(box, {
@@ -256,30 +305,28 @@
         render();
       });
     }
-    if (presetsRow) {
-      presetsRow.addEventListener("click", (ev) => {
-        const btn = ev.target.closest(".sections-preset-btn");
+    if (productsRow) {
+      productsRow.addEventListener("click", (ev) => {
+        const btn = ev.target.closest(".sections-preset-btn[data-product]");
         if (!btn) return;
-        const preset = btn.dataset.preset;
-        activePreset = preset;
-        // Пресет сбрасывает раскрытые узлы на «выбранный вид раскрыт, остальное
-        // свёрнуто» ('all'/'smoke' ничего не раскрывают особо, см. мission).
-        expanded = new Set(SectionsTreeLogic.expandedKeysForPreset(data.kinds, preset));
-        if (preset === "smoke") {
-          if (markerSelectEl) markerSelectEl.value = "smoke";
-          checked = new Set(SectionsTreeLogic.allLeafTargets(data));
-        } else if (preset === "e2e") {
-          // e2e — тоже маркер pytest (@pytest.mark.e2e в auto_tests_vshgu), но
-          // псевдо-раздел tests/e2e уже содержит ровно эти тесты, включая
-          // размеченные прямо в tests/ui/* (app.core.sections._e2e_virtual_files)
-          // — отмечаем только их, не всё дерево целиком, как smoke. Маркер
-          // всё равно ставим — подстрахует, если в файле есть и другие тесты.
-          if (markerSelectEl) markerSelectEl.value = "e2e";
-          checked = new Set(SectionsTreeLogic.presetLeafTargets(data, preset));
-        } else {
-          checked = new Set(SectionsTreeLogic.presetLeafTargets(data, preset));
-        }
-        render();
+        product = btn.dataset.product;
+        // Вид, недоступный при новом продукте (Mobile вне LMS/Всё, Regression/
+        // Integration на Helpdesk/LRS), сбрасываем — иначе кнопка «Как» осталась
+        // бы подсвеченной и недоступной одновременно.
+        if (kind && !SectionsTreeLogic.kindAvailableForProduct(kind, product)) kind = null;
+        applyPresetChange();
+      });
+    }
+    if (kindsRow) {
+      kindsRow.addEventListener("click", (ev) => {
+        const btn = ev.target.closest(".sections-preset-btn[data-preset]");
+        if (!btn) return;
+        const clicked = btn.dataset.preset;
+        if (!mobile && clicked === "mobile") return;
+        if (!SectionsTreeLogic.kindAvailableForProduct(clicked, product)) return;
+        // Повторный клик по уже выбранному виду снимает его.
+        kind = kind === clicked ? null : clicked;
+        applyPresetChange();
       });
     }
     // Маркер можно выставить и вручную из списка, без клика по кнопке — кнопка,
@@ -287,9 +334,11 @@
     // (чисто визуально: активный чекбокс выбора файлов этим не трогаем).
     if (markerSelectEl) {
       markerSelectEl.addEventListener("change", () => {
-        activePreset = markerSelectEl.value || null;
-        updatePresetButtons();
+        kind = markerSelectEl.value || null;
+        updateProductButtons();
+        updateKindButtons();
         updateSummaryLine();
+        if (onStateChange) onStateChange();
       });
     }
 
@@ -298,7 +347,9 @@
         data = newData;
         checked = new Set();
         expanded = new Set();
-        activePreset = null;
+        product = "all";
+        kind = null;
+        updateProductCounts(productsRow, data);
         render();
       },
       // Предустановка отмеченных файлов извне (страница «Сборка», см. initBuildMode) —
@@ -315,14 +366,21 @@
       checkedFiles() {
         return checkedFileTargets(box);
       },
+      // Текущая пара продукт/вид — для автометки сборки и чипа «Сборка: …»
+      // (ui/project-run-window.js::updateBuildChip).
+      getProductKind() {
+        return { product, kind };
+      },
     };
   }
 
   const sectionsPicker = createSectionsPicker(
-    sectionsTreeBox, sectionsSearchInput, sectionsPresetsRow, markerSelect, sectionsSummaryLine
+    sectionsTreeBox, sectionsSearchInput, sectionsProductsRow, sectionsKindsRow, markerSelect, sectionsSummaryLine,
+    { mobile: true, onStateChange: () => updateBuildChip() }
   );
   const schedSectionsPicker = createSectionsPicker(
-    schedSectionsTreeBox, schedSectionsSearchInput, schedSectionsPresetsRow, schedMarkerSelect, schedSectionsSummaryLine
+    schedSectionsTreeBox, schedSectionsSearchInput, schedSectionsProductsRow, schedSectionsKindsRow, schedMarkerSelect, schedSectionsSummaryLine,
+    { mobile: false }
   );
 
   let sectionsDataCache = { kinds: [] };
@@ -428,8 +486,12 @@
   sectionsTreeBox.addEventListener("change", (ev) => {
     if (ev.target.matches("input.tree-check")) updateLiveCheckboxState();
   });
-  sectionsPresetsRow.addEventListener("click", (ev) => {
-    const presetBtn = ev.target.closest(".sections-preset-btn");
+  sectionsProductsRow.addEventListener("click", (ev) => {
+    if (!ev.target.closest(".sections-preset-btn[data-product]")) return;
+    updateLiveCheckboxState();
+  });
+  sectionsKindsRow.addEventListener("click", (ev) => {
+    const presetBtn = ev.target.closest(".sections-preset-btn[data-preset]");
     if (!presetBtn) return;
     // Пресет «Mobile» сам включает вёрстку Pixel 7 — без неё выбранные им
     // tests/ui/mobile/* гоняются в обычном десктопном viewport, что бессмысленно.
@@ -444,5 +506,6 @@
   // «Эфир» автоматически, но не блокирует её ручное выключение после этого.
   mobileCheckbox.addEventListener("change", () => {
     if (mobileCheckbox.checked) liveCheckbox.checked = true;
+    updateBuildChip();
   });
 

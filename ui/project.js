@@ -24,6 +24,7 @@
   await loadSections();
   initBuildMode();
   updateLiveCheckboxState();
+  updateBuildChip();
   await Promise.all([loadHistory(), loadFlaky(), loadSchedules(), loadTestcases(), loadSentryCard(), loadBuildRuns()]);
 
   // Глубокая ссылка из суперадминки (admin_all.html): project.html?name=...&run=<id>

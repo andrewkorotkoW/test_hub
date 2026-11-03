@@ -585,6 +585,23 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
 .stand-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
 .run-buttons { display: flex; gap: 10px; flex-wrap: wrap; margin: 12px 0; }
 
+/* Два ряда пресетов «Что»/«Как» (docs/missions/redesign/product_presets/mockups.html,
+   вариант A) — подпись слева в своей колонке, кнопки справа; на узких экранах
+   (как в макете, ≤640px) подпись уходит в отдельную строку над кнопками. */
+.preset-group { display: grid; grid-template-columns: 52px 1fr; align-items: center; gap: 10px; margin: 0 0 4px; }
+.preset-group .label {
+  padding-top: 2px;
+  font-size: 11px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.preset-group .run-buttons { margin: 0; }
+@media (max-width: 640px) {
+  .preset-group { grid-template-columns: 1fr; }
+}
+
 /* ---------- test tree ---------- */
 .test-tree { max-height: 460px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; }
 .tree-file { margin-bottom: 4px; }
@@ -654,6 +671,56 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
   border-color: var(--preset-color, var(--action-accent));
   color: var(--action-accent-text);
 }
+/* Ряд «Что» (продукт, data-product="lms|helpdesk|lrs|all") — отдельный ряд над
+   «Как» (docs/missions/redesign/product_presets/mockups.html, вариант A): цвет
+   не статусный, а цвет проекта (--accent), т.к. это не «вид проверки», а «что
+   тестируем». «Всё» без цвета — так же, как у data-preset="all" выше. */
+.sections-preset-btn[data-product] { --preset-color: var(--accent); }
+.sections-preset-btn[data-product]:not([data-product="all"]) {
+  border-color: var(--preset-color);
+  color: var(--preset-color);
+}
+.sections-preset-btn[data-product]:not([data-product="all"]):hover {
+  background: var(--preset-color);
+  border-color: var(--preset-color);
+  color: #fff;
+}
+.sections-preset-btn[data-product="all"]:hover {
+  border-color: var(--border);
+  color: var(--text);
+}
+/* Буквенная марка (L/H/R) и число тестов продукта справа — различают кнопки
+   ряда «Что» по форме, а не по цвету (цвет у них один, --accent). */
+.sections-preset-btn .preset-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  background: var(--preset-color, var(--accent));
+  color: var(--surface);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+}
+.sections-preset-btn.active .preset-mark, .sections-preset-btn:hover .preset-mark {
+  background: var(--surface);
+  color: var(--preset-color, var(--accent));
+}
+.sections-preset-btn .preset-count {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 11px;
+  opacity: .75;
+}
+.sections-preset-btn.active .preset-count, .sections-preset-btn:hover .preset-count {
+  opacity: 1;
+}
+/* Недоступный вид при выбранном продукте (Mobile вне LMS/Всё, Regression/
+   Integration на Helpdesk/LRS — SectionsTreeLogic.kindAvailableForProduct) —
+   pointer-events:none, а не disabled: клик мог бы случайно пройти раньше,
+   чем кнопка станет недоступной (атрибут проверяется в JS тоже). */
+.sections-preset-btn.dim { opacity: .4; pointer-events: none; }
 /* Системное кольцо фокуса (жёлтый halo в macOS при Full Keyboard Access) ложится
    поверх цветной рамки кнопки и даёт грязный смешанный цвет вместо выделения —
    своё кольцо в тон самой кнопки вместо системного. */
@@ -662,6 +729,21 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
   outline: 2px solid var(--preset-color, var(--action-accent));
   outline-offset: 1px;
 }
+/* Чип «Сборка: …» рядом с кнопкой запуска (docs/missions/redesign/product_presets/
+   mockups.html, #a-build) — какая метка подставится в прогон автоматически,
+   см. updateBuildChip в ui/project-run-window.js. */
+.build-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--text);
+}
+.build-chip .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex: 0 0 auto; }
 .manual-target-spoiler { margin: 4px 0 12px; }
 .manual-target-spoiler summary { cursor: pointer; color: var(--accent); font-size: 13px; font-weight: 600; }
 .manual-target-spoiler textarea { margin-top: 8px; }

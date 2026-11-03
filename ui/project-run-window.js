@@ -868,6 +868,33 @@
     }
   });
 
+  // Автометка сборки (план, раздел 2): если пользователь не задаёт свою метку
+  // (вне режима «Сборка», см. isBuildMode/buildLabel) и не отмечена галочка
+  // «Мобильный», подставляем "<Продукт>"/"<Продукт> · <Вид>" по текущему
+  // выбору пресетов — чтобы история/лента прогонов могли фильтровать по
+  // сборке продукта (helpdesk ≠ lrs ≠ lms), не смешивая их дельтой/флаками.
+  // «Мобильный» не трогаем — он подставляет свою метку сам (runner.py:374).
+  function autoBuildLabel() {
+    const { product, kind } = sectionsPicker.getProductKind();
+    return SectionsTreeLogic.buildAutoLabel(product, kind);
+  }
+
+  function computeRunLabel() {
+    if (isBuildMode) return buildLabel;
+    if (mobileCheckbox.checked) return null;
+    return autoBuildLabel();
+  }
+
+  // Чип «Сборка: …» рядом с кнопкой запуска — показывает то же, что реально
+  // подставится в submitRun (computeRunLabel), чтобы владелец видел метку до
+  // запуска. Обновляется на любое изменение продукта/вида (onStateChange
+  // пикера, ui/project-sections-picker.js) и на галочку «Мобильный».
+  function updateBuildChip() {
+    if (!runBuildChip) return;
+    const label = isBuildMode ? buildLabel : (mobileCheckbox.checked ? "Мобильный (Pixel 7)" : autoBuildLabel());
+    runBuildChip.textContent = `Сборка: ${label || "—"}`;
+  }
+
   async function submitRun(target, label = null, live = false, mobile = false) {
     runAllBtn.disabled = true;
     runSelectedBtn.disabled = true;
@@ -892,7 +919,7 @@
   // с отмеченным «Мобильный (Pixel 7)» ушёл обычным десктопным «всё».
   runAllBtn.addEventListener("click", () => {
     lastSubmitKind = "all";
-    submitRun("all", isBuildMode ? buildLabel : null, liveCheckbox.checked && !liveCheckbox.disabled, mobileCheckbox.checked);
+    submitRun("all", computeRunLabel(), liveCheckbox.checked && !liveCheckbox.disabled, mobileCheckbox.checked);
   });
   runSelectedBtn.addEventListener("click", () => {
     const target = selectedTarget();
@@ -906,7 +933,7 @@
       return;
     }
     lastSubmitKind = "selected";
-    submitRun(target, isBuildMode ? buildLabel : null, liveCheckbox.checked && !liveCheckbox.disabled, mobileCheckbox.checked);
+    submitRun(target, computeRunLabel(), liveCheckbox.checked && !liveCheckbox.disabled, mobileCheckbox.checked);
   });
 
   // ---------------- шаринг отчёта ----------------
