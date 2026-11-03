@@ -686,6 +686,42 @@ def test_build_preset_product_keyboard_has_four_products_and_back_to_stands():
     assert buttons["« К стендам"] == "launch:bike_fit"
 
 
+# ------------------------------------------------------------------ _preset_matches_product:
+# классификация областей пресета стенда продублирована в handlers.py (не импортирует
+# ui/sections-tree-logic.js, см. комментарий там же) — здесь только то, что не покрыто
+# сквозными test_button_flow_preset_product_* выше (там разобраны только "all"/"helpdesk"
+# с односегментными target).
+
+def test_preset_matches_product_lrs_area():
+    assert tg_bot.handlers._preset_matches_product({"target": "tests/api/lrs"}, "lrs") is True
+    assert tg_bot.handlers._preset_matches_product({"target": "tests/api/lrs"}, "helpdesk") is False
+    assert tg_bot.handlers._preset_matches_product({"target": "tests/api/lrs"}, "lms") is False
+
+
+def test_preset_matches_product_lms_target_with_no_area_segment_counts_as_lms():
+    # "all" (Smoke) и "tests/e2e" не дают area-сегмента -> общий пресет, под LMS/Всё.
+    assert tg_bot.handlers._preset_matches_product({"target": "all"}, "lms") is True
+    assert tg_bot.handlers._preset_matches_product({"target": "all"}, "helpdesk") is False
+    assert tg_bot.handlers._preset_matches_product({"target": "tests/e2e"}, "lms") is True
+
+
+def test_preset_matches_product_lms_includes_mixed_lms_and_integration_target():
+    # Regression-подобный пресет (основной функционал + внешняя интеграция в одном
+    # target) — под продуктом LMS всё равно виден: integration не выделена в свой
+    # продукт на этом шаге (у неё нет отдельной кнопки продукта).
+    target = "tests/api/notifications\ntests/api/buk"
+    assert tg_bot.handlers._preset_matches_product({"target": target}, "lms") is True
+    assert tg_bot.handlers._preset_matches_product({"target": target}, "helpdesk") is False
+
+
+def test_preset_matches_product_mixed_lms_and_helpdesk_target_matches_both():
+    # Пресет, чей target реально охватывает две разные продуктовые области, виден
+    # под обоими продуктами (множественная принадлежность, не только LMS-зеркало).
+    target = "tests/api/notifications\ntests/api/helpdesk"
+    assert tg_bot.handlers._preset_matches_product({"target": target}, "lms") is False
+    assert tg_bot.handlers._preset_matches_product({"target": target}, "helpdesk") is True
+
+
 def test_build_manual_confirm_keyboard_has_yes_and_cancel():
     markup = build_manual_confirm_keyboard("preset_confirm:bike_fit:stage:1")
     buttons = {btn.text: btn.callback_data for row in markup.inline_keyboard for btn in row}

@@ -26,6 +26,7 @@ SHARE_HTML = (REPO_ROOT / "ui" / "share.html").read_text()
 SHARE_JS = (REPO_ROOT / "ui" / "share.js").read_text()
 STYLE_CSS = (REPO_ROOT / "ui" / "style.css").read_text()
 RUN_LIVE_LOGIC_JS = (REPO_ROOT / "ui" / "run-live-logic.js").read_text()
+RUNS_HISTORY_LOGIC_JS = (REPO_ROOT / "ui" / "runs-history-logic.js").read_text()
 
 
 # ------------------------------------------------------------------ 1. форма запуска
@@ -123,11 +124,14 @@ def test_project_js_toggles_device_badge_with_mobile_payload():
 # ------------------------------------------------------------------ 5. пилюли «Pixel 7»
 
 def test_project_js_renders_pixel7_pill_in_feed_and_table_next_to_live():
-    # лента прогонов (runsFeedItemHtml) и таблица истории (loadHistory) — обе
-    # в ui/project-dashboard.js.
-    assert 'r.mobile ? `<span class="runs-feed-tag">Pixel 7</span>' in PROJECT_DASHBOARD_JS
-    # ровно в тех же местах, где пилюля «эфир» — список прогонов и таблица истории
-    assert PROJECT_DASHBOARD_JS.count('Pixel 7</span>') >= 2
+    # Теги строки (включая пилюлю Pixel 7) собирает RunsHistoryLogic.runTags
+    # (ui/runs-history-logic.js) — лента прогонов (runsFeedItemHtml) и таблица
+    # истории (historyRowHtml), обе в ui/project-dashboard.js, только рендерят
+    # то, что он вернул, не зная про "Pixel 7" напрямую (см. комментарий выше
+    # historyRowHtml про дедуп с меткой сборки «Мобильный (Pixel 7)»).
+    assert PROJECT_DASHBOARD_JS.count("HistLogic.runTags(r)") >= 2
+    assert 'runs-feed-tag runs-feed-tag--${t.kind}' in PROJECT_DASHBOARD_JS
+    assert 'tags.push({ kind: "mobile", text: "Pixel 7" });' in RUNS_HISTORY_LOGIC_JS
 
 
 # ------------------------------------------------------------------ 6. share-страница: та же рамка без логина

@@ -480,6 +480,32 @@ test("productTestCounts: суммы tests_count по продукту облас
   assert.deepStrictEqual(counts, { lms: 5, helpdesk: 6, lrs: 5, all: 17 });
 });
 
+// ------------------------------------------------------------------ buildAutoLabel
+
+test("buildAutoLabel: продукт + вид — 'Продукт · Вид'", function () {
+  assert.strictEqual(Logic.buildAutoLabel("helpdesk", "api"), "Helpdesk · API");
+  assert.strictEqual(Logic.buildAutoLabel("lrs", "smoke"), "LRS · Smoke");
+  assert.strictEqual(Logic.buildAutoLabel("lms", "regression"), "LMS · Regression");
+});
+
+test("buildAutoLabel: только продукт (без вида) — просто подпись продукта", function () {
+  assert.strictEqual(Logic.buildAutoLabel("helpdesk", null), "Helpdesk");
+  assert.strictEqual(Logic.buildAutoLabel("lrs", undefined), "LRS");
+});
+
+test("buildAutoLabel: только вид (продукт 'all') — просто подпись вида", function () {
+  assert.strictEqual(Logic.buildAutoLabel("all", "api"), "API");
+  assert.strictEqual(Logic.buildAutoLabel("all", "mobile"), "Mobile");
+});
+
+test("buildAutoLabel: продукт 'all' без вида — null (метку не подставляем сверх 'Всё')", function () {
+  assert.strictEqual(Logic.buildAutoLabel("all", null), null);
+});
+
+test("buildAutoLabel: мобильную метку 'Мобильный (Pixel 7)' сама функция не знает — это заботится вызывающий код (project-run-window.js::computeRunLabel), здесь просто 'Продукт · Mobile'", function () {
+  assert.strictEqual(Logic.buildAutoLabel("lms", "mobile"), "LMS · Mobile");
+});
+
 // ------------------------------------------------------------------ collectTargets
 
 test("collectTargets: один файл из области с несколькими файлами — путь именно этого файла", function () {

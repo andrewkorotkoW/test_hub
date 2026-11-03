@@ -28,18 +28,25 @@ async def test_schedules_table_has_next_run_column_between_cron_and_last_result(
 
 
 async def test_schedule_presets_match_run_form_except_mobile(client):
-    """Пресеты разделов в форме расписания — те же, что в «Запуске» (API/UI/Smoke/E2E/
-    Всё/Regression); Mobile намеренно нет: он включает флаг «Мобильный (Pixel 7)»,
+    """Два ряда пресетов (docs/missions/2026-11-03_product_presets.md): ряд «Что»
+    (data-product=lms/helpdesk/lrs/all) — буквально одинаков в «Запуске» и
+    «Расписаниях»; ряд «Как» (data-preset) — те же виды (API/UI/Smoke/E2E/
+    Regression/Integration), кроме Mobile: он включает флаг «Мобильный (Pixel 7)»,
     которого у расписаний нет."""
     html = (await client.get("/project.html")).text
-    def presets(row_id):
+    def row(row_id, attr):
         m = re.search(rf'id="{row_id}">(.*?)</div>', html, re.S)
         assert m, row_id
-        return re.findall(r'data-preset="([^"]+)"', m.group(1))
-    run_presets = presets("sections-presets-row")
-    sched_presets = presets("sched-sections-presets-row")
-    assert "mobile" in run_presets
-    assert sched_presets == [p for p in run_presets if p != "mobile"]
+        return re.findall(rf'{attr}="([^"]+)"', m.group(1))
+    run_products = row("sections-products-row", "data-product")
+    sched_products = row("sched-sections-products-row", "data-product")
+    assert run_products == ["lms", "helpdesk", "lrs", "all"]
+    assert sched_products == run_products
+    run_kinds = row("sections-kinds-row", "data-preset")
+    sched_kinds = row("sched-sections-kinds-row", "data-preset")
+    assert "mobile" in run_kinds
+    assert "integration" in sched_kinds
+    assert sched_kinds == [p for p in run_kinds if p != "mobile"]
 
 
 def test_schedule_rows_reuse_history_renderers():
