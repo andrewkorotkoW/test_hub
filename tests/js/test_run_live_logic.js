@@ -86,6 +86,24 @@ test("mediaTabForTest: видео побеждает даже пока тест 
   assert.strictEqual(tab, "video");
 });
 
+// ------------------------------------------------------------------ videoRetentionMessage / framesRetentionMessage
+
+test("videoRetentionMessage: подставляет число дней ретеншена из настроек", function () {
+  assert.strictEqual(Logic.videoRetentionMessage(14), "Видео удалено по сроку хранения (14 дней).");
+});
+
+test("videoRetentionMessage: другое число дней -> другой текст (не зашито 14)", function () {
+  assert.strictEqual(Logic.videoRetentionMessage(7), "Видео удалено по сроку хранения (7 дней).");
+});
+
+test("framesRetentionMessage: подставляет число дней ретеншена из настроек", function () {
+  assert.strictEqual(Logic.framesRetentionMessage(30), "Кадры удалены по сроку хранения (30 дней).");
+});
+
+test("framesRetentionMessage: 0 дней (хотя TH_KEEP_*_DAYS=0 означает «не удалять», сама функция чисто текстовая)", function () {
+  assert.strictEqual(Logic.framesRetentionMessage(0), "Кадры удалены по сроку хранения (0 дней).");
+});
+
 // ------------------------------------------------------------------ isLiveStale
 
 test("isLiveStale: кадров не было (lastLiveAt пуст) -> нет сигнала", function () {
