@@ -667,23 +667,12 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
   color: var(--text);
 }
 /* Ряд «Что» (продукт, data-product="lms|helpdesk|lrs|all") — отдельный ряд над
-   «Как» (docs/missions/redesign/product_presets/mockups.html, вариант A): цвет
-   не статусный, а цвет проекта (--accent), т.к. это не «вид проверки», а «что
-   тестируем». «Всё» без цвета — так же, как у data-preset="all" выше. */
-.sections-preset-btn[data-product] { --preset-color: var(--accent); }
-.sections-preset-btn[data-product]:not([data-product="all"]) {
-  border-color: var(--preset-color);
-  color: var(--preset-color);
-}
-.sections-preset-btn[data-product]:not([data-product="all"]):hover {
-  background: var(--preset-color);
-  border-color: var(--preset-color);
-  color: #fff;
-}
-.sections-preset-btn[data-product="all"]:hover {
-  border-color: var(--border);
-  color: var(--text);
-}
+   «Как» (docs/missions/redesign/product_presets/mockups.html, вариант A). Без цвета
+   вовсе (решение владельца 03.11.2026): у VSHGU фирменный --accent оранжевый и ряд
+   продуктов сливался с оранжевой кнопкой API. Продукты различаются буквенной
+   маркой L/H/R, активный — нейтральная заливка, как у «Всё». */
+.sections-preset-btn[data-product] { --preset-color: var(--surface-hover); border-color: var(--border); color: var(--text); }
+.sections-preset-btn[data-product]:hover { background: var(--surface-hover); border-color: var(--border); color: var(--text); }
 /* Активная кнопка: селектор с атрибутом — иначе правила
    .sections-preset-btn[data-preset|data-product]:not([…="all"]) выше (специфичность
    0,3,0) равны по специфичности .active-правилу с атрибутом (0,3,0), поэтому оно должно стоять ПОСЛЕ обоих блоков — побеждает последнее, и подпись сливается с фоном
@@ -695,8 +684,13 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
   border-color: var(--preset-color, var(--action-accent));
   color: var(--action-accent-text);
 }
+.sections-preset-btn[data-product].active {
+  background: var(--surface-hover);
+  border-color: var(--text-muted);
+  color: var(--text);
+}
 /* Буквенная марка (L/H/R) и число тестов продукта справа — различают кнопки
-   ряда «Что» по форме, а не по цвету (цвет у них один, --accent). */
+   ряда «Что» по форме, а не по цвету (цвета у них нет). */
 .sections-preset-btn .preset-mark {
   display: inline-grid;
   place-items: center;
@@ -709,10 +703,8 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
   font-size: 10px;
   font-weight: 700;
 }
-.sections-preset-btn.active .preset-mark, .sections-preset-btn:hover .preset-mark {
-  background: var(--surface);
-  color: var(--preset-color, var(--accent));
-}
+.sections-preset-btn[data-product] .preset-mark { background: var(--text-muted); color: var(--surface); }
+.sections-preset-btn[data-product].active .preset-mark { background: var(--text); color: var(--surface); }
 .sections-preset-btn .preset-count {
   font-family: var(--font-mono);
   font-weight: 500;
