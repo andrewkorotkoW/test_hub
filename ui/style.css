@@ -709,6 +709,7 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
   font-family: var(--font-mono);
   font-weight: 500;
   font-size: 11px;
+  line-height: 1;
   opacity: .75;
 }
 .sections-preset-btn.active .preset-count, .sections-preset-btn:hover .preset-count {
@@ -722,7 +723,19 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
 /* Системное кольцо фокуса (жёлтый halo в macOS при Full Keyboard Access) ложится
    поверх цветной рамки кнопки и даёт грязный смешанный цвет вместо выделения —
    своё кольцо в тон самой кнопки вместо системного. */
-.sections-preset-btn { outline: none; }
+/* Как в макете (docs/missions/redesign/product_presets/mockups.html, .pbtn):
+   кнопка — inline-flex с зазором 7px между маркой, подписью и числом (без этого
+   марка L/H/R прилипала к тексту), 13px/600, число тестов — моно 11px/500. */
+.sections-preset-btn {
+  outline: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+}
 .sections-preset-btn:focus-visible {
   outline: 2px solid var(--preset-color, var(--action-accent));
   outline-offset: 1px;
