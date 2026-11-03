@@ -1,0 +1,330 @@
+<title>Пресеты по продуктам</title>
+<meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+/* Токены — строго из DESIGN.md (как в redesign/run_compare/mockups.html). Цвета пресетов —
+   из ui/style.css (.sections-preset-btn[data-preset=…]), новых оттенков нет.
+   Числа тестов — дерево VSHGU на 03.11.2026: api 277 · ui 177 · e2e 24 = 478. */
+:root{
+  --bg:#0f1223; --surface:#1b2036; --surface-hover:#232945; --border:#262c47;
+  --text:#e7e9f5; --text-muted:#9298b8;
+  --accent:#2563eb; --accent-text:#ffffff; --danger:#dc2626;
+  --passed:#22c55e; --failed:#ff4d6d; --broken:#f59e0b; --skipped:#8b93a7;
+  --ui:#38bdf8; --e2e:#ec4899; --mobile:#7c3aed;
+  --font:"Golos Text",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --r-md:8px; --r-card:16px; --r-pill:999px;
+  --shadow-card:0 8px 24px rgba(0,0,0,.35);
+  color-scheme:dark;
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    --bg:#f5f6f8; --surface:#ffffff; --surface-hover:#f3f4f6; --border:#e1e4e9;
+    --text:#1f2430; --text-muted:#6b7280; --passed:#16a34a; --failed:#dc2626; --broken:#d97706; --skipped:#6b7280;
+    --ui:#0284c7; --e2e:#db2777; --mobile:#6d28d9;
+    --shadow-card:0 1px 3px rgba(15,23,42,.08); color-scheme:light;
+  }
+}
+:root[data-theme="light"]{
+  --bg:#f5f6f8; --surface:#ffffff; --surface-hover:#f3f4f6; --border:#e1e4e9;
+  --text:#1f2430; --text-muted:#6b7280; --passed:#16a34a; --failed:#dc2626; --broken:#d97706; --skipped:#6b7280;
+  --ui:#0284c7; --e2e:#db2777; --mobile:#6d28d9;
+  --shadow-card:0 1px 3px rgba(15,23,42,.08); color-scheme:light;
+}
+*{box-sizing:border-box}
+html{background:var(--bg)}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;line-height:1.45;font-variant-numeric:tabular-nums}
+h1,h2,h3{margin:0;text-wrap:balance}
+.wrap{max-width:980px;margin:0 auto;padding:28px 24px 64px}
+.top{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:8px}
+h1{font-size:22px;font-weight:700}
+.lead{color:var(--text-muted);max-width:66ch;margin:6px 0 22px}
+.theme-btn{border:1px solid var(--border);background:var(--surface);color:var(--text-muted);border-radius:var(--r-md);padding:6px 12px;font:inherit;font-size:12px;cursor:pointer}
+.theme-btn:hover{color:var(--text);background:var(--surface-hover)}
+.variant{margin-top:28px}
+.variant-head{display:flex;align-items:baseline;gap:12px;margin-bottom:10px}
+.variant-head h2{font-size:18px;font-weight:700}
+.tag{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);font-weight:600}
+.verdict{font-size:13px;color:var(--text-muted);max-width:70ch;margin:0 0 12px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-card);box-shadow:var(--shadow-card);padding:20px 22px}
+.card h3{font-size:16px;font-weight:700;margin-bottom:14px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.label{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--text-muted);font-weight:600}
+.select{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--border);background:var(--bg);border-radius:var(--r-md);padding:6px 10px;color:var(--text);min-width:220px}
+.select .chev{margin-left:auto;color:var(--text-muted);font-size:11px}
+.search{border:1px solid var(--border);background:var(--bg);border-radius:var(--r-md);padding:6px 10px;color:var(--text-muted);width:260px}
+
+/* ряды пресетов */
+.preset-group{display:grid;grid-template-columns:52px 1fr;align-items:center;gap:10px;margin:0 0 8px}
+.preset-group .label{padding-top:2px}
+.run-buttons{display:flex;gap:10px;flex-wrap:wrap}
+.pbtn{--c:var(--text-muted);border:1px solid var(--c);background:transparent;color:var(--c);border-radius:var(--r-md);padding:6px 14px;font:inherit;font-weight:600;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:7px;transition:background .12s,color .12s}
+.pbtn .n{font-family:var(--mono);font-weight:500;font-size:11px;opacity:.75}
+.pbtn:hover{background:var(--c);color:#fff}
+.pbtn:hover .n{opacity:1}
+.pbtn.active{background:var(--c);color:#fff;border-color:var(--c)}
+.pbtn.active .n{opacity:1}
+.pbtn.all{--c:var(--text-muted);border-color:var(--border)}
+.pbtn.all:hover,.pbtn.all.active{background:var(--surface-hover);color:var(--text);border-color:var(--border)}
+.pbtn.dim{opacity:.4;pointer-events:none}
+.pbtn:focus-visible{outline:2px solid var(--c);outline-offset:1px}
+/* продукты — цвет проекта остаётся нейтральным, продукты различаются формой: буквенная марка */
+.pbtn .mark{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:5px;background:currentColor;color:var(--surface);font-family:var(--mono);font-size:10px;font-weight:700}
+.pbtn.active .mark,.pbtn:hover .mark{color:var(--c)}
+.pbtn.all .mark{display:none}
+/* виды — цвета из ui/style.css */
+.pbtn[data-kind="api"]{--c:var(--broken)}
+.pbtn[data-kind="ui"]{--c:var(--ui)}
+.pbtn[data-kind="smoke"]{--c:var(--skipped)}
+.pbtn[data-kind="e2e"]{--c:var(--e2e)}
+.pbtn[data-kind="regression"]{--c:var(--passed)}
+.pbtn[data-kind="mobile"]{--c:var(--mobile)}
+.pbtn[data-kind="integration"]{--c:var(--danger)}
+.pbtn[data-product]{--c:var(--accent)}
+
+.summary{font-size:13px;color:var(--text-muted);margin:4px 0 12px;display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+.summary b{color:var(--text);font-weight:600}
+.chip{display:inline-flex;align-items:center;gap:6px;border-radius:var(--r-pill);padding:2px 10px;font-size:12px;font-weight:600;background:var(--surface-hover);color:var(--text)}
+.chip.build{background:color-mix(in srgb,var(--accent) 18%,transparent);color:var(--text)}
+.chip .dot{width:7px;height:7px;border-radius:50%;background:var(--accent)}
+
+/* дерево */
+.tree{border:1px solid var(--border);border-radius:var(--r-md);background:var(--bg);padding:8px 10px;display:grid;gap:4px}
+.tkind{display:grid;grid-template-columns:18px 16px auto 1fr;align-items:center;gap:6px;padding:3px 2px;border-radius:6px}
+.tkind .chev{color:var(--text-muted);font-size:11px}
+.cb{width:14px;height:14px;border:1.5px solid var(--text-muted);border-radius:3px;display:inline-grid;place-items:center;font-size:10px;color:#fff;line-height:1}
+.cb.on{background:var(--accent);border-color:var(--accent)}
+.cb.part{border-color:var(--accent);color:var(--accent)}
+.tkind .t{font-weight:600}
+.tkind .meta{font-size:12px;color:var(--text-muted);font-family:var(--mono)}
+.areas{display:flex;flex-wrap:wrap;gap:6px;padding:2px 0 6px 40px}
+.area{font-family:var(--mono);font-size:11.5px;border:1px solid var(--border);border-radius:var(--r-pill);padding:2px 9px;color:var(--text-muted);background:transparent;transition:background .12s}
+.area.on{background:color-mix(in srgb,var(--accent) 22%,transparent);border-color:var(--accent);color:var(--text)}
+.area.off{opacity:.45}
+
+.actions{display:flex;gap:10px;align-items:center;margin-top:16px;flex-wrap:wrap}
+.btn{border:1px solid var(--border);background:transparent;color:var(--text);border-radius:var(--r-md);padding:8px 16px;font:inherit;font-weight:600;cursor:pointer}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-text)}
+.hint{font-size:12px;color:var(--text-muted);margin-left:auto}
+
+/* вариант B — один ряд */
+.onerow .run-buttons{gap:8px}
+.divider{width:1px;height:22px;background:var(--border);margin:0 2px}
+
+.notes{margin-top:26px;display:grid;gap:10px;max-width:70ch}
+.notes h2{font-size:16px;font-weight:700}
+.notes ul{margin:0;padding-left:18px;color:var(--text-muted)}
+.notes li{margin:4px 0}
+.notes code{font-family:var(--mono);font-size:12px;color:var(--text)}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+@media (max-width:640px){.preset-group{grid-template-columns:1fr}.wrap{padding:16px}}
+</style>
+
+<div class="wrap">
+  <div class="top">
+    <div>
+      <h1>Пресеты по продуктам в форме запуска</h1>
+      <p class="lead">Два варианта разделения кнопки «Всё» на LMS, Helpdesk и LRS. Кнопки кликабельные: смотрите, какие области дерева отмечаются и какая метка сборки подставится в прогон. Числа — по дереву VSHGU на 3 ноября.</p>
+    </div>
+    <button class="theme-btn" id="theme">Светлая тема</button>
+  </div>
+
+  <!-- ВАРИАНТ A -->
+  <section class="variant" id="va">
+    <div class="variant-head"><span class="tag">Вариант A</span><h2>Два ряда: что тестируем × как</h2></div>
+    <p class="verdict">Рекомендую. Продукт задаёт область, вид фильтрует внутри неё. «Integration» становится честным: только внешние системы. Та же пара рядов в «Расписаниях», без Mobile.</p>
+    <div class="card">
+      <h3>Тесты</h3>
+      <div class="row">
+        <span class="label">Стенд</span><span class="select">develop <span class="chev">▾</span></span>
+        <button class="btn" style="padding:6px 12px;font-size:13px">Проверить</button>
+        <span class="label">Маркер</span><span class="select" style="min-width:150px">— без маркера — <span class="chev">▾</span></span>
+      </div>
+      <div class="row"><span class="label">Поиск по разделам</span><span class="search">например notifications</span></div>
+
+      <div class="preset-group">
+        <span class="label">Что</span>
+        <div class="run-buttons" id="a-products">
+          <button class="pbtn" data-product="lms"><span class="mark">L</span>LMS <span class="n">255</span></button>
+          <button class="pbtn" data-product="helpdesk"><span class="mark">H</span>Helpdesk <span class="n">51</span></button>
+          <button class="pbtn" data-product="lrs"><span class="mark">R</span>LRS <span class="n">16</span></button>
+          <button class="pbtn all active" data-product="all">Всё <span class="n">478</span></button>
+        </div>
+      </div>
+      <div class="preset-group">
+        <span class="label">Как</span>
+        <div class="run-buttons" id="a-kinds">
+          <button class="pbtn" data-kind="api">API</button>
+          <button class="pbtn" data-kind="ui">UI</button>
+          <button class="pbtn" data-kind="smoke" title="Маркер smoke внутри выбранного продукта">Smoke</button>
+          <button class="pbtn" data-kind="e2e">E2E</button>
+          <button class="pbtn" data-kind="regression" title="Без внешних интеграций: ai_chat, CAS, БУК, МТС Линк, P2P">Regression</button>
+          <button class="pbtn" data-kind="mobile" title="tests/ui/mobile, включает галочку «Мобильный (Pixel 7)»">Mobile</button>
+          <button class="pbtn" data-kind="integration" title="Только внешние системы: ai_chat, CAS, БУК, МТС Линк, P2P. Нужен стенд с токенами интеграций">Integration</button>
+        </div>
+      </div>
+
+      <div class="summary" id="a-summary"></div>
+      <div class="tree" id="a-tree"></div>
+
+      <div class="actions">
+        <button class="btn primary">Запустить выбранное</button>
+        <span class="chip build" id="a-build"><span class="dot"></span>Сборка: —</span>
+        <span class="hint">метка подставляется автоматически, как «Мобильный (Pixel 7)»</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ВАРИАНТ B -->
+  <section class="variant onerow" id="vb">
+    <div class="variant-head"><span class="tag">Вариант B</span><h2>Один ряд: продукты добавлены к существующим кнопкам</h2></div>
+    <p class="verdict">Минимальное изменение, как в вопросе. Девять кнопок в ряд, «что» и «как» смешаны, Integration по-прежнему содержит helpdesk и lrs, пока его не переопределить вручную.</p>
+    <div class="card">
+      <h3>Тесты</h3>
+      <div class="row"><span class="label">Поиск по разделам</span><span class="search">например notifications</span></div>
+      <div class="run-buttons" id="b-row">
+        <button class="pbtn" data-kind="api">API</button>
+        <button class="pbtn" data-kind="ui">UI</button>
+        <button class="pbtn" data-kind="smoke">Smoke</button>
+        <button class="pbtn" data-kind="e2e">E2E</button>
+        <button class="pbtn" data-kind="regression">Regression</button>
+        <button class="pbtn" data-kind="mobile">Mobile</button>
+        <button class="pbtn" data-kind="integration">Integration</button>
+        <span class="divider"></span>
+        <button class="pbtn" data-product="helpdesk"><span class="mark">H</span>Helpdesk</button>
+        <button class="pbtn" data-product="lrs"><span class="mark">R</span>LRS</button>
+        <button class="pbtn all active" data-product="all">Всё</button>
+      </div>
+      <div class="summary" id="b-summary"></div>
+      <div class="tree" id="b-tree"></div>
+      <div class="actions">
+        <button class="btn primary">Запустить выбранное</button>
+        <span class="chip build" id="b-build"><span class="dot"></span>Сборка: —</span>
+      </div>
+    </div>
+  </section>
+
+  <div class="notes">
+    <h2>Что меняется в коде при варианте A</h2>
+    <ul>
+      <li>В <code>ui/sections-tree-logic.js</code>: список областей по продукту (<code>helpdesk</code> и <code>tickets</code> → Helpdesk; <code>lrs</code> → LRS; внешние интеграции <code>ai_chat, cas, buk, mts_link, p2p</code> → Integration; остальное → LMS). Пресет вида применяется к областям выбранного продукта.</li>
+      <li>«Всё» и «LMS» без Regression дают прежний полный набор, ничего из существующих сценариев не ломается.</li>
+      <li>Метка сборки по продукту подставляется в <code>runner.submit_run</code>, если не задана, по тому же правилу, что «Мобильный (Pixel 7)». В истории прогонов появляется фильтр по сборкам Helpdesk и LRS, дельта сравнивает helpdesk с helpdesk.</li>
+      <li>Форма расписания получает те же два ряда без Mobile. Четыре падающих теста про пресеты обновляются под новую раскладку.</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  // Области по дереву VSHGU (03.11.2026): kind → area → число тестов.
+  var TREE = {
+    api: {ai_chat:12, alpina_and_mif:4, aos:2, banner:2, buk:15, cas:15, certificates:4, create_activity:17, dictionaries:29, e2e:3, helpdesk:23, knowledge_base:1, learning_statistics:2, mts_link:26, notifications:22, onboarding:1, p2p:36, polls:1, proctoring:1, programs:28, qr_code:13, ratings:30, streams:1, tests:1, tickets:11, users:12},
+    ui:  {ai_chat:17, alpina_and_mif:2, aos:2, banner:2, buk:7, cas:4, courses:6, dashboards:2, dictionaries:5, game_session:2, helpdesk:16, homework:1, knowledge_base:23, learning_statistics:14, lrs:14, mobile:5, mts_link:14, notifications:2, onboarding:8, p2p:10, polls:1, practical_tasks:11, proctoring:1, test_constructor:18, tests:1, tickets:1, users:9},
+    e2e: {lrs:2, scenarios:22}
+  };
+  var PRODUCT = {
+    helpdesk: ["helpdesk","tickets"],
+    lrs: ["lrs"],
+    integration: ["ai_chat","cas","buk","mts_link","p2p"]
+  };
+  var LABEL = {lms:"LMS", helpdesk:"Helpdesk", lrs:"LRS", all:null};
+  function productOf(area){
+    if (PRODUCT.helpdesk.indexOf(area) !== -1) return "helpdesk";
+    if (PRODUCT.lrs.indexOf(area) !== -1) return "lrs";
+    if (PRODUCT.integration.indexOf(area) !== -1) return "integration";
+    return "lms";
+  }
+  // Вариант A: продукт задаёт область; вид — фильтр внутри. Вариант B: любая кнопка заменяет выбор.
+  function select(product, kind, twoRows){
+    var on = {};
+    Object.keys(TREE).forEach(function(k){
+      Object.keys(TREE[k]).forEach(function(a){
+        var p = productOf(a);
+        var inProduct = product === "all" || (product === "lms" ? (p === "lms") : p === product);
+        if (twoRows){
+          // в варианте B продукт «lms» не существует, а integration содержит helpdesk/lrs
+          if (product === "all" && kind === "integration") inProduct = (p !== "lms");
+        } else if (kind === "integration") inProduct = (p !== "lms");
+        var kindOk = true;
+        if (kind === "api" || kind === "ui" || kind === "e2e") kindOk = (k === kind);
+        if (kind === "mobile") kindOk = (a === "mobile");
+        if (kind === "regression") kindOk = (p !== "integration") && (twoRows ? true : (p === "lms"));
+        if (kind === "integration") kindOk = (p === "integration") || (!twoRows && (p === "helpdesk" || p === "lrs"));
+        if (kind === "smoke") kindOk = true;
+        if (inProduct && kindOk) on[k+"/"+a] = true;
+      });
+    });
+    return on;
+  }
+  function render(prefix, product, kind, twoRows){
+    var on = select(product, kind, twoRows);
+    var tree = document.getElementById(prefix+"-tree");
+    var html = "", total = 0, per = {api:0, ui:0, e2e:0};
+    Object.keys(TREE).forEach(function(k){
+      var areas = Object.keys(TREE[k]), cnt = 0, sel = 0, tests = 0;
+      areas.forEach(function(a){ var n = TREE[k][a]; tests += n; if (on[k+"/"+a]) { cnt += n; sel++; } });
+      total += cnt; per[k] = cnt;
+      var cb = sel === 0 ? "" : (sel === areas.length ? "on" : "part");
+      html += '<div class="tkind"><span class="chev">▾</span><span class="cb '+cb+'">'+(cb==="on"?"✓":(cb==="part"?"–":""))+'</span><span class="t">tests/'+k+'</span><span class="meta">'+tests+' тест. · выбрано '+cnt+'</span></div>';
+      html += '<div class="areas">'+areas.map(function(a){
+        var cls = on[k+"/"+a] ? "on" : (Object.keys(on).length ? "off" : "");
+        return '<span class="area '+cls+'">'+a+' '+TREE[k][a]+'</span>';
+      }).join("")+'</div>';
+    });
+    tree.innerHTML = html;
+    var smoke = kind === "smoke" ? ' <span class="chip">-m smoke</span>' : "";
+    document.getElementById(prefix+"-summary").innerHTML =
+      'Выбрано: <b>'+total+'</b> тестов · API '+per.api+' · UI '+per.ui+' · E2E '+per.e2e + smoke;
+    var label = twoRows
+      ? (LABEL[product] ? LABEL[product] + (kind ? " · " + kindTitle(kind) : "") : (kind ? kindTitle(kind) : "—"))
+      : (product !== "all" ? LABEL[product] : (kind ? kindTitle(kind) : "—"));
+    document.getElementById(prefix+"-build").innerHTML = '<span class="dot"></span>Сборка: ' + label;
+  }
+  function kindTitle(k){ return {api:"API", ui:"UI", smoke:"Smoke", e2e:"E2E", regression:"Regression", mobile:"Mobile", integration:"Integration"}[k] || k; }
+
+  // ---- вариант A
+  var aProduct = "all", aKind = null;
+  var ap = document.getElementById("a-products"), ak = document.getElementById("a-kinds");
+  function aSync(){
+    ap.querySelectorAll(".pbtn").forEach(function(b){ b.classList.toggle("active", b.dataset.product === aProduct); });
+    ak.querySelectorAll(".pbtn").forEach(function(b){
+      b.classList.toggle("active", b.dataset.kind === aKind);
+      // Mobile есть только в LMS, Integration — только вне Helpdesk/LRS
+      var dim = (b.dataset.kind === "mobile" && aProduct !== "all" && aProduct !== "lms")
+             || (b.dataset.kind === "integration" && (aProduct === "helpdesk" || aProduct === "lrs"))
+             || (b.dataset.kind === "regression" && (aProduct === "helpdesk" || aProduct === "lrs"));
+      b.classList.toggle("dim", dim);
+    });
+    render("a", aProduct, aKind, true);
+  }
+  ap.addEventListener("click", function(e){ var b = e.target.closest(".pbtn"); if (!b) return; aProduct = b.dataset.product; if (aKind === "mobile" && aProduct !== "all" && aProduct !== "lms") aKind = null; aSync(); });
+  ak.addEventListener("click", function(e){ var b = e.target.closest(".pbtn"); if (!b) return; aKind = (aKind === b.dataset.kind) ? null : b.dataset.kind; aSync(); });
+  aSync();
+
+  // ---- вариант B
+  var bProduct = "all", bKind = null;
+  var br = document.getElementById("b-row");
+  function bSync(){
+    br.querySelectorAll(".pbtn").forEach(function(b){
+      b.classList.toggle("active", (b.dataset.product && b.dataset.product === bProduct && !bKind) || (b.dataset.kind && b.dataset.kind === bKind));
+    });
+    render("b", bProduct, bKind, false);
+  }
+  br.addEventListener("click", function(e){
+    var b = e.target.closest(".pbtn"); if (!b) return;
+    if (b.dataset.product){ bProduct = b.dataset.product; bKind = null; }
+    else { bKind = (bKind === b.dataset.kind) ? null : b.dataset.kind; bProduct = "all"; }
+    bSync();
+  });
+  bSync();
+
+  // ---- тема
+  var root = document.documentElement, tb = document.getElementById("theme");
+  function isDark(){ var t = root.getAttribute("data-theme"); if (t) return t === "dark"; return window.matchMedia("(prefers-color-scheme: dark)").matches; }
+  function syncTheme(){ tb.textContent = isDark() ? "Светлая тема" : "Тёмная тема"; }
+  tb.addEventListener("click", function(){ root.setAttribute("data-theme", isDark() ? "light" : "dark"); syncTheme(); });
+  syncTheme();
+})();
+</script>
