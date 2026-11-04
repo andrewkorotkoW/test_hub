@@ -802,6 +802,25 @@ test("toggleKind: 'off' отмечает все файлы всех област
   assert.deepStrictEqual(Array.from(fromOn), []);
 });
 
+test("toggleKind: возвращает новый Set, не мутирует переданный (симметрично toggleArea)", function () {
+  var apiKind = sampleTree().kinds[0];
+  var original = new Set(["tests/api/notifications/test_list.py"]);
+  var result = Logic.toggleKind(apiKind, original);
+  assert.notStrictEqual(result, original);
+  assert.deepStrictEqual(Array.from(original).sort(), ["tests/api/notifications/test_list.py"]);
+});
+
+test("toggleKind: принимает обычный массив (не только Set)", function () {
+  var apiKind = sampleTree().kinds[0];
+  var result = Logic.toggleKind(apiKind, ["tests/api/notifications/test_list.py"]);
+  assert.ok(result instanceof Set);
+  assert.deepStrictEqual(Array.from(result).sort(), [
+    "tests/api/buk/test_x.py",
+    "tests/api/notifications/test_get.py",
+    "tests/api/notifications/test_list.py",
+  ]);
+});
+
 // ------------------------------------------------------------------ expandedKeysForQuery
 
 test("expandedKeysForQuery: пустой запрос — ничего не раскрывает принудительно", function () {
