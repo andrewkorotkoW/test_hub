@@ -147,8 +147,41 @@
   // нельзя — считаем уникальный file.target, по одному разу на продукт и один раз
   // на "all" (своим Set-ом каждый, т.к. "all" должен быть верным независимо от
   // того, к какому продукту отнесён конкретный дубль).
+  // Полное число тестов файла: один и тот же target может встречаться в нескольких
+  // видах с РАЗНЫМ tests_count — под tests/e2e (раздел по маркеру e2e) у файла из
+  // tests/ui/<area> считаются только e2e-тесты (ui=3, e2e=1 у
+  // tests/ui/learning_statistics/test_courses_table_progress.py, 04.11.2026).
+  // Поэтому «уникальное» число файла — максимум по вхождениям, а не первое
+  // встреченное. Одна карта для productTestCounts, countCheckedByKind.total и
+  // меты строк вида — чтобы кнопка продукта, строка итога и плашки сходились.
+  function fileTestCounts(data) {
+    var map = {};
+    (data.kinds || []).forEach(function (kindNode) {
+      (kindNode.areas || []).forEach(function (area) {
+        (area.files || []).forEach(function (file) {
+          var count = file.tests_count || 0;
+          if (!(file.target in map) || count > map[file.target]) map[file.target] = count;
+        });
+      });
+    });
+    return map;
+  }
+
+  function uniqueTestCount(data, targets) {
+    var map = fileTestCounts(data);
+    var seen = {};
+    var total = 0;
+    (targets instanceof Set ? Array.from(targets) : (targets || [])).forEach(function (target) {
+      if (seen[target]) return;
+      seen[target] = true;
+      total += map[target] || 0;
+    });
+    return total;
+  }
+
   function productTestCounts(data) {
     var out = { lms: 0, helpdesk: 0, lrs: 0, all: 0 };
+    var counts = fileTestCounts(data);
     var seenAll = {};
     var seenByProduct = { lms: {}, helpdesk: {}, lrs: {} };
     (data.kinds || []).forEach(function (kindNode) {
@@ -156,7 +189,7 @@
         var areaProduct = productOf(area.area);
         (area.files || []).forEach(function (file) {
           var target = file.target;
-          var count = file.tests_count || 0;
+          var count = counts[target] || 0;
           if (!seenAll[target]) {
             seenAll[target] = true;
             out.all += count;
@@ -349,19 +382,16 @@
   function countCheckedByKind(data, checkedTargets) {
     var checked = checkedTargets instanceof Set ? checkedTargets : new Set(checkedTargets || []);
     var out = { total: 0, api: 0, ui: 0, e2e: 0 };
-    var countedTotal = {};
     (data.kinds || []).forEach(function (kindNode) {
       var sum = 0;
       kindAllFiles(kindNode).forEach(function (file) {
-        if (!checked.has(file.target)) return;
-        sum += file.tests_count || 0;
-        if (!countedTotal[file.target]) {
-          countedTotal[file.target] = true;
-          out.total += file.tests_count || 0;
-        }
+        if (checked.has(file.target)) sum += file.tests_count || 0;
       });
       out[kindNode.kind] = sum;
     });
+    // total — уникальные файлы с полным числом тестов (fileTestCounts), а не сумма по
+    // видам: tests/e2e пересекается с tests/ui, разбивка по видам это показывает честно.
+    out.total = uniqueTestCount(data, checked);
     return out;
   }
 
@@ -440,6 +470,8 @@
     productOf: productOf,
     presetLeafTargets: presetLeafTargets,
     kindAvailableForProduct: kindAvailableForProduct,
+    fileTestCounts: fileTestCounts,
+    uniqueTestCount: uniqueTestCount,
     productTestCounts: productTestCounts,
     PRODUCT_LABELS: PRODUCT_LABELS,
     KIND_LABELS: KIND_LABELS,
