@@ -202,21 +202,27 @@ def test_common_js_stats_link_needs_project_like_coverage_link():
 # ------------------------------------------------------------------ дерево разделов в форме запуска (project.html)
 
 async def test_project_html_has_sections_tree_with_search_and_presets_in_run_form(client):
+    """С 03.11 (docs/missions/2026-11-03_product_presets.md) пресеты — два ряда:
+    «Что» (data-product, продукты) и «Как» (data-preset, виды) — вместо одного
+    #sections-presets-row; «Всё» переехало в ряд «Что» (data-product="all")."""
     resp = await client.get("/project.html")
     html = resp.text
     assert 'id="sections-search-input"' in html
-    assert 'id="sections-presets-row"' in html
+    assert 'id="sections-products-row"' in html
+    assert 'id="sections-kinds-row"' in html
     assert 'id="sections-tree"' in html
     assert 'id="manual-target-input"' in html
-    for preset in ("api", "ui", "smoke", "all"):
+    for preset in ("api", "ui", "smoke"):
         assert f'data-preset="{preset}"' in html
+    assert 'data-product="all"' in html
 
 
 async def test_project_html_has_sections_tree_in_schedule_form(client):
     resp = await client.get("/project.html")
     html = resp.text
     assert 'id="sched-sections-search-input"' in html
-    assert 'id="sched-sections-presets-row"' in html
+    assert 'id="sched-sections-products-row"' in html
+    assert 'id="sched-sections-kinds-row"' in html
     assert 'id="sched-sections-tree"' in html
     assert 'id="sched-target-input"' in html
 
@@ -254,15 +260,18 @@ async def test_project_js_manual_target_input_overrides_sections_picker():
 
 
 async def test_project_js_smoke_preset_sets_marker_and_checks_all_files():
-    """Пресет «smoke» — единственный, отсутствующий в SectionsTreeLogic.presetLeafTargets
-    (это существующий pytest-маркер, не раздел файловой системы): выставляет
-    marker=smoke и отмечает все файлы дерева (allLeafTargets)."""
+    """Пресет «smoke» (ряд «Как») — особый kind: не фильтрует файлы по kindNode.kind
+    (isSpecialKind в sections-tree-logic.js), то есть presetLeafTargets(data, {product,
+    kind}) с kind="smoke" фактически отмечает все файлы текущего продукта (по
+    умолчанию продукт — 'all', то есть все файлы дерева, как раньше allLeafTargets).
+    С 03.11 (docs/missions/2026-11-03_product_presets.md) оба ряда ведут в общий
+    applyPresetChange(), который и выставляет marker=smoke."""
     project_js = (REPO_ROOT / "ui" / "project-sections-picker.js").read_text()
-    match = re.search(r'if \(preset === "smoke"\) \{([^}]*)\}', project_js)
-    assert match, "не найдена ветка пресета smoke в ui/project-sections-picker.js"
+    match = re.search(r"function applyPresetChange\(\) \{(.*?)\n    \}", project_js, re.DOTALL)
+    assert match, "не найдена applyPresetChange() в ui/project-sections-picker.js"
     body = match.group(1)
-    assert 'markerSelectEl.value = "smoke"' in body
-    assert "SectionsTreeLogic.allLeafTargets(data)" in body
+    assert 'if (kind === "smoke") markerSelectEl.value = "smoke";' in body
+    assert "SectionsTreeLogic.presetLeafTargets(data, { product, kind })" in body
 
 
 async def test_schedule_submit_falls_back_to_sections_picker_then_all():
