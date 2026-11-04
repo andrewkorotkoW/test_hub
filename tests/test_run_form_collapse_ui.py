@@ -91,10 +91,13 @@ def test_style_css_set_target_summary_respects_hidden():
 
 def test_run_all_button_passes_live_and_mobile_flags():
     # прогон #92 (19.10.2026): «Запустить всё» с отмеченным «Мобильный» уходил без
-    # mobile/live — флаги передавались только из «Запустить выбранное»
+    # mobile/live — флаги передавались только из «Запустить выбранное». С автометкой
+    # сборки (docs/missions/2026-11-03_product_presets.md) метка больше не голый
+    # isBuildMode-тернарник, а computeRunLabel() (учитывает автометку по продукту/виду
+    # и null для мобильного прогона — см. tests/test_run_auto_label_ui.py).
     handler = RUN_WINDOW_JS[RUN_WINDOW_JS.index('runAllBtn.addEventListener("click"'):]
     handler = handler[: handler.index('runSelectedBtn.addEventListener("click"')]
-    assert 'submitRun("all", isBuildMode ? buildLabel : null, liveCheckbox.checked && !liveCheckbox.disabled, mobileCheckbox.checked)' in handler
+    assert 'submitRun("all", computeRunLabel(), liveCheckbox.checked && !liveCheckbox.disabled, mobileCheckbox.checked)' in handler
     assert 'submitRun("all");' not in handler
 
 

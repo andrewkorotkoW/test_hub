@@ -240,7 +240,11 @@ def test_action_buttons_use_fixed_color_not_project_accent():
         r'\.tc-view-toggle button\[aria-current="true"\]',
     ]
     for selector in selectors:
-        match = re.search(selector + r" \{([^}]*)\}", css)
+        # .sections-preset-btn.active — голова группы селекторов (вместе с
+        # [data-preset].active/[data-product].active, см. комментарий про
+        # специфичность в style.css), не отдельное правило — после селектора
+        # могут идти ещё строки через запятую перед открывающей скобкой.
+        match = re.search(selector + r"(?:,\s*[^{]*)?\s*\{([^}]*)\}", css)
         assert match, f"не найдено правило {selector} в ui/style.css"
         body = match.group(1)
         assert "--action-accent" in body, f"{selector} не использует --action-accent"
