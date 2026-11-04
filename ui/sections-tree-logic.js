@@ -141,14 +141,31 @@
   // {lms, helpdesk, lrs, all}, each — сумма file.tests_count по productOf(area.area);
   // all — сумма по всем продуктам, включая Integration (у Integration нет своей
   // кнопки, её тесты видны только внутри «Всё»/вида Integration).
+  // Дедуп «один файл — один раз» (docs/missions/2026-11-03_area_chips.md, раздел 2):
+  // псевдо-раздел tests/e2e дублирует файлы, физически лежащие в tests/api|ui/<area>
+  // (маркер @pytest.mark.e2e), поэтому area.tests_count суммировать по всем kind
+  // нельзя — считаем уникальный file.target, по одному разу на продукт и один раз
+  // на "all" (своим Set-ом каждый, т.к. "all" должен быть верным независимо от
+  // того, к какому продукту отнесён конкретный дубль).
   function productTestCounts(data) {
     var out = { lms: 0, helpdesk: 0, lrs: 0, all: 0 };
+    var seenAll = {};
+    var seenByProduct = { lms: {}, helpdesk: {}, lrs: {} };
     (data.kinds || []).forEach(function (kindNode) {
       (kindNode.areas || []).forEach(function (area) {
-        var count = area.tests_count || 0;
         var areaProduct = productOf(area.area);
-        if (areaProduct !== "integration") out[areaProduct] += count;
-        out.all += count;
+        (area.files || []).forEach(function (file) {
+          var target = file.target;
+          var count = file.tests_count || 0;
+          if (!seenAll[target]) {
+            seenAll[target] = true;
+            out.all += count;
+          }
+          if (areaProduct !== "integration" && !seenByProduct[areaProduct][target]) {
+            seenByProduct[areaProduct][target] = true;
+            out[areaProduct] += count;
+          }
+        });
       });
     });
     return out;
@@ -267,18 +284,83 @@
     return (files || []).filter(function (f) { return checked.has(f.target); }).length;
   }
 
+  function toSet(checkedTargets) {
+    return checkedTargets instanceof Set ? checkedTargets : new Set(checkedTargets || []);
+  }
+
+  // Тристейт по списку файлов: "on" — все отмечены, "off" — ни одного, "partial" —
+  // часть. Пустой список файлов (не встречается в реальном дереве) — "off".
+  function triStateOfFiles(files, checkedTargets) {
+    var checked = toSet(checkedTargets);
+    var list = files || [];
+    if (!list.length) return "off";
+    var checkedCount = list.filter(function (f) { return checked.has(f.target); }).length;
+    if (checkedCount === 0) return "off";
+    if (checkedCount === list.length) return "on";
+    return "partial";
+  }
+
+  // Тристейт плашки области (макет docs/missions/redesign/product_presets/mockups.html,
+  // блок .area.on|.off, партиал — своё правило, в макете его нет): "on" — все файлы
+  // области отмечены, "partial" — часть, "off" — ничего. Работает и для tests/e2e
+  // (area.area == null) — там это единственная плашка «e2e».
+  function areaState(area, checkedTargets) {
+    return triStateOfFiles((area || {}).files, checkedTargets);
+  }
+
+  // Тристейт чекбокса вида (строка "tests/<kind>" над плашками областей) — по всем
+  // файлам раздела (kindAllFiles), а не только текущей области.
+  function kindState(kindNode, checkedTargets) {
+    return triStateOfFiles(kindAllFiles(kindNode), checkedTargets);
+  }
+
+  // Клик по плашке области: "on" -> снять все файлы области, иначе (partial/off)
+  // -> отметить все. Возвращает новый Set, исходный checkedTargets не меняет.
+  function toggleArea(area, checkedTargets) {
+    var checked = toSet(checkedTargets);
+    var next = new Set(checked);
+    var turnOff = areaState(area, checked) === "on";
+    ((area || {}).files || []).forEach(function (file) {
+      if (turnOff) next.delete(file.target);
+      else next.add(file.target);
+    });
+    return next;
+  }
+
+  // Клик по чекбоксу вида — то же самое, но по всем файлам раздела (kindAllFiles).
+  function toggleKind(kindNode, checkedTargets) {
+    var checked = toSet(checkedTargets);
+    var next = new Set(checked);
+    var files = kindAllFiles(kindNode);
+    var turnOff = triStateOfFiles(files, checked) === "on";
+    files.forEach(function (file) {
+      if (turnOff) next.delete(file.target);
+      else next.add(file.target);
+    });
+    return next;
+  }
+
   // Строка итога под пресетами: сколько ТЕСТОВ (не файлов — у файла может быть
-  // несколько тестов, file.tests_count) отмечено всего и по каждому виду.
+  // несколько тестов, file.tests_count) отмечено всего и по каждому виду. Поля
+  // api/ui/e2e считаются "как есть" (у tests/e2e это и есть тесты с маркером e2e,
+  // дубль с их исходным api/ui-файлом осознанный), но total — один раз на
+  // file.target (см. productTestCounts про тот же дубль), иначе он больше суммы
+  // уникальных тестов продуктов.
   function countCheckedByKind(data, checkedTargets) {
     var checked = checkedTargets instanceof Set ? checkedTargets : new Set(checkedTargets || []);
     var out = { total: 0, api: 0, ui: 0, e2e: 0 };
+    var countedTotal = {};
     (data.kinds || []).forEach(function (kindNode) {
       var sum = 0;
       kindAllFiles(kindNode).forEach(function (file) {
-        if (checked.has(file.target)) sum += file.tests_count || 0;
+        if (!checked.has(file.target)) return;
+        sum += file.tests_count || 0;
+        if (!countedTotal[file.target]) {
+          countedTotal[file.target] = true;
+          out.total += file.tests_count || 0;
+        }
       });
       out[kindNode.kind] = sum;
-      out.total += sum;
     });
     return out;
   }
@@ -376,6 +458,10 @@
     kindAllFiles: kindAllFiles,
     countChecked: countChecked,
     countCheckedByKind: countCheckedByKind,
+    areaState: areaState,
+    kindState: kindState,
+    toggleArea: toggleArea,
+    toggleKind: toggleKind,
     expandedKeysForQuery: expandedKeysForQuery,
     sortKindsForPreset: sortKindsForPreset,
     expandedKeysForPreset: expandedKeysForPreset,
