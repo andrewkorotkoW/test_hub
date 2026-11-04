@@ -663,6 +663,145 @@ test("countCheckedByKind: считает тесты (file.tests_count), а не 
   assert.deepStrictEqual(counts, { total: 7, api: 3, ui: 4, e2e: 0 });
 });
 
+// ------------------------------------------------------------------ дедуп «один файл — один раз»
+// (docs/missions/2026-11-03_area_chips.md, раздел 2): псевдо-раздел tests/e2e
+// дублирует файл, физически лежащий в tests/ui/<area> и помеченный @pytest.mark.e2e
+// (пример из плана: tests_ui_courses/test_user_scorm_stream_flow.py — ui/courses:1
+// и e2e/∅:1). Здесь тот же файл (5 тестов) встречается и в ui/courses, и в tests/e2e
+// вместе с файлом, которого в ui-разделе нет (test_checkout.py, 2 теста).
+
+function treeWithDupE2eFile() {
+  return {
+    kinds: [
+      {
+        kind: "ui",
+        target: "tests/ui",
+        areas: [
+          {
+            area: "courses", section: "ui/courses", target: "tests/ui/courses", tests_count: 5,
+            files: [{ name: "test_scorm.py", target: "tests/ui/courses/test_scorm.py", tests_count: 5 }],
+          },
+        ],
+      },
+      {
+        kind: "e2e",
+        target: "tests/e2e",
+        areas: [
+          {
+            area: null, section: "e2e", target: "tests/e2e", tests_count: 7,
+            files: [
+              { name: "ui/courses/test_scorm.py", target: "tests/ui/courses/test_scorm.py", tests_count: 5 },
+              { name: "test_checkout.py", target: "tests/e2e/test_checkout.py", tests_count: 2 },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+}
+
+test("productTestCounts: дедуп — файл, дублирующийся в tests/e2e (маркер), считается один раз", function () {
+  var counts = Logic.productTestCounts(treeWithDupE2eFile());
+  // наивная сумма area.tests_count дала бы lms=5+7=12 — вместо этого уникальные
+  // file.target: test_scorm (5) + test_checkout (2) = 7.
+  assert.deepStrictEqual(counts, { lms: 7, helpdesk: 0, lrs: 0, all: 7 });
+});
+
+test("countCheckedByKind: total считает дублирующийся файл один раз, поле e2e — как есть (с дублем)", function () {
+  var data = treeWithDupE2eFile();
+  var checked = new Set(["tests/ui/courses/test_scorm.py", "tests/e2e/test_checkout.py"]);
+  var counts = Logic.countCheckedByKind(data, checked);
+  // ui: 5 (test_scorm); e2e: 5+2=7 (дубль test_scorm + test_checkout, это тесты с
+  // маркером e2e "как есть"); total: 5+2=7, не 5+7=12.
+  assert.deepStrictEqual(counts, { total: 7, api: 0, ui: 5, e2e: 7 });
+});
+
+// ------------------------------------------------------------------ areaState/kindState/toggleArea/toggleKind
+
+test("areaState: 'off' — ничего не отмечено, 'partial' — часть файлов, 'on' — все файлы области", function () {
+  var data = sampleTree();
+  var notifications = data.kinds[0].areas[0]; // 2 файла
+  assert.strictEqual(Logic.areaState(notifications, new Set()), "off");
+  assert.strictEqual(Logic.areaState(notifications, new Set(["tests/api/notifications/test_list.py"])), "partial");
+  assert.strictEqual(Logic.areaState(notifications, new Set([
+    "tests/api/notifications/test_list.py",
+    "tests/api/notifications/test_get.py",
+  ])), "on");
+});
+
+test("areaState: работает для tests/e2e (area.area == null, одна плашка 'e2e')", function () {
+  var data = sampleTree();
+  var e2eArea = data.kinds[2].areas[0];
+  assert.strictEqual(e2eArea.area, null);
+  assert.strictEqual(Logic.areaState(e2eArea, new Set()), "off");
+  assert.strictEqual(Logic.areaState(e2eArea, new Set(["tests/e2e/test_checkout.py"])), "on");
+});
+
+test("kindState: тристейт по всем файлам раздела (все области kindNode), не одной области", function () {
+  var apiKind = sampleTree().kinds[0]; // notifications (2 файла) + buk (1 файл) = 3 файла
+  assert.strictEqual(Logic.kindState(apiKind, new Set()), "off");
+  assert.strictEqual(Logic.kindState(apiKind, new Set(["tests/api/notifications/test_list.py"])), "partial");
+  assert.strictEqual(Logic.kindState(apiKind, new Set([
+    "tests/api/notifications/test_list.py",
+    "tests/api/notifications/test_get.py",
+    "tests/api/buk/test_x.py",
+  ])), "on");
+});
+
+test("toggleArea: 'off'/'partial' отмечает все файлы области, 'on' — снимает все", function () {
+  var data = sampleTree();
+  var notifications = data.kinds[0].areas[0];
+  var fromOff = Logic.toggleArea(notifications, new Set());
+  assert.deepStrictEqual(Array.from(fromOff).sort(), [
+    "tests/api/notifications/test_get.py",
+    "tests/api/notifications/test_list.py",
+  ]);
+  var fromPartial = Logic.toggleArea(notifications, new Set(["tests/api/notifications/test_list.py", "tests/api/buk/test_x.py"]));
+  assert.deepStrictEqual(Array.from(fromPartial).sort(), [
+    "tests/api/buk/test_x.py",
+    "tests/api/notifications/test_get.py",
+    "tests/api/notifications/test_list.py",
+  ]);
+  var fromOn = Logic.toggleArea(notifications, new Set([
+    "tests/api/notifications/test_list.py",
+    "tests/api/notifications/test_get.py",
+    "tests/api/buk/test_x.py",
+  ]));
+  assert.deepStrictEqual(Array.from(fromOn).sort(), ["tests/api/buk/test_x.py"]);
+});
+
+test("toggleArea: возвращает новый Set, не мутирует переданный", function () {
+  var data = sampleTree();
+  var notifications = data.kinds[0].areas[0];
+  var original = new Set(["tests/api/notifications/test_list.py"]);
+  var result = Logic.toggleArea(notifications, original);
+  assert.notStrictEqual(result, original);
+  assert.deepStrictEqual(Array.from(original).sort(), ["tests/api/notifications/test_list.py"]);
+});
+
+test("toggleArea: принимает обычный массив (не только Set)", function () {
+  var data = sampleTree();
+  var notifications = data.kinds[0].areas[0];
+  var result = Logic.toggleArea(notifications, ["tests/api/notifications/test_list.py"]);
+  assert.ok(result instanceof Set);
+  assert.deepStrictEqual(Array.from(result).sort(), [
+    "tests/api/notifications/test_get.py",
+    "tests/api/notifications/test_list.py",
+  ]);
+});
+
+test("toggleKind: 'off' отмечает все файлы всех областей раздела, 'on' — снимает все", function () {
+  var apiKind = sampleTree().kinds[0];
+  var fromOff = Logic.toggleKind(apiKind, new Set());
+  assert.deepStrictEqual(Array.from(fromOff).sort(), [
+    "tests/api/buk/test_x.py",
+    "tests/api/notifications/test_get.py",
+    "tests/api/notifications/test_list.py",
+  ]);
+  var fromOn = Logic.toggleKind(apiKind, new Set(fromOff));
+  assert.deepStrictEqual(Array.from(fromOn), []);
+});
+
 // ------------------------------------------------------------------ expandedKeysForQuery
 
 test("expandedKeysForQuery: пустой запрос — ничего не раскрывает принудительно", function () {
