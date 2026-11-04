@@ -24,6 +24,22 @@ from app.main import app
 
 
 @pytest.fixture(autouse=True)
+def _demo_service_off(request, monkeypatch):
+    """Встроенный демо-сервис (app/main.py::lifespan, uvicorn demo.app.main:app на
+    TH_DEMO_PORT=8710) в тестах выключен: на машине владельца этот порт уже занят
+    демо живого test_hub, и тесты, входящие в lifespan(app) (test_prod_startup,
+    test_run_live, test_tg_bot), плодили чужой процесс на занятом порту — два полных
+    прогона агентов 03.11.2026 зависли на часы и ушли в таймаут. Демо-сервис сам по
+    себе тестируется в tests/test_demo_service.py на свободном порту, без lifespan.
+    Единственный тест, которому нужно значение по умолчанию, — проверка самого
+    дефолта; его пропускаем по имени, а не по модулю, чтобы остальные тесты
+    того же файла тоже шли без демо-процесса."""
+    if request.node.name == "test_th_demo_enabled_by_default":
+        return
+    monkeypatch.setattr(settings, "TH_DEMO", False)
+
+
+@pytest.fixture(autouse=True)
 def _eta_hook_off(monkeypatch):
     """Хук пересчёта ETA (app/core/eta.on_run_finished) в тестах выключен: он стартует
     discover проекта и фоновый поток после каждого прогона раннера, задача переживает
