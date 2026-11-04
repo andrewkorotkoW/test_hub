@@ -170,6 +170,55 @@ def test_tree_events_checkbox_click_does_not_trigger_header_toggle():
     assert "return;" in body
 
 
+# ------------------------------------------------------------------ строка вида + плашки областей (docs/missions/2026-11-03_area_chips.md)
+
+def test_kind_row_html_renders_tristate_checkbox_and_tests_meta():
+    """kindRowHtml (макет, строка tests/<kind>) — кнопка-чекбокс .tkind-cb с
+    role="checkbox"/aria-checked, отражающим tristate kindState (on/mixed/false),
+    и подпись-мета ровно в формате макета «N тест. · выбрано M»."""
+    m = re.search(r"function kindRowHtml\(kindNode, checkedTargets, open\) \{(.*?)\n  \}", PROJECT_SECTIONS_PICKER_JS, re.DOTALL)
+    assert m, "не найдена функция kindRowHtml()"
+    body = m.group(1)
+    assert "SectionsTreeLogic.kindState(kindNode, checkedTargets)" in body
+    assert 'class="tkind-cb ${cbClass}"' in body
+    assert 'role="checkbox"' in body
+    assert 'aria-checked="${state === "on" ? "true" : state === "partial" ? "mixed" : "false"}"' in body
+    assert 'class="tkind-meta">${total} тест. · выбрано ${selected}</span>' in body
+
+
+def test_area_chips_html_renders_label_and_tests_count_with_on_off_partial_classes():
+    """areaChipsHtml (макет, плашки под строкой вида) — текст плашки ровно
+    '<область> <число>' и класс area-chip с on/partial, off только когда в форме
+    уже что-то выбрано (anySelected) — иначе ни одна плашка не тускнеет просто
+    потому что сама она ничего не выбрала."""
+    m = re.search(r"function areaChipsHtml\(kindNode, checkedTargets, anySelected\) \{(.*?)\n  \}", PROJECT_SECTIONS_PICKER_JS, re.DOTALL)
+    assert m, "не найдена функция areaChipsHtml()"
+    body = m.group(1)
+    assert 'const cls = ["area-chip"];' in body
+    assert 'class="${cls.join(" ")}"' in body
+    assert 'cls.push("on")' in body
+    assert 'cls.push("partial")' in body
+    assert "else if (anySelected) cls.push(\"off\");" in body
+    assert '>${escapeHtml(label)} ${area.tests_count}</button>' in body
+    # e2e (area.area == null) — одна плашка "e2e" на весь раздел, не пустая подпись
+    assert 'area.area == null ? "e2e" : SectionsTreeLogic.areaLabel(area.area)' in body
+
+
+def test_build_sections_tree_html_places_kind_row_and_area_chips_above_collapsed_file_tree():
+    """Разметка узла вида (.tree-file): строка вида (kindRowHtml), затем плашки
+    областей (.areas-row), затем свёрнутое по умолчанию дерево файлов
+    (.tree-classes[hidden], см. test_build_sections_tree_html_hides_children_when_node_not_open) —
+    порядок как в макете (строка вида наверху, плашки под ней, дерево — по стрелке)."""
+    m = re.search(r"function buildSectionsTreeHtml\(filtered, checkedTargets, expandedKeys\) \{(.*?)\n  \}", PROJECT_SECTIONS_PICKER_JS, re.DOTALL)
+    assert m, "не найдена функция buildSectionsTreeHtml()"
+    body = m.group(1)
+    assert "kindRowHtml(kindNode, checkedTargets, kindOpen)" in body
+    kind_row_idx = body.index("kindRowHtml(kindNode, checkedTargets, kindOpen)")
+    areas_row_idx = body.index('<div class="areas-row">${areaChipsHtml(kindNode, checkedTargets, anySelected)}</div>')
+    tree_classes_idx = body.index('<div class="tree-classes"${kindOpen ? "" : " hidden"}>')
+    assert kind_row_idx < areas_row_idx < tree_classes_idx
+
+
 def test_tree_node_head_checkbox_is_inside_header_markup():
     """Чекбокс физически внутри .tree-node-head (один клик-хэндлер на всю шапку) —
     без этого проверка выше ничего не гарантирует на реальной разметке."""
