@@ -38,17 +38,68 @@
     return `выбрано ${checkedCount} из ${total}`;
   }
 
+  // Строка вида tests/<kind> (docs/missions/2026-11-03_area_chips.md, раздел 1) —
+  // число тестов раздела целиком и число отмеченных тестов (не файлов, как в
+  // countText() выше — макет считает именно тесты). Внутри одного kindNode области
+  // не пересекаются, поэтому простая сумма area.tests_count не нуждается в дедупе
+  // (дедуп нужен только между kind, см. SectionsTreeLogic.fileTestCounts/countCheckedByKind).
+  function kindTestsTotal(kindNode) {
+    return (kindNode.areas || []).reduce((sum, area) => sum + (area.tests_count || 0), 0);
+  }
+
+  function kindTestsSelected(kindNode, checkedTargets) {
+    return SectionsTreeLogic.kindAllFiles(kindNode).reduce(
+      (sum, file) => sum + (checkedTargets.has(file.target) ? (file.tests_count || 0) : 0),
+      0
+    );
+  }
+
+  // Строка вида (макет, блок .tkind): чекбокс-тристейт (SectionsTreeLogic.kindState)
+  // вместо обычного input — клик по нему переключает все файлы вида (toggleKind),
+  // поэтому это кнопка, а не чекбокс-инпут (см. createSectionsPicker/setupTreeEvents).
+  function kindRowHtml(kindNode, checkedTargets, open) {
+    const state = SectionsTreeLogic.kindState(kindNode, checkedTargets);
+    const cbClass = state === "on" ? "on" : state === "partial" ? "part" : "";
+    const cbMark = state === "on" ? "✓" : state === "partial" ? "–" : "";
+    const label = KIND_LABELS[kindNode.kind] || kindNode.kind;
+    const total = kindTestsTotal(kindNode);
+    const selected = kindTestsSelected(kindNode, checkedTargets);
+    return `
+      <div class="tree-node-head tkind-row" role="button" tabindex="0" aria-expanded="${open ? "true" : "false"}">
+        <span class="tree-chev" aria-hidden="true">▸</span>
+        <button type="button" class="tkind-cb ${cbClass}" data-kind="${escapeHtml(kindNode.kind)}" role="checkbox" aria-checked="${state === "on" ? "true" : state === "partial" ? "mixed" : "false"}" aria-label="Выбрать ${escapeHtml(label)} целиком">${cbMark}</button>
+        <span class="tkind-label">${escapeHtml(label)}</span>
+        <span class="tkind-meta">${total} тест. · выбрано ${selected}</span>
+      </div>
+    `;
+  }
+
+  // Плашки областей под строкой вида (макет, блок .areas/.area.on|.off, partial —
+  // своё правило из плана, в макете его нет): для tests/e2e без области (area.area
+  // == null) — одна плашка "e2e" на весь раздел. anySelected — выбрано хоть что-то
+  // в ЦЕЛОЙ форме (не только в этом kind) — "off" тускнеет только тогда, иначе
+  // (ничего вообще не выбрано) все плашки выглядят одинаково нейтрально.
+  function areaChipsHtml(kindNode, checkedTargets, anySelected) {
+    return kindNode.areas.map((area) => {
+      const state = SectionsTreeLogic.areaState(area, checkedTargets);
+      const label = area.area == null ? "e2e" : SectionsTreeLogic.areaLabel(area.area);
+      const cls = ["area-chip"];
+      if (state === "on") cls.push("on");
+      else if (state === "partial") cls.push("partial");
+      else if (anySelected) cls.push("off");
+      return `<button type="button" class="${cls.join(" ")}" data-kind="${escapeHtml(kindNode.kind)}" data-area="${area.area == null ? "" : escapeHtml(area.area)}" title="${escapeHtml(area.section || area.area || label)}">${escapeHtml(label)} ${area.tests_count}</button>`;
+    }).join("");
+  }
+
   // Раскрытые узлы (expandedKeys — Set из SectionsTreeLogic.kindNodeKey/areaNodeKey,
   // уже объединяет ручные клики и авто-раскрытие по поиску, см. createSectionsPicker)
   // переживают пересборку innerHTML — ключ раскрытия хранится вне разметки.
   function buildSectionsTreeHtml(filtered, checkedTargets, expandedKeys) {
     if (!filtered.kinds.length) return `<p class="muted">Разделы не найдены.</p>`;
+    const anySelected = checkedTargets.size > 0;
     return filtered.kinds.map((kindNode) => {
-      const kindFiles = SectionsTreeLogic.kindAllFiles(kindNode);
-      const kindTestsCount = kindNode.areas.reduce((sum, a) => sum + (a.tests_count || 0), 0);
       const kindKey = SectionsTreeLogic.kindNodeKey(kindNode);
       const kindOpen = expandedKeys.has(kindKey);
-      const kindLabel = KIND_LABELS[kindNode.kind] || kindNode.kind;
 
       const areasHtml = kindNode.areas.map((area) => {
         const filesHtml = area.files.map((file) => `
@@ -77,16 +128,10 @@
         `;
       }).join("");
 
-      const kindChecked = SectionsTreeLogic.countChecked(kindFiles, checkedTargets);
       return `
         <div class="tree-file${kindOpen ? " open" : ""}" data-tree-key="${escapeHtml(kindKey)}">
-          ${nodeHeadHtml({
-            open: kindOpen,
-            ariaLabel: kindLabel,
-            label: kindLabel,
-            baseMeta: `${kindTestsCount} тест.`,
-            countText: countText(kindChecked, kindFiles.length),
-          })}
+          ${kindRowHtml(kindNode, checkedTargets, kindOpen)}
+          <div class="areas-row">${areaChipsHtml(kindNode, checkedTargets, anySelected)}</div>
           <div class="tree-classes"${kindOpen ? "" : " hidden"}>${areasHtml}</div>
         </div>
       `;
@@ -100,35 +145,14 @@
     parentCb.indeterminate = checkedCount > 0 && checkedCount < leaves.length;
   }
 
-  function updateCountLabel(scope, leaves) {
-    const countEl = scope.querySelector(":scope > .tree-node-head .tree-node-meta-count");
-    if (!countEl) return;
-    const checkedCount = Array.from(leaves).filter((cb) => cb.checked).length;
-    countEl.textContent = countText(checkedCount, leaves.length);
-  }
-
-  function updateAncestors(checkbox) {
-    const classScope = checkbox.closest("div.tree-class");
-    if (classScope) {
-      const leaves = classScope.querySelectorAll(".tree-tests input.tree-leaf");
-      setParentState(classScope.querySelector(":scope > .tree-node-head > input.tree-check"), leaves);
-      updateCountLabel(classScope, leaves);
-    }
-    const fileScope = checkbox.closest("div.tree-file");
-    if (fileScope) {
-      const leaves = fileScope.querySelectorAll(".tree-leaf");
-      setParentState(fileScope.querySelector(":scope > .tree-node-head > input.tree-check"), leaves);
-      updateCountLabel(fileScope, leaves);
-    }
-  }
-
   // После полной пересборки innerHTML (рендер дерева заново — поиск/пресет/раскрытие)
-  // родительские чекбоксы (область/раздел) рендерятся как ни на что не похожие
-  // на состояние листьев — buildSectionsTreeHtml знает только про checked-атрибут
-  // самих файлов (счётчики «выбрано N из M» он, в отличие от checked/indeterminate,
-  // уже посчитал сам). Эта функция досчитывает checked/indeterminate у всех
-  // .tree-class/.tree-file по уже отрисованным листьям, как updateAncestors
-  // делает для одного изменения.
+  // родительский чекбокс области рендерится как ни на что не похожий на состояние
+  // листьев — buildSectionsTreeHtml знает только про checked-атрибут самих файлов
+  // (счётчик «выбрано N из M» он, в отличие от checked/indeterminate, уже посчитал
+  // сам). Эта функция досчитывает checked/indeterminate у всех .tree-class по уже
+  // отрисованным листьям (у строки вида над плашками, .tkind-row, своего
+  // input.tree-check больше нет — её тристейт (kindState) и так целиком посчитан
+  // в kindRowHtml на каждый рендер, досчитывать по DOM нечего).
   function syncAllAncestors(box) {
     box.querySelectorAll("div.tree-class").forEach((classScope) => {
       setParentState(
@@ -136,23 +160,27 @@
         classScope.querySelectorAll(".tree-tests input.tree-leaf")
       );
     });
-    box.querySelectorAll("div.tree-file").forEach((fileScope) => {
-      setParentState(
-        fileScope.querySelector(":scope > .tree-node-head > input.tree-check"),
-        fileScope.querySelectorAll(".tree-leaf")
-      );
-    });
   }
 
   // handlers.onHeaderToggle(key) — клик/Enter/Space по заголовку узла (не по
   // чекбоксу — ev.target.matches("input.tree-check") возвращает раньше, поэтому
   // ниже не нужен preventDefault/stopImmediatePropagation, чекбокс и раскрытие
-  // не конфликтуют). handlers.onLeafChange() — после updateAncestors на каждое
-  // ручное изменение листа, для пересчёта строки итога.
+  // не конфликтуют). handlers.onKindCheckboxToggle(rawKind)/onAreaChipToggle(rawKind,
+  // rawArea) — клик по новой строке вида/плашке области (кнопки .tkind-cb/.area-chip,
+  // не input, поэтому разбираются раньше общего .tree-node-head-тоггла раскрытия).
+  // handlers.onLeafChange() — любое ручное изменение листа в развёрнутом дереве
+  // точечного выбора: полный рендер (а не точечный DOM-патч) — проще и надёжнее,
+  // раз строка вида/плашки всё равно требуют пересчёта по всему checked.
   function setupTreeEvents(box, handlers) {
     const onHeaderToggle = (handlers && handlers.onHeaderToggle) || null;
     const onLeafChange = (handlers && handlers.onLeafChange) || null;
+    const onKindCheckboxToggle = (handlers && handlers.onKindCheckboxToggle) || null;
+    const onAreaChipToggle = (handlers && handlers.onAreaChipToggle) || null;
     const toggleFromEvent = (ev) => {
+      const kindCb = ev.target.closest(".tkind-cb");
+      if (kindCb) { if (onKindCheckboxToggle) onKindCheckboxToggle(kindCb.dataset.kind); return; }
+      const chip = ev.target.closest(".area-chip");
+      if (chip) { if (onAreaChipToggle) onAreaChipToggle(chip.dataset.kind, chip.dataset.area); return; }
       if (ev.target.matches("input.tree-check")) { ev.stopPropagation(); return; }
       const head = ev.target.closest(".tree-node-head");
       if (!head || !onHeaderToggle) return;
@@ -170,12 +198,11 @@
       const checkbox = ev.target;
       if (!checkbox.matches("input.tree-check")) return;
       if (checkbox.classList.contains("tree-parent")) {
-        const scope = checkbox.closest("div.tree-class") || checkbox.closest("div.tree-file");
+        const scope = checkbox.closest("div.tree-class");
         scope.querySelectorAll("input.tree-check").forEach((cb) => {
           if (cb !== checkbox) { cb.checked = checkbox.checked; cb.indeterminate = false; }
         });
       }
-      updateAncestors(checkbox);
       if (onLeafChange) onLeafChange();
     });
   }
@@ -220,6 +247,12 @@
     // текущее состояние чекбоксов из DOM — иначе оно потеряется при замене разметки.
     function snapshotChecked() {
       checked = new Set(checkedFileTargets(box));
+    }
+
+    // kindNode по kindNode.kind (как в data-kind у .tkind-cb/.area-chip) — для
+    // toggleKind/toggleArea по клику (см. setupTreeEvents ниже).
+    function findKindNode(rawKind) {
+      return (data.kinds || []).find((k) => k.kind === rawKind) || null;
     }
 
     // Узлы, раскрытые вручную, плюс (пока есть непустой поисковый запрос) узлы,
@@ -296,7 +329,29 @@
         if (expanded.has(key)) expanded.delete(key); else expanded.add(key);
         render();
       },
-      onLeafChange: updateSummaryLine,
+      // Ручное изменение листа в развёрнутом дереве точечного выбора: полный
+      // рендер, не точечный DOM-патч — строка вида и плашки областей всё равно
+      // пересчитываются по всему checked (areaState/kindState), в отличие от
+      // старого countText() выше это им не обойти.
+      onLeafChange() {
+        snapshotChecked();
+        render();
+      },
+      onKindCheckboxToggle(rawKind) {
+        const kindNode = findKindNode(rawKind);
+        if (!kindNode) return;
+        snapshotChecked();
+        checked = SectionsTreeLogic.toggleKind(kindNode, checked);
+        render();
+      },
+      onAreaChipToggle(rawKind, rawArea) {
+        const kindNode = findKindNode(rawKind);
+        const area = kindNode && kindNode.areas.find((a) => (a.area == null ? "" : a.area) === rawArea);
+        if (!area) return;
+        snapshotChecked();
+        checked = SectionsTreeLogic.toggleArea(area, checked);
+        render();
+      },
     });
     if (searchInput) {
       searchInput.addEventListener("input", () => {
@@ -376,7 +431,15 @@
 
   const sectionsPicker = createSectionsPicker(
     sectionsTreeBox, sectionsSearchInput, sectionsProductsRow, sectionsKindsRow, markerSelect, sectionsSummaryLine,
-    { mobile: true, onStateChange: () => updateBuildChip() }
+    {
+      mobile: true,
+      // Клик по новой строке вида/плашке области (toggleKind/toggleArea) меняет
+      // checked и перерисовывает дерево так же, как клик по чекбоксу файла или
+      // пресет — но, в отличие от них, не идёт через "change"/отдельные
+      // слушатели на sectionsProductsRow/sectionsKindsRow (см. ниже), поэтому
+      // «Эфир»/маркер-конфликт пересчитываем здесь же, на каждый рендер.
+      onStateChange: () => { updateBuildChip(); updateLiveCheckboxState(); },
+    }
   );
   const schedSectionsPicker = createSectionsPicker(
     schedSectionsTreeBox, schedSectionsSearchInput, schedSectionsProductsRow, schedSectionsKindsRow, schedMarkerSelect, schedSectionsSummaryLine,

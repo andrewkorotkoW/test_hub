@@ -622,6 +622,56 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
 .tree-class .tree-node-title { color: var(--text-muted); }
 .tree-node-head .tree-meta { margin-left: 0; }
 
+/* Строка вида (tests/api|ui|e2e) и плашки областей под ней — макет
+   docs/missions/redesign/product_presets/mockups.html (вариант A: .tkind/.cb/
+   .areas/.area), план docs/missions/2026-11-03_area_chips.md, раздел 1.
+   Чекбокс вида (.tkind-cb) и плашки (.area-chip) — кнопки, не input/span:
+   клик переключает все файлы вида/области (SectionsTreeLogic.toggleKind/
+   toggleArea), а не раскрывает дерево точечного выбора под ними (тот —
+   по стрелке строки/области, как раньше, см. project-sections-picker.js). */
+.tkind-cb {
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 1.5px solid var(--text-muted);
+  border-radius: 3px;
+  background: transparent;
+  color: #fff;
+  font-size: 10px;
+  line-height: 1;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+.tkind-cb:hover { border-color: var(--accent); color: var(--accent); background: transparent; }
+.tkind-cb.on { background: var(--accent); border-color: var(--accent); }
+.tkind-cb.on:hover { color: #fff; }
+.tkind-cb.part { border-color: var(--accent); color: var(--accent); }
+.tkind-cb:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tkind-label { font-weight: 600; }
+.tkind-meta { margin-left: auto; font-size: 12px; color: var(--text-muted); font-family: var(--font-mono); white-space: nowrap; }
+
+/* Плашки областей (padding-left: 14px стрелка + 6px gap + 14px чекбокс + 6px gap
+   = 40px — выравнивание по подписи "tests/<kind>" в строке выше). */
+.areas-row { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 0 8px 40px; }
+.area-chip {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 9px;
+  color: var(--text-muted);
+  background: transparent;
+  line-height: 1.5;
+}
+.area-chip:hover { border-color: var(--accent); color: var(--text); background: transparent; }
+.area-chip.on { background: color-mix(in srgb, var(--accent) 22%, transparent); border-color: var(--accent); color: var(--text); }
+.area-chip.partial { border-color: var(--accent); }
+/* "off" тускнеет только когда в форме хоть что-то выбрано — если выбор пуст,
+   все плашки выглядят одинаково нейтрально (см. buildSectionsTreeHtml). */
+.area-chip.off { opacity: .45; }
+.area-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
 /* ---------- дерево разделов (project.js: sections-tree-logic.js) ---------- */
 .sections-search-field { max-width: 320px; margin-bottom: 12px; }
 .sections-summary-line { font-size: 13px; margin: 2px 0 10px; }

@@ -151,15 +151,23 @@ def test_node_head_html_reflects_open_state_in_aria_expanded():
 # ------------------------------------------------------------------ чекбокс не сворачивает узел
 
 def test_tree_events_checkbox_click_does_not_trigger_header_toggle():
-    """setupTreeEvents: клик по input.tree-check должен выходить раньше, чем код
-    дойдёт до onHeaderToggle — проверка это гарантирует (а не чекбокс отдельно
-    обрабатывает раскрытие где-то ещё)."""
+    """setupTreeEvents: клик по input.tree-check (лист дерева точечного выбора),
+    по .tkind-cb (тристейт-чекбокс строки вида) и по .area-chip (плашка области,
+    docs/missions/2026-11-03_area_chips.md) должен выходить раньше, чем код дойдёт
+    до onHeaderToggle (раскрытие узла) — порядок проверок в toggleFromEvent это
+    гарантирует."""
     m = re.search(r"const toggleFromEvent = \(ev\) => \{(.*?)\n    \};", PROJECT_SECTIONS_PICKER_JS, re.DOTALL)
     assert m, "не найдена toggleFromEvent() в setupTreeEvents"
     body = m.group(1)
-    first_line = body.strip().splitlines()[0]
-    assert 'ev.target.matches("input.tree-check")' in first_line
-    assert "return;" in first_line
+    head_idx = body.index('ev.target.closest(".tree-node-head")')
+    for needle in (
+        'ev.target.closest(".tkind-cb")',
+        'ev.target.closest(".area-chip")',
+        'ev.target.matches("input.tree-check")',
+    ):
+        idx = body.index(needle)
+        assert idx < head_idx, f"{needle} должен проверяться раньше .tree-node-head (раскрытия)"
+    assert "return;" in body
 
 
 def test_tree_node_head_checkbox_is_inside_header_markup():
@@ -231,12 +239,18 @@ def test_summary_line_rendered_on_every_render_call():
 
 def test_summary_line_updates_on_manual_leaf_checkbox_change():
     """onLeafChange хук срабатывает на каждое 'change' события чекбокса-листа
-    (ручной клик пользователя, не через пресет) и обновляет ту же строку итога,
-    что и render() после пресета/поиска."""
+    (ручной клик пользователя, не через пресет) и делает полный render() — строка
+    вида/плашки областей (docs/missions/2026-11-03_area_chips.md) считаются по
+    всему checked, точечным DOM-патчем (как раньше делал updateSummaryLine один)
+    их не обновить; render() сам зовёт updateSummaryLine() в конце
+    (test_summary_line_rendered_on_every_render_call)."""
     m = re.search(r"setupTreeEvents\(box, \{(.*?)\n    \}\);", PROJECT_SECTIONS_PICKER_JS, re.DOTALL)
     assert m, "не найден вызов setupTreeEvents() в createSectionsPicker"
     body = m.group(1)
-    assert "onLeafChange: updateSummaryLine," in body
+    leaf_m = re.search(r"onLeafChange\(\) \{(.*?)\n      \},", body, re.DOTALL)
+    assert leaf_m, "не найден onLeafChange() в вызове setupTreeEvents()"
+    assert "snapshotChecked();" in leaf_m.group(1)
+    assert "render();" in leaf_m.group(1)
 
 
 def test_update_summary_line_shows_whatever_marker_is_currently_selected():
@@ -279,14 +293,23 @@ def test_both_tabs_use_the_same_create_sections_picker_factory():
     """createSectionsPicker теперь берёт отдельные productsRow/kindsRow (два ряда) и
     opts ({mobile, onStateChange}) — расписание передаёт mobile: false (у него нет
     кнопки Mobile в разметке, см. test_schedules_tab_has_same_presets_as_run_form_except_mobile),
-    форма запуска — onStateChange: () => updateBuildChip() для чипа «Сборка: …»."""
-    assert re.search(
+    форма запуска — onStateChange, который дёргает updateBuildChip() (чип «Сборка: …»)
+    и updateLiveCheckboxState() (докрутка «Эфир»/маркер-конфликта на клик по новой
+    строке вида/плашке области — они меняют checked мимо "change"/кликов по
+    sectionsProductsRow/sectionsKindsRow, см. docs/missions/2026-11-03_area_chips.md)."""
+    picker_m = re.search(
         r"const sectionsPicker = createSectionsPicker\(\s*"
         r"sectionsTreeBox, sectionsSearchInput, sectionsProductsRow, sectionsKindsRow, markerSelect, "
         r"sectionsSummaryLine,\s*"
-        r"\{ mobile: true, onStateChange: \(\) => updateBuildChip\(\) \}\s*\);",
-        PROJECT_SECTIONS_PICKER_JS,
+        r"\{(.*?)\}\s*\);",
+        PROJECT_SECTIONS_PICKER_JS, re.DOTALL,
     )
+    assert picker_m, "не найден const sectionsPicker = createSectionsPicker(...)"
+    opts_body = picker_m.group(1)
+    assert "mobile: true," in opts_body
+    assert "updateBuildChip();" in opts_body
+    assert "updateLiveCheckboxState();" in opts_body
+
     assert re.search(
         r"const schedSectionsPicker = createSectionsPicker\(\s*"
         r"schedSectionsTreeBox, schedSectionsSearchInput, schedSectionsProductsRow, schedSectionsKindsRow, "
