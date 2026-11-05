@@ -956,6 +956,16 @@ test("markerConflict: в дереве нет файлов с таким марк
   assert.strictEqual(Logic.markerConflict(data, "e2e", ["tests/ui/buk/test_form.py"]), false);
 });
 
+test("hasNamedProducts: проект без helpdesk/lrs/интеграций (bike_fit и т.п.) -> false, ряд «Что» не нужен", function () {
+  var data = { kinds: [{ kind: "api", areas: [{ area: "users", tests_count: 3, files: [{ target: "tests/api/users/test_a.py", tests_count: 3 }] }] }] };
+  assert.strictEqual(Logic.hasNamedProducts(data), false);
+});
+
+test("hasNamedProducts: проект с разделом helpdesk (ВШГУ) -> true", function () {
+  var data = { kinds: [{ kind: "api", areas: [{ area: "helpdesk", tests_count: 2, files: [{ target: "tests/api/helpdesk/test_a.py", tests_count: 2 }] }] }] };
+  assert.strictEqual(Logic.hasNamedProducts(data), true);
+});
+
 var failed = 0;
 tests.forEach(function (t) {
   try {

@@ -125,6 +125,20 @@
     return targets;
   }
 
+  // Проект использует названные продукты (Helpdesk/LRS/внешние интеграции) —
+  // это бизнес-термины конкретно ВШГУ (PRODUCT_AREAS/INTEGRATION_AREAS выше), а
+  // не общее понятие, применимое к любому проекту test_hub. Ряд «Что» (LMS/
+  // Helpdesk/LRS/Всё) в форме запуска/расписания показывает только когда у
+  // проекта реально есть такие разделы — иначе на bike_fit/Velo_bot/Courseditor_
+  // Learn/Experts висели кнопки «Helpdesk 0»/«LRS 0» без единого теста под ними
+  // (найдено владельцем 05.11.2026: "в других проектах есть такие же кнопки...
+  // этого не должно быть"). "Всё" совпадает с "LMS", когда этих разделов нет —
+  // этого достаточно, чтобы отличить ВШГУ-подобное дерево от любого другого.
+  function hasNamedProducts(data) {
+    var counts = productTestCounts(data);
+    return counts.all !== counts.lms;
+  }
+
   // Доступен ли вид (kind) при выбранном продукте (см. раздел «Как» в форме
   // запуска): Mobile есть только у LMS (область "mobile" не принадлежит
   // Helpdesk/LRS/Integration), Regression/Integration не имеют смысла для
@@ -473,6 +487,7 @@
     fileTestCounts: fileTestCounts,
     uniqueTestCount: uniqueTestCount,
     productTestCounts: productTestCounts,
+    hasNamedProducts: hasNamedProducts,
     PRODUCT_LABELS: PRODUCT_LABELS,
     KIND_LABELS: KIND_LABELS,
     buildAutoLabel: buildAutoLabel,

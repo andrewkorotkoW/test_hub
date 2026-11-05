@@ -222,6 +222,27 @@
     });
   }
 
+  // Ряд «Что» (LMS/Helpdesk/LRS/Всё) — бизнес-термины конкретно ВШГУ
+  // (SectionsTreeLogic.hasNamedProducts), на проекте без таких разделов
+  // (bike_fit, Velo_bot, Courseditor_Learn, Experts) прячем его целиком вместе
+  // с подписью «Что», а не показываем «Helpdesk 0»/«LRS 0» без единого теста
+  // под ними. Кнопка «Integration» в ряду «Как» — то же: без этих разделов она
+  // всегда выбирала бы пустой набор, так что прячем и её. «Regression»/«Mobile»
+  // остаются — это общие для любого проекта понятия (маркер pytest/раздел
+  // tests/ui/mobile), просто могут не дать файлов на конкретном дереве, как и
+  // «API»/«UI»/«E2E» на проекте без соответствующей папки.
+  function updateProductRowVisibility(productsRow, kindsRow, data) {
+    const named = SectionsTreeLogic.hasNamedProducts(data);
+    if (productsRow) {
+      const group = productsRow.closest(".preset-group") || productsRow;
+      group.hidden = !named;
+    }
+    if (kindsRow) {
+      const integrationBtn = kindsRow.querySelector('[data-preset="integration"]');
+      if (integrationBtn) integrationBtn.hidden = !named;
+    }
+  }
+
   // Пикер дерева разделов используется дважды (форма запуска и форма расписания) —
   // общий стейт (данные с бэкенда + текущий поиск + отмеченные файлы + раскрытые
   // узлы + продукт/вид) и рендер под конкретную группу DOM-элементов. opts.mobile
@@ -405,6 +426,7 @@
         product = "all";
         kind = null;
         updateProductCounts(productsRow, data);
+        updateProductRowVisibility(productsRow, kindsRow, data);
         render();
       },
       // Предустановка отмеченных файлов извне (страница «Сборка», см. initBuildMode) —
