@@ -572,6 +572,7 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-muted); text-transform:
    полоской (скрин владельца 19.10.2026, вкладка «Запуск»). */
 .run-form-summary[hidden], .marker-conflict-hint[hidden], .report-cause-filter[hidden] { display: none; }
 .preset-group[hidden] { display: none; }
+.sections-preset-btn[hidden] { display: none; }
 .run-form-summary { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .run-form-summary .rfs-item { display: inline-flex; align-items: baseline; gap: 6px; font-size: 13px; }
 .run-form-summary .rfs-k { color: var(--text-muted); font-size: 12px; }

@@ -232,14 +232,19 @@
   // tests/ui/mobile), просто могут не дать файлов на конкретном дереве, как и
   // «API»/«UI»/«E2E» на проекте без соответствующей папки.
   function updateProductRowVisibility(productsRow, kindsRow, data) {
+    // Ряд «Что» — только у проектов с названными продуктами ВШГУ (Helpdesk/LRS).
     const named = SectionsTreeLogic.hasNamedProducts(data);
     if (productsRow) {
       const group = productsRow.closest(".preset-group") || productsRow;
       group.hidden = !named;
     }
+    // Кнопка «Integration» — по другому признаку (hasAnyTests, не hasNamedProducts):
+    // на Courseditor_Learn/Experts продуктов нет, но тесты есть, и владелец явно
+    // попросил оставить там Integration как общий фильтр; убрать — только там, где
+    // тестов вообще нет (Velo_bot/bike_fit), см. комментарий у hasAnyTests.
     if (kindsRow) {
       const integrationBtn = kindsRow.querySelector('[data-preset="integration"]');
-      if (integrationBtn) integrationBtn.hidden = !named;
+      if (integrationBtn) integrationBtn.hidden = !SectionsTreeLogic.hasAnyTests(data);
     }
   }
 

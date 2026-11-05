@@ -139,6 +139,20 @@
     return counts.all !== counts.lms;
   }
 
+  // Есть ли у проекта вообще хоть один тест (любой area/kind) — отличает
+  // Courseditor_Learn/Experts (нет названных продуктов, но тесты реальные,
+  // 21/2 — кнопка Integration там осмысленна как общий фильтр "без внешних
+  // интеграций", просто по совпадению ни одна область не названа ai_chat/cas/
+  // buk/mts_link/p2p) от Velo_bot/bike_fit (разделов нет вовсе — «Integration»
+  // там всегда выбрала бы пустой набор, как и любой другой пресет; решение
+  // владельца 05.11.2026: «Courseditor_Learn, Experts — пусть будет, в других
+  // проектах, с Вело, можно убрать»). Кнопку Integration прячем по ЭТОМУ
+  // признаку, а не по hasNamedProducts — иначе она пропала бы и у Courseditor_
+  // Learn/Experts, что владелец явно просил не делать.
+  function hasAnyTests(data) {
+    return productTestCounts(data).all > 0;
+  }
+
   // Доступен ли вид (kind) при выбранном продукте (см. раздел «Как» в форме
   // запуска): Mobile есть только у LMS (область "mobile" не принадлежит
   // Helpdesk/LRS/Integration), Regression/Integration не имеют смысла для
@@ -488,6 +502,7 @@
     uniqueTestCount: uniqueTestCount,
     productTestCounts: productTestCounts,
     hasNamedProducts: hasNamedProducts,
+    hasAnyTests: hasAnyTests,
     PRODUCT_LABELS: PRODUCT_LABELS,
     KIND_LABELS: KIND_LABELS,
     buildAutoLabel: buildAutoLabel,

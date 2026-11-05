@@ -966,6 +966,17 @@ test("hasNamedProducts: проект с разделом helpdesk (ВШГУ) -> 
   assert.strictEqual(Logic.hasNamedProducts(data), true);
 });
 
+test("hasAnyTests: пустой проект (Velo_bot/bike_fit) -> false", function () {
+  assert.strictEqual(Logic.hasAnyTests({ kinds: [] }), false);
+});
+
+test("hasAnyTests: проект без названных продуктов, но с тестами (Courseditor_Learn/Experts) -> true", function () {
+  var data = { kinds: [{ kind: "api", areas: [{ area: "users", tests_count: 3, files: [{ target: "tests/api/users/test_a.py", tests_count: 3 }] }] }] };
+  assert.strictEqual(Logic.hasAnyTests(data), true);
+  // и hasNamedProducts для того же дерева — false (нет Helpdesk/LRS)
+  assert.strictEqual(Logic.hasNamedProducts(data), false);
+});
+
 var failed = 0;
 tests.forEach(function (t) {
   try {
