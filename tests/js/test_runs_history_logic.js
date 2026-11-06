@@ -105,6 +105,26 @@ test("runTags: сборка / эфир / Pixel 7 без дубля с метко
   assert.deepStrictEqual(tags(run(1)), []);
 });
 
+test("runTags: буквенные пилюли продукта — только когда showProductBadges=true", function () {
+  var tagsOf = function (r, show) { return Logic.runTags(r, show).map(function (t) { return t.text; }); };
+  // без showProductBadges (как у старых вызовов) — пилюль нет, даже если цель Helpdesk
+  assert.deepStrictEqual(tagsOf(run(1, { target: "tests/api/helpdesk/test_a.py" })), []);
+  assert.deepStrictEqual(tagsOf(run(1, { target: "tests/api/helpdesk/test_a.py" }), false), []);
+  // showProductBadges=true — буква по цели, впереди остальных тегов
+  assert.deepStrictEqual(tagsOf(run(1, { target: "tests/api/helpdesk/test_a.py" }), true), ["H"]);
+  assert.deepStrictEqual(tagsOf(run(1, { target: "tests/ui/lrs/test_b.py" }), true), ["LR"]);
+  assert.deepStrictEqual(tagsOf(run(1, { target: "tests/api/users/test_c.py" }), true), ["LM"]);
+  // "всё сразу" ("all"/пусто) -> все три буквы (решение владельца 06.11.2026)
+  assert.deepStrictEqual(tagsOf(run(1, { target: "all" }), true), ["LM", "H", "LR"]);
+  // смешанная цель из нескольких продуктов — по одной букве на каждый, без дублей
+  assert.deepStrictEqual(
+    tagsOf(run(1, { target: "tests/api/helpdesk/test_a.py\ntests/api/users/test_c.py\ntests/ui/lrs/test_b.py" }), true),
+    ["LM", "H", "LR"]
+  );
+  // рядом с другими тегами — впереди (Build/Live/Pixel 7/Integration)
+  assert.deepStrictEqual(tagsOf(run(1, { target: "tests/api/helpdesk/test_a.py", label: "Helpdesk" }), true), ["H", "Build: Helpdesk"]);
+});
+
 test("isIntegrationTarget: область из REGRESSION_EXCLUDED_AREAS — да, 'all' и обычная область — нет", function () {
   assert.strictEqual(Logic.isIntegrationTarget("tests/ui/mts_link/test_create_webinar_via_ui.py"), true);
   assert.strictEqual(Logic.isIntegrationTarget("tests/api/notifications/test_list.py\ntests/api/buk/test_x.py"), true);

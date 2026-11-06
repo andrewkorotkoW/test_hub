@@ -128,8 +128,10 @@ def test_project_js_renders_pixel7_pill_in_feed_and_table_next_to_live():
     # (ui/runs-history-logic.js) — лента прогонов (runsFeedItemHtml) и таблица
     # истории (historyRowHtml), обе в ui/project-dashboard.js, только рендерят
     # то, что он вернул, не зная про "Pixel 7" напрямую (см. комментарий выше
-    # historyRowHtml про дедуп с меткой сборки «Мобильный (Pixel 7)»).
-    assert PROJECT_DASHBOARD_JS.count("HistLogic.runTags(r)") >= 2
+    # historyRowHtml про дедуп с меткой сборки «Мобильный (Pixel 7)»). Второй
+    # аргумент (showProductBadges) — буквенные пилюли продукта LM/H/LR,
+    # владелец 06.11.2026: LM/H/LR на карточке прогона, «все сразу» показывает все буквы (RunsHistoryLogic.targetProducts).
+    assert PROJECT_DASHBOARD_JS.count("HistLogic.runTags(r,") >= 2
     assert 'runs-feed-tag runs-feed-tag--${t.kind}' in PROJECT_DASHBOARD_JS
     assert 'tags.push({ kind: "mobile", text: "Pixel 7" });' in RUNS_HISTORY_LOGIC_JS
 

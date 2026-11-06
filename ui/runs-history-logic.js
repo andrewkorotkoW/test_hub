@@ -137,9 +137,20 @@
   // отдельная пилюля «Pixel 7» тогда не нужна. Подписи на английском (владелец
   // 31.10.2026) — остальной текст приложения по-русски остаётся как есть, это
   // только короткие пилюли-теги.
-  function runTags(run) {
+  function runTags(run, showProductBadges) {
     var tags = [];
     var label = run.label || "";
+    // Буквенные пилюли продукта (LM/H/LR) — только когда вызывающий код явно
+    // попросил о них (showProductBadges=true): проект должен иметь названные
+    // продукты вообще (SectionsTreeLogic.hasNamedProducts на дереве разделов) —
+    // решает это вызывающая сторона, у этой функции дерева нет, только run.target.
+    // "Если добавляются сразу все — показывать все буквы" (владелец 06.11.2026) —
+    // targetProducts(target) сама возвращает все три для target == "all".
+    if (showProductBadges && SectionsTreeLogic) {
+      SectionsTreeLogic.targetProducts(run.target).forEach(function (p) {
+        tags.push({ kind: "product-" + p, text: SectionsTreeLogic.PRODUCT_BADGE_LETTERS[p] });
+      });
+    }
     if (run.schedule_id) tags.push({ kind: "schedule", text: "Scheduled" });
     if (label) tags.push({ kind: "label", text: "Build: " + label });
     if (run.live) tags.push({ kind: "live", text: "Live" });

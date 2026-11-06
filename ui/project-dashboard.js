@@ -413,10 +413,10 @@
   // уезжали на вторые-третьи строки). Теги не переносятся — длинная метка сборки режется
   // многоточием, целиком — в title. У queued/running вместо даты и длительности — ETA
   // (RunsHistoryLogic.etaCells, см. app/core/eta.py).
-  function runsFeedItemHtml(r) {
+  function runsFeedItemHtml(r, showProductBadges) {
     const now = new Date();
     const eta = HistLogic.etaCells(r);
-    const tags = HistLogic.runTags(r);
+    const tags = HistLogic.runTags(r, showProductBadges);
     let when = `<span title="${escapeHtml(fmtDate(r.started))}">${escapeHtml(HistLogic.fmtStarted(r.started, now))}</span>`;
     let duration = escapeHtml(RunReportLogic.fmtRunDuration(r.duration));
     if (r.status === "queued") {
@@ -448,7 +448,13 @@
       runsFeedBox.innerHTML = `<p class="muted">Прогонов ещё не было.</p>`;
       return;
     }
-    runsFeedBox.innerHTML = items.map(runsFeedItemHtml).join("");
+    // Буквенные пилюли продукта (LM/H/LR) — только на проектах с названными
+    // продуктами ВШГУ (Helpdesk/LRS), та же граница, что у ряда «Что» формы
+    // запуска (SectionsTreeLogic.hasNamedProducts). .map(runsFeedItemHtml) без
+    // стрелочной обёртки передал бы сюда индекс элемента, а не этот флаг —
+    // поэтому явная функция, а не bare-ссылка.
+    const showProductBadges = SectionsTreeLogic.hasNamedProducts(sectionsDataCache);
+    runsFeedBox.innerHTML = items.map((r) => runsFeedItemHtml(r, showProductBadges)).join("");
   }
 
   runsFeedBox.addEventListener("click", (ev) => {
@@ -779,9 +785,9 @@
     return `<span class="eta${cells.rough ? " eta-rough" : ""}" title="${escapeHtml(cells.title)}">${escapeHtml(cells.duration)}</span>`;
   }
 
-  function historyRowHtml(r, now) {
+  function historyRowHtml(r, now, showProductBadges) {
     const target = HistLogic.targetSummary(r.target);
-    const tags = HistLogic.runTags(r);
+    const tags = HistLogic.runTags(r, showProductBadges);
     return `
       <tr class="clickable${r.status === "running" || r.status === "queued" ? " hist-row-active" : ""}" data-run-id="${r.id}">
         <td class="hist-id">#${r.id}</td>
@@ -820,7 +826,8 @@
       return;
     }
     const now = new Date();
-    historyRows.innerHTML = shown.map((r) => historyRowHtml(r, now)).join("");
+    const showProductBadges = SectionsTreeLogic.hasNamedProducts(sectionsDataCache);
+    historyRows.innerHTML = shown.map((r) => historyRowHtml(r, now, showProductBadges)).join("");
   }
 
   function histSetFilter(key, value) {

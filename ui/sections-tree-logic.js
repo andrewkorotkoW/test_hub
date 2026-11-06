@@ -149,6 +149,33 @@
   // проектах, с Вело, можно убрать»). Кнопку Integration прячем по ЭТОМУ
   // признаку, а не по hasNamedProducts — иначе она пропала бы и у Courseditor_
   // Learn/Experts, что владелец явно просил не делать.
+  // Буквенные пилюли продукта на карточке прогона (история/лента, docs/missions/
+  // redesign/product_presets — развитие той же идеи для кнопок): LM/H/LR для
+  // LMS/Helpdesk/LRS. Integration своей буквы не получает — для него уже есть
+  // отдельный тег «Integration» (RunsHistoryLogic.isIntegrationTarget).
+  var PRODUCT_BADGE_LETTERS = { lms: "LM", helpdesk: "H", lrs: "LR" };
+
+  // Продукты, которых касается цель прогона (run.target: "all" либо список путей/
+  // nodeid по строке) — та же классификация area -> product (PRODUCT_AREAS/
+  // productOf), что у кнопок «Что», только по строке, а не по дереву разделов
+  // (карточка прогона в истории/ленте не всегда имеет под рукой дерево). "all"
+  // или пустая цель — задеты все три продукта сразу (решение владельца
+  // 06.11.2026: «если добавляются сразу все — показывать все буквы»). Порядок
+  // результата фиксирован (lms, helpdesk, lrs), а не по первому вхождению.
+  function targetProducts(target) {
+    if (!target || target === "all") return ["lms", "helpdesk", "lrs"];
+    var found = {};
+    String(target).split(/\n+/).forEach(function (line) {
+      line = line.trim();
+      if (!line) return;
+      var parts = line.split("/");
+      var area = parts.length >= 3 && parts[0] === "tests" ? parts[2] : null;
+      var product = area ? productOf(area) : "lms";
+      if (product === "lms" || product === "helpdesk" || product === "lrs") found[product] = true;
+    });
+    return ["lms", "helpdesk", "lrs"].filter(function (p) { return found[p]; });
+  }
+
   function hasAnyTests(data) {
     return productTestCounts(data).all > 0;
   }
@@ -503,6 +530,8 @@
     productTestCounts: productTestCounts,
     hasNamedProducts: hasNamedProducts,
     hasAnyTests: hasAnyTests,
+    targetProducts: targetProducts,
+    PRODUCT_BADGE_LETTERS: PRODUCT_BADGE_LETTERS,
     PRODUCT_LABELS: PRODUCT_LABELS,
     KIND_LABELS: KIND_LABELS,
     buildAutoLabel: buildAutoLabel,

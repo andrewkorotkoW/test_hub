@@ -84,7 +84,10 @@
       setRunsFeed.innerHTML = `<p class="muted">Прогонов этой сборки ещё не было.</p>`;
       return;
     }
-    setRunsFeed.innerHTML = items.map(runsFeedItemHtml).join("");
+    // Та же граница, что в ui/project-dashboard.js::renderRunsFeed — буквенные
+    // пилюли продукта только на проектах с названными продуктами ВШГУ.
+    const showProductBadges = SectionsTreeLogic.hasNamedProducts(sectionsDataCache);
+    setRunsFeed.innerHTML = items.map((r) => runsFeedItemHtml(r, showProductBadges)).join("");
   }
 
   // Та же разметка, что у ленты на дашборде (runsFeedItemHtml): карточка целиком
