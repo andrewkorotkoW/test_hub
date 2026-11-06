@@ -633,6 +633,10 @@
   // выбор базы сравнения на вкладке «Сравнить с…» (ui/project-run-compare.js), чтобы
   // не дёргать ручку второй раз только за списком последних прогонов стенда.
   let lastRunsList = [];
+  // Id прогонов, активных (running/queued) на момент последнего опроса — чтобы
+  // pollRunsFeed ниже понимал, когда последний активный прогон только что
+  // завершился (см. его комментарий), а не на каждом тике.
+  let pollKnownActiveIds = new Set();
 
   function historyDeltaHtml(r) {
     const d = RunCompareLogic.historyDelta(r.delta_prev);
@@ -849,6 +853,7 @@
     try {
       const runs = await api(`/api/projects/${encodeURIComponent(projectName)}/runs`);
       lastRunsList = runs;
+      pollKnownActiveIds = new Set(runs.filter((r) => r.status === "running" || r.status === "queued").map((r) => r.id));
       if (runs.some((r) => r.status === "running" || r.status === "queued")) await refreshOwnRunEstimate();
       renderQueueNotice();
       renderHistoryTable();
@@ -858,6 +863,34 @@
       await renderDashboard([]);
     }
   }
+
+  // Автообновление ленты/истории/баннера очереди (решение владельца 06.11.2026:
+  // прогон на медленном стенде может идти часами, а карточка «RUNNING» застывает
+  // до ручной перезагрузки страницы — ни лента, ни история сами не опрашивались,
+  // в отличие от баннера очереди на «Запуске», см. refreshQueueNotice/15000 ниже).
+  // Опрос лёгкий: только GET .../runs (десятые доли секунды) и чистый рендер без
+  // сети. Тяжёлые виджеты дашборда (KPI/флаки/xfail/топ долгих тестов — /flaky и
+  // /xfail по несколько секунд каждый из-за runner.discover() без кэша, отдельная
+  // открытая задача) пересчитываем полным renderDashboard() только один раз, в
+  // момент, когда число активных прогонов только что уменьшилось (чей-то прогон
+  // завершился) — а не на каждом тике, чтобы не умножать и так медленные запросы.
+  async function pollRunsFeed() {
+    let runs;
+    try {
+      runs = await api(`/api/projects/${encodeURIComponent(projectName)}/runs`);
+    } catch {
+      return; // та же тихая защита, что у refreshQueueNotice — опрос необязателен
+    }
+    lastRunsList = runs;
+    const activeIds = new Set(runs.filter((r) => r.status === "running" || r.status === "queued").map((r) => r.id));
+    const justFinished = pollKnownActiveIds.size > 0 && activeIds.size < pollKnownActiveIds.size;
+    pollKnownActiveIds = activeIds;
+    renderQueueNotice();
+    renderHistoryTable();
+    renderRunsFeed(runs);
+    if (justFinished) await renderDashboard(runs);
+  }
+  setInterval(pollRunsFeed, 25000);
 
   historyRows.addEventListener("click", (ev) => {
     const cleanupBtn = ev.target.closest(".hist-cleanup-btn");
