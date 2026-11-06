@@ -208,6 +208,40 @@ test("presetLeafTargets('mobile') — нет области 'mobile' в дере
   assert.deepStrictEqual(Logic.presetLeafTargets(sampleTree(), "mobile"), []);
 });
 
+// Дерево с физическим дублем: один и тот же файл лежит в tests/ui/<область> и
+// ещё раз размечен в tests/e2e (раздел по маркеру @pytest.mark.e2e, не по
+// папке) — ровно ситуация, найденная на прогоне #120 (стенд 2066, 06.11.2026):
+// Regression не исключает e2e, и без дедупа этот файл ушёл бы в цель дважды,
+// а pytest реально прогнал бы его дважды.
+function treeWithCrossKindDuplicate() {
+  return {
+    kinds: [
+      { kind: "ui", target: "tests/ui", areas: [
+        { area: "lrs", section: "ui/lrs", target: "tests/ui/lrs", tests_count: 2, files: [
+          { name: "test_report.py", target: "tests/ui/lrs/test_report.py", tests_count: 2 },
+        ] },
+      ] },
+      { kind: "e2e", target: "tests/e2e", areas: [
+        { area: null, section: "e2e", target: "tests/e2e", tests_count: 1, files: [
+          { name: "test_report.py", target: "tests/ui/lrs/test_report.py", tests_count: 1 },
+        ] },
+      ] },
+    ],
+  };
+}
+
+test("allLeafTargets: один и тот же target под двумя kind — только один раз в результате", function () {
+  assert.deepStrictEqual(Logic.allLeafTargets(treeWithCrossKindDuplicate()), ["tests/ui/lrs/test_report.py"]);
+});
+
+test("presetLeafTargets: тот же дубль не удваивается ни у 'all', ни у 'regression' (е2e не исключается)", function () {
+  var data = treeWithCrossKindDuplicate();
+  assert.deepStrictEqual(Logic.presetLeafTargets(data, "all"), ["tests/ui/lrs/test_report.py"]);
+  assert.deepStrictEqual(Logic.presetLeafTargets(data, "regression"), ["tests/ui/lrs/test_report.py"]);
+  assert.deepStrictEqual(Logic.presetLeafTargets(data, { product: "lrs" }), ["tests/ui/lrs/test_report.py"]);
+});
+
+
 // ------------------------------------------------------------------ productOf/PRODUCT_AREAS/INTEGRATION_AREAS
 
 // Дерево со всеми продуктами: lms (notifications), helpdesk (helpdesk+tickets),

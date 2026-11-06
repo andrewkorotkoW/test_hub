@@ -43,10 +43,21 @@
   }
 
   function allLeafTargets(data) {
+    var seen = {};
     var targets = [];
     (data.kinds || []).forEach(function (kindNode) {
       (kindNode.areas || []).forEach(function (area) {
-        (area.files || []).forEach(function (file) { targets.push(file.target); });
+        (area.files || []).forEach(function (file) {
+          // tests/e2e дублирует файлы, физически лежащие в tests/api|ui/<область>
+          // (раздел по маркеру @pytest.mark.e2e, не по папке) — без дедупа один и
+          // тот же target попадал бы в цель прогона дважды, и pytest реально
+          // прогонял бы файл дважды (прогон #120 на стенде 2066, 06.11.2026:
+          // ~15 файлов выполнились по два раза, часть тестов — по 3-6 раз с учётом
+          // ретраев). См. тот же приём в presetLeafTargets ниже.
+          if (seen[file.target]) return;
+          seen[file.target] = true;
+          targets.push(file.target);
+        });
       });
     });
     return targets;
@@ -102,6 +113,7 @@
     var options = normalizePresetOpts(opts);
     var product = options.product || "all";
     var kind = options.kind;
+    var seen = {};
     var targets = [];
     // "mobile"/"regression"/"integration"/без kind ("smoke"/не задан) фильтруют
     // внутри kind (по области/файлу, см. ниже) — любой другой kind (включая
@@ -118,6 +130,11 @@
         (area.files || []).forEach(function (file) {
           if (kind === "regression" && isRegressionExcluded(file.target)) return;
           if (kind === "integration" && !isRegressionExcluded(file.target)) return;
+          // Дедуп по target (см. комментарий у allLeafTargets) — важнее всего
+          // именно здесь: presetLeafTargets формирует цель, которая реально
+          // уходит в pytest (submitRun), а не только текст для отображения.
+          if (seen[file.target]) return;
+          seen[file.target] = true;
           targets.push(file.target);
         });
       });
